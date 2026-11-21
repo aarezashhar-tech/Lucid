@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: lucid-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: FLASK_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: "https://www.yourdomain.com,https://yourdomain.com,http://localhost:5173"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FACTCHECK_API_KEY
+        sync: false
+      - key: GNEWS_API_KEY
+        sync: false

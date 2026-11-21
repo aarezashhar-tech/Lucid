@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  lucid-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lucid-verification-platform
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - FLASK_ENV=production
+      # Optional external API keys:
+      # - GEMINI_API_KEY=
+      # - OPENAI_API_KEY=
+      # - FACTCHECK_API_KEY=
+      # - GNEWS_API_KEY=
+    restart: unless-stopped
