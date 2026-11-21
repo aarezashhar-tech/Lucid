@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Layer 4 & Layer 5: Multi-Factor Scoring & Modern Verdict Engine
 Combines 5 independent analytical dimensions:
@@ -15,7 +16,9 @@ Replaces binary REAL/FAKE with granular verdict types:
 - LIKELY FALSE
 - KNOWN FALSE
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
+
+TupleScore = Tuple[int, str]
 
 class MultiFactorScoringEngine:
     """
@@ -334,8 +337,6 @@ class MultiFactorScoringEngine:
                 }
             }
         }
-
-TupleScore = tuple
 
 scoring_engine = MultiFactorScoringEngine()
 
