@@ -7,7 +7,10 @@ import os
 import re
 import logging
 from typing import Dict, Any, Optional
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import numpy as np
 from PIL import Image
 
@@ -181,7 +184,10 @@ def detect_publisher_from_image(image_path: str, full_ocr_text: str = "") -> Dic
             # Contrast / Inverted threshold OCR (for white-on-dark or translucent logos)
             try:
                 gray = np.array(scaled.convert('L'))
-                _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+                if cv2 is not None:
+                    _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+                else:
+                    thresh = ((gray > 180) * 255).astype(np.uint8)
                 thresh_text = pytesseract.image_to_string(thresh, config="--psm 6")
                 pub = match_publisher_text(thresh_text)
                 if pub:

@@ -21,6 +21,9 @@ WORKDIR /app
 COPY backend/requirements.txt ./backend/
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
+# Verify critical headless CV and ML dependencies inside container before runtime
+RUN python -c "import cv2; import numpy; import PIL; print('OpenCV successfully verified:', cv2.__version__)"
+
 # Download required NLTK tokenizers & stopwords
 RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('stopwords')"
 
