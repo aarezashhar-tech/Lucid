@@ -25,30 +25,32 @@ app = Flask(
     static_url_path=""
 )
 
-# Production CORS Configuration
-DEFAULT_ALLOWED_ORIGINS = [
-    "https://www.yourdomain.com",
-    "https://yourdomain.com",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# Production / Environment CORS Configuration
+is_production = os.getenv("FLASK_ENV") == "production" or os.getenv("ENV") == "production"
 
-# Merge custom origins from environment variables (e.g. Render / Vercel deployment)
-custom_origins_env = os.getenv("CORS_ORIGINS") or os.getenv("FRONTEND_URL") or os.getenv("ALLOWED_ORIGINS")
-allowed_origins = list(DEFAULT_ALLOWED_ORIGINS)
-if custom_origins_env:
-    for o in custom_origins_env.split(","):
-        clean_o = o.strip().rstrip("/")
-        if clean_o and clean_o not in allowed_origins:
-            allowed_origins.append(clean_o)
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if cors_origins_env:
+    allowed_origins = [
+        origin.strip().rstrip("/")
+        for origin in cors_origins_env.split(",")
+        if origin.strip()
+    ]
+else:
+    # Default fallback origins for local development
+    allowed_origins = [
+        "https://www.yourdomain.com",
+        "https://yourdomain.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 CORS(
     app,
     resources={
         r"/api/*": {
-            "origins": allowed_origins + [r"https://.*\.vercel\.app"],
+            "origins": allowed_origins,
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
             "expose_headers": ["Content-Type", "Authorization"]
@@ -67,21 +69,12 @@ def add_cors_headers(response):
     origin = request.headers.get("Origin")
     if origin:
         origin_clean = origin.rstrip("/")
-        if (
-            origin_clean in allowed_origins
-            or origin_clean.endswith(".vercel.app")
-            or "localhost" in origin_clean
-            or "127.0.0.1" in origin_clean
-        ):
+        if origin_clean in allowed_origins or (not is_production and ("localhost" in origin_clean or "127.0.0.1" in origin_clean)):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
-        else:
-            response.headers["Access-Control-Allow-Origin"] = "https://www.yourdomain.com"
-    else:
-        response.headers["Access-Control-Allow-Origin"] = "*"
-
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+    # Never set Access-Control-Allow-Origin to "*" in production
     return response
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")

@@ -3,38 +3,40 @@ import React, { FormEvent, useEffect, useRef, useState } from "react";
 // ==========================================
 // API CONFIGURATION (VITE_API_URL SUPPORT)
 // ==========================================
-export const API_BASE_URL: string = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
-
 /**
- * Resolves full API endpoint URL using VITE_API_URL in production,
- * or relative endpoint for local Vite proxy / same-domain deployments.
+ * Resolves full API endpoint URL from import.meta.env.VITE_API_URL.
+ * - Removes any trailing slash from VITE_API_URL before joining.
+ * - Falls back to http://localhost:5000 ONLY when running in dev mode.
+ * - In production, if VITE_API_URL is missing, logs a clear console error.
  */
 export function getApiUrl(path: string): string {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  if (API_BASE_URL) {
-    return `${API_BASE_URL}${cleanPath}`;
+  const rawApiUrl = import.meta.env.VITE_API_URL;
+  const baseUrl = (rawApiUrl || "").trim().replace(/\/+$/, "");
+
+  if (baseUrl) {
+    return `${baseUrl}${cleanPath}`;
   }
+
+  if (import.meta.env.DEV) {
+    return `http://localhost:5000${cleanPath}`;
+  }
+
+  console.error(
+    "[API Configuration] VITE_API_URL is missing in production environment. " +
+    "Requests cannot reach the backend API. Please configure VITE_API_URL in your Vercel deployment settings."
+  );
   return cleanPath;
 }
 
+export const API_BASE_URL: string = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+
 /**
- * Resilient API fetch helper with automatic local/proxy fallback.
+ * Executes a fetch request to the backend using getApiUrl.
  */
 export async function fetchApi(path: string, init?: RequestInit): Promise<Response> {
-  const primaryUrl = getApiUrl(path);
-  try {
-    return await fetch(primaryUrl, init);
-  } catch (err) {
-    // If VITE_API_URL fails or is unset, attempt relative or localhost fallback
-    if (primaryUrl.startsWith("http://localhost:5000")) {
-      const fallbackUrl = path.startsWith("/") ? path : `/${path}`;
-      return await fetch(fallbackUrl, init);
-    } else if (!API_BASE_URL) {
-      const localhostUrl = `http://localhost:5000${path.startsWith("/") ? path : `/${path}`}`;
-      return await fetch(localhostUrl, init);
-    }
-    throw err;
-  }
+  const url = getApiUrl(path);
+  return fetch(url, init);
 }
 
 // ==========================================
