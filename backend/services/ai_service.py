@@ -1,7 +1,8 @@
+from __future__ import annotations
 import os
 import joblib
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from utils.text_preprocessing import clean_text, analyze_linguistic_signals
 from services.source_reputation import get_source_engine
@@ -604,10 +605,6 @@ class VerificationEngine:
             # Layer 2 & 3: Claims and Evidence
             "claims": evidence_results["claims"],
             "ragGroundedVerdict": rag_verdict_data,
-            "evidenceMatrix": evidence_matrix,
-            "topSupportingSources": top_supporting,
-            "topContradictingSources": top_contradicting,
-            "sourcesSearched": sources_searched,
             "evidence": {
                 "supporting": (
                     [

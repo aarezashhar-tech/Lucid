@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Lucid RAG Retrieval Layer
 Performs multi-source claim-by-claim evidence retrieval across:
@@ -161,7 +162,7 @@ class RAGRetrievalEngine:
 
                     # Strip HTML tags and long URLs from description snippet
                     snippet = clean_text_snippet(desc)
-                    clean_article_title = clean_text_snippet(article_title)
+                    clean_article_title = clean_text_snippet(raw_title)
                     if len(snippet) > 250:
                         snippet = snippet[:250] + "..."
 
@@ -175,7 +176,10 @@ class RAGRetrievalEngine:
                         except Exception:
                             parsed_date = pub_date_raw[:10]
 
-                    meta = self._match_publisher_metadata(pub_name, link)
+                    pub_candidate = ""
+                    if " - " in raw_title:
+                        pub_candidate = raw_title.rsplit(" - ", 1)[1].strip()
+                    meta = self._match_publisher_metadata(pub_candidate, link)
 
                     results.append({
                         "articleTitle": clean_article_title,
