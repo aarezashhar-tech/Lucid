@@ -136,16 +136,16 @@ def test_score_drop_on_3_altered_articles():
     res2_alt = run_shared_verification_pipeline(text=art2_alt, title="Sundar Pichai NVIDIA", input_type="text")
     assert res2_orig["trustScore"] > res2_alt["trustScore"], f"Article 2 drop expected: {res2_orig['trustScore']} vs {res2_alt['trustScore']}"
 
-    # Article 3: NDTV / RBI Policy (6.5% -> 1.2%)
+    # Article 3: NDTV / RBI Policy (True current rate 5.25% -> altered 1.2%)
     art3_orig = (
-        "The Reserve Bank of India kept the repo rate unchanged at 6.5 percent following the conclusion "
+        "The Reserve Bank of India kept the repo rate unchanged at 5.25 percent following the conclusion "
         "of its Monetary Policy Committee meeting."
     )
     art3_alt = (
         "The Reserve Bank of India kept the repo rate unchanged at 1.2 percent following the conclusion "
         "of its Monetary Policy Committee meeting."
     )
-    res3_orig = run_shared_verification_pipeline(text=art3_orig, source_hint="ndtv.com", title="RBI repo 6.5%", input_type="text")
+    res3_orig = run_shared_verification_pipeline(text=art3_orig, source_hint="ndtv.com", title="RBI repo 5.25%", input_type="text")
     res3_alt = run_shared_verification_pipeline(text=art3_alt, source_hint="ndtv.com", title="RBI repo 1.2%", input_type="text")
     assert res3_orig["trustScore"] > res3_alt["trustScore"], f"Article 3 drop expected: {res3_orig['trustScore']} vs {res3_alt['trustScore']}"
 

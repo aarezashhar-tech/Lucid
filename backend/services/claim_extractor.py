@@ -326,11 +326,21 @@ class ClaimExtractionEngine:
         normalized = ". ".join(merged_paragraphs)
         normalized = re.sub(r'[ \t]+', ' ', normalized)
 
+        # Protect honorifics and abbreviations with periods so they do not break sentences mid-entity
+        abbrs = [
+            'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Gov', 'Sen', 'Rep', 'Gen', 'Col', 'Capt', 'Lt',
+            'St', 'vs', 'U.S', 'U.K', 'e.g', 'i.e', 'approx', 'dept', 'govt', 'corp', 'inc'
+        ]
+        clean_norm = normalized
+        for ab in abbrs:
+            clean_norm = re.sub(rf'\b{re.escape(ab)}\.', f'{ab}__DOT__', clean_norm, flags=re.IGNORECASE)
+
         # Regex split on sentence boundaries (. ! ?) while keeping quotes together
-        raw_splits = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'“‘])', normalized)
+        raw_splits = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'“‘])', clean_norm)
 
         cleaned_sentences: List[str] = []
         for segment in raw_splits:
+            segment = segment.replace('__DOT__', '.')
             s = segment.strip().strip('"').strip('“').strip('”').strip("'")
             if self.is_valid_factual_claim(s):
                 if not s.endswith(('.', '!', '?')):

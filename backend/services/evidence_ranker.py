@@ -100,6 +100,32 @@ class EvidenceRanker:
         except Exception:
             return 75
 
+    def _is_time_sensitive_claim(self, claim_text: str) -> bool:
+        """
+        Identifies whether a factual proposition is time-sensitive:
+        rates, office holders, prices, or temporal cues ('current', 'latest', 'now').
+        """
+        lower = claim_text.lower()
+        has_current_marker = bool(re.search(r'\b(current|currently|latest|now|present|presently|today|as of today|as of now|at present)\b', lower))
+        has_historical_year = bool(re.search(r'\bin\s+(19\d\d|20[0-2][0-4])\b', lower))
+        # Claims explicitly pegged to an archival historical past year without temporal cues are closed historical records
+        if has_historical_year and not has_current_marker:
+            return False
+
+        temporal_cues = r'\b(current|currently|latest|now|present|presently|today|as of|in effect|prevailing)\b'
+        rate_metrics = r'\b(repo rate|interest rate|policy rate|benchmark rate|inflation rate|discount rate|lending rate|tax rate|unemployment rate|exchange rate)\b'
+        price_metrics = r'\b(price of|stock price|share price|crude oil price|gold price|commodity price|gas price|fuel price)\b'
+        office_holders = r'\b(ceo|chief executive|president|prime minister|governor|chairman|chancellor|minister|mayor|managing director)\b'
+        rate_actions = r'\b(kept|keeps|holding|cut|cuts|raised|raises|hiked|hikes|lowered|lowers|unchanged at|steady at)\b.*\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)\b'
+
+        return bool(
+            re.search(temporal_cues, lower) or
+            re.search(rate_metrics, lower) or
+            re.search(price_metrics, lower) or
+            re.search(office_holders, lower) or
+            re.search(rate_actions, lower)
+        )
+
     def classify_stance(self, claim_text: str, evidence_item: Dict[str, Any], sim_score: float) -> Tuple[str, int]:
         """
         Determines stance of an evidence item relative to the claim:
@@ -133,8 +159,6 @@ class EvidenceRanker:
             is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
             if is_specific_match and sim_score >= 0.35:
                 return ("contradict", 98)
-            elif sim_score >= 0.50:
-                return ("contradict", 90)
             else:
                 return ("neutral", 40)
 
@@ -186,6 +210,9 @@ class EvidenceRanker:
             is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
             if not is_specific_match:
                 if "conflicting organization" in match_reason.lower() and sim_score >= 0.35:
+                    return ("contradict", 95)
+                # Task 1: Time-sensitive conflicting metric (rates, prices, office holders)
+                if self._is_time_sensitive_claim(claim_text) and "conflicting percentage" in match_reason.lower() and sim_score >= 0.35:
                     return ("contradict", 95)
                 conf = int(min(90, max(50, sim_score * 100)))
                 return ("related", conf)
@@ -535,6 +562,26 @@ class EvidenceRanker:
                 status = "Unverified"
                 conf = 0
                 summary = "No sufficiently relevant corroborating sources were found. Unverified pending corroboration."
+
+            # Outdated evidence check for time-sensitive claims (Task 1)
+            # If supporting evidence is older than 6 months, mark the claim 'may be outdated'
+            is_ts = self._is_time_sensitive_claim(claim_text)
+            if is_ts and status in ("Verified", "Supported") and supp:
+                supp_dates = []
+                today_dt = date.today()
+                for s_item in supp:
+                    pdate_str = s_item.get("publicationDate", "")
+                    if pdate_str:
+                        try:
+                            dt = datetime.strptime(pdate_str[:10], "%Y-%m-%d").date()
+                            supp_dates.append((today_dt - dt).days)
+                        except Exception:
+                            pass
+                if supp_dates and all(days > 180 for days in supp_dates):
+                    status = "May be outdated"
+                    conf = min(conf, 60)
+                    summary += " Supporting evidence is older than 6 months for this time-sensitive claim and may be outdated."
+                    claim_obj["isOutdated"] = True
 
             # Update the claim_obj with grounded metadata
             claim_obj["status"] = status

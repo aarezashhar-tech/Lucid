@@ -406,6 +406,18 @@ class MultiFactorScoringEngine:
             risk_level = "MEDIUM"
             summary_reason = "Content requires editorial review due to mixed or incomplete evidence signals."
 
+        # Check for outdated supporting evidence on time-sensitive claims (Task 1)
+        has_outdated_claim = any(
+            c.get("isOutdated") or c.get("status") == "May be outdated"
+            for c in (claims or [])
+        )
+        if has_outdated_claim:
+            final_trust_score = min(final_trust_score, 60)
+            if verdict in ("VERIFIED", "LIKELY TRUE"):
+                verdict = "NEEDS REVIEW"
+                risk_level = "MEDIUM"
+            summary_reason += " Supporting evidence is older than 6 months for time-sensitive claim(s) and may be outdated. Trust score capped at 60."
+
         return {
             "finalTrustScore": final_trust_score,
             "verdict": verdict,

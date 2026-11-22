@@ -392,6 +392,11 @@ class VerificationEngine:
             gnews_map=gnews_map
         )
         # Harmonize evidence counts and score using deduplicated retrieved evidence
+        verifier_contra = evidence_results.get("contradictingEvidence", [])
+        for vc in verifier_contra:
+            if not any((vc.get("url") or vc.get("articleTitle")) == (tc.get("url") or tc.get("articleTitle")) for tc in top_contradicting):
+                top_contradicting.append(vc)
+
         supp_count = len(top_supporting)
         contra_count = len(top_contradicting)
         evidence_results["supportingEvidenceCount"] = supp_count

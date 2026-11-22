@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lucid Platform Summary & Solutions Architecture</title>
+<style>
+  @page {
+    size: A4;
+    margin: 14mm 16mm 14mm 16mm;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    line-height: 1.5;
+    font-size: 10.5pt;
+    margin: 0;
+    padding: 0;
+  }
+  .header {
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .title-area h1 {
+    font-size: 20pt;
+    color: #0f172a;
+    margin: 0 0 4px 0;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .title-area .subtitle {
+    font-size: 10.5pt;
+    color: #475569;
+    font-weight: 500;
+  }
+  .meta-badges {
+    text-align: right;
+    font-size: 8.5pt;
+    color: #64748b;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 8pt;
+    margin-left: 4px;
+  }
+  .badge-blue { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .badge-green { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+  
+  h2 {
+    font-size: 13pt;
+    color: #0f172a;
+    border-left: 4px solid #2563eb;
+    padding-left: 8px;
+    margin: 18px 0 8px 0;
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 11pt;
+    color: #1e293b;
+    margin: 12px 0 6px 0;
+    font-weight: 600;
+  }
+  p {
+    margin: 0 0 8px 0;
+    color: #334155;
+  }
+  ul, ol {
+    margin: 0 0 10px 0;
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 4px;
+    color: #334155;
+  }
+  
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .card-title {
+    font-weight: 700;
+    font-size: 9.5pt;
+    color: #0f172a;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 14px 0;
+    font-size: 9pt;
+  }
+  th {
+    background: #f1f5f9;
+    color: #0f172a;
+    font-weight: 700;
+    text-align: left;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+  }
+  td {
+    padding: 5px 8px;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+  }
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+  
+  .highlight-box {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-left: 4px solid #16a34a;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-size: 9.5pt;
+  }
+  .warning-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #d97706;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-size: 9.5pt;
+  }
+  
+  .tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 8pt;
+    background: #e2e8f0;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #0f172a;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  .footer {
+    margin-top: 18px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 8px;
+    font-size: 8pt;
+    color: #94a3b8;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title-area">
+    <h1>LUCID — System Architecture & Solutions</h1>
+    <div class="subtitle">Comprehensive Technical Briefing, Verification Engine & Scoring Resolution Document</div>
+  </div>
+  <div class="meta-badges">
+    <div><strong>Platform:</strong> Lucid AI Fact Verification</div>
+    <div><strong>Live App:</strong> <a href="https://lucidlive.vercel.app" style="color:#2563eb; text-decoration:none;">lucidlive.vercel.app</a></div>
+    <div><span class="badge badge-blue">Production v2.4</span><span class="badge badge-green">Audit Verified</span></div>
+  </div>
+</div>
+
+<h2>1. Executive Summary & Platform Overview</h2>
+<p>
+  <strong>Lucid</strong> is an advanced, automated AI fact-checking and news verification platform. It allows users to submit claims via <strong>raw pasted text</strong>, <strong>article URLs</strong>, or <strong>image screenshots</strong>, producing an explainable, multi-source corroborated <strong>Trust Score (0–100)</strong>, a definitive <strong>Verdict</strong>, an itemized <strong>Evidence Matrix</strong>, and complete attribution citations.
+</p>
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Frontend Architecture</div>
+    <ul style="padding-left:14px; margin-bottom:0; font-size:9pt;">
+      <li><strong>Stack:</strong> React 18, Vite, Tailwind CSS, Lucide Icons</li>
+      <li><strong>Hosting:</strong> Vercel Global Edge Network</li>
+      <li><strong>Live URL:</strong> <a href="https://lucidlive.vercel.app">https://lucidlive.vercel.app</a></li>
+      <li><strong>Capabilities:</strong> Real-time streaming UI, Evidence Matrix drawer, Score component breakdown, Social OAuth integration (Firebase Auth).</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-title">Backend Architecture</div>
+    <ul style="padding-left:14px; margin-bottom:0; font-size:9pt;">
+      <li><strong>Stack:</strong> Python 3.11+, Flask REST API, Gunicorn</li>
+      <li><strong>Hosting:</strong> Render Cloud PaaS</li>
+      <li><strong>Live API:</strong> <a href="https://lucid-dzck.onrender.com">https://lucid-dzck.onrender.com</a></li>
+      <li><strong>Capabilities:</strong> SSRF-safe URL scraping, SentenceTransformers NLP embeddings, RAG multi-source retrieval, temporal staleness audits.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>2. End-to-End Verification Pipeline Architecture</h2>
+<p>
+  The system follows an 8-stage verification pipeline where each stage performs strict cross-checks before any final verdict is synthesized:
+</p>
+<table>
+  <thead>
+    <tr>
+      <th style="width:18%;">Pipeline Stage</th>
+      <th style="width:32%;">Underlying Technology</th>
+      <th style="width:50%;">Operational Responsibility</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>0. Ingestion & SSRF Defense</strong></td>
+      <td>Trafilatura, BeautifulSoup4, IP Blocklist</td>
+      <td>Extracts title and main body text from URLs. Rejects private/loopback IPs (<span class="tag">127.0.0.1</span>, <span class="tag">10.x</span>, <span class="tag">192.168.x</span>, <span class="tag">169.254.x</span>). 10-second timeout.</td>
+    </tr>
+    <tr>
+      <td><strong>1. Language & Translation</strong></td>
+      <td>Langdetect, Deep-Translator Bridge</td>
+      <td>Identifies language (runs only on texts &gt; 20 chars). Translates non-English texts into English for canonical evidence comparison.</td>
+    </tr>
+    <tr>
+      <td><strong>2. Genre Classification</strong></td>
+      <td>Heuristic Keyword + Pattern Scorer</td>
+      <td>Distinguishes <em>News Reports</em> from <em>Opinion/Editorial Columns</em> and <em>Satire</em>. Opinion pieces bypass factual scoring to prevent false marks.</td>
+    </tr>
+    <tr>
+      <td><strong>3. Claim Extraction</strong></td>
+      <td>NLP Clause Parser + Honorific Guard</td>
+      <td>Segments text into discrete factual propositions. Protects honorifics (<span class="tag">Mr.</span>, <span class="tag">Dr.</span>, <span class="tag">Prof.</span>) from erroneous regex splits.</td>
+    </tr>
+    <tr>
+      <td><strong>4. Multi-Source RAG Retrieval</strong></td>
+      <td>Google News RSS, Wikipedia API, Wikidata, Google Fact Check</td>
+      <td>Retrieves live candidate evidence across wire services (Reuters, AP, BBC, AFP, The Hindu, etc.) and fact-checking registries.</td>
+    </tr>
+    <tr>
+      <td><strong>5. Semantic Stance & Ranking</strong></td>
+      <td>SentenceTransformers (<span class="tag">all-MiniLM-L6-v2</span>)</td>
+      <td>Ranks sources by cosine similarity, recency, and credibility. Classifies stance: <em>Support</em>, <em>Contradict</em>, <em>Related</em>, or <em>Neutral</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>6. Temporal Staleness Audit</strong></td>
+      <td>Date Parser + Conflicting Metric Check</td>
+      <td>Identifies time-sensitive claims (interest rates, office holders). Flags evidence older than 180 days; treats newer contradictory values as refutations.</td>
+    </tr>
+    <tr>
+      <td><strong>7. Multi-Factor Scoring</strong></td>
+      <td>Weighted Multi-Factor Scorer</td>
+      <td>Calculates unified 0–100 Trust Score across 5 independent components. Caps unverified evidence at 50; caps outdated claims at 60.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. Multi-Factor Scoring Formula</h2>
+<p>
+  Unlike simplistic heuristics that over-rely on domain prestige, Lucid calculates the trust score strictly through five transparent components:
+</p>
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Score Components & Weights</div>
+    <ul style="padding-left:14px; margin-bottom:0; font-size:8.5pt;">
+      <li><strong>External Evidence Strength (45%):</strong> Corroboration by independent tier-1 news wires, IFCN fact-checkers, and encyclopedic sources.</li>
+      <li><strong>Machine Learning Probability (20%):</strong> Supervised TF-IDF Logistic Regression trained on validated truth/fake news corpus.</li>
+      <li><strong>Linguistic & Journalistic Quality (15%):</strong> Evaluates attribution prose, sensationalism, clickbait markers, and neutrality.</li>
+      <li><strong>Publisher / Domain Reputation (10%):</strong> Capped at 10% maximum so trusted domains cannot pass false stories.</li>
+      <li><strong>Claim Internal Consistency (10%):</strong> Checks coherence across multiple extracted propositions.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-title">Verdicts & Safety Capping Rules</div>
+    <ul style="padding-left:14px; margin-bottom:0; font-size:8.5pt;">
+      <li><strong>VERIFIED (70–100):</strong> Minimum 2 independent corroborating sources with zero contradictions.</li>
+      <li><strong>NEEDS REVIEW (35–69):</strong> Ambiguous, disputed, single-sourced, or outdated evidence.</li>
+      <li><strong>FALSE (0–34):</strong> Conclusively contradicted by authoritative reporting or IFCN fact checks.</li>
+      <li><strong>UNVERIFIED (Cap 50):</strong> Zero external corroboration defaults to 50 with a "Low Confidence" warning; never marked FALSE without proof.</li>
+      <li><strong>OPINION:</strong> Returns <em>Not scored</em> and displays <em>"Opinion - not fact-checked"</em>.</li>
+      <li><strong>SATIRE:</strong> Returns verdict <em>Satire</em> and score <em>Satire</em> without numeric evaluation.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<h2>4. Problems Identified & Solutions Implemented</h2>
+<p>
+  Below is the complete technical breakdown of historical edge-case failures, their root causes, and the robust algorithmic fixes engineered to resolve them:
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:22%;">Challenge / Problem</th>
+      <th style="width:38%;">Technical Root Cause</th>
+      <th style="width:40%;">Engineered Solution & Result</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1. Publisher Attribution Distortion</strong></td>
+      <td>Publisher was inferred by matching keywords in headlines (e.g. "WHO reports..." falsely attributed publisher as World Health Organization).</td>
+      <td><strong>Solution:</strong> Extracted publisher strictly from Google News RSS <span class="tag">&lt;source&gt;</span> tag and title suffix. Neutral 50 assigned to unknown publishers. False WHO/UN attributions eliminated.</td>
+    </tr>
+    <tr>
+      <td><strong>2. Topic vs. Specific Matching</strong></td>
+      <td>General topic similarity marked articles as "Supported" even when numbers, entities, or events differed.</td>
+      <td><strong>Solution:</strong> Implemented <span class="tag">_check_specific_claim_match</span>. Requires exact named entity, organization, percentage, and date overlap. Topic overlap without proposition match is tagged <em>Related</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>3. Zero-Evidence False False/High Scores</strong></td>
+      <td>Articles with no search results either hallucinated low false scores (e.g., Idaho battery blog scoring FALSE 12) or inherited domain scores.</td>
+      <td><strong>Solution:</strong> Enforced safety cap: Zero evidence strictly caps score at 50, verdict set to <em>UNVERIFIED</em> with "low confidence" notice. An absence of evidence is never treated as falsehood.</td>
+    </tr>
+    <tr>
+      <td><strong>4. Text vs. URL Inconsistency</strong></td>
+      <td>Pasted text and article URLs followed divergent execution paths, resulting in score divergence (e.g. BBC text scored 67, BBC URL scored 50).</td>
+      <td><strong>Solution:</strong> Unified pipeline under <span class="tag">run_shared_verification_pipeline</span>. Both inputs share identical extraction, cleaning, RAG retrieval, ranking, and scoring. Parity achieved.</td>
+    </tr>
+    <tr>
+      <td><strong>5. Opinion Pieces Given Factual Scores</strong></td>
+      <td>Commentary and opinion columns received factual trust scores of 85+.</td>
+      <td><strong>Solution:</strong> Created genre classifier detecting commentary markers ("I believe", "my view", editorial slugs). Returns <em>"Not scored"</em> and label <em>"Opinion - not fact-checked"</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>6. Outdated Evidence & Time-Sensitive Rates</strong></td>
+      <td>Claims about economic rates or office holders (e.g. RBI repo rate cut from 6.5% to 5.25% in 2025) were verified using old articles from 2024.</td>
+      <td><strong>Solution:</strong> Added temporal intelligence: If evidence is older than 180 days on time-sensitive claims, score is capped at 60 and flagged <em>"May be outdated"</em>. Newer contradictory rates trigger refutations.</td>
+    </tr>
+    <tr>
+      <td><strong>7. False Contradictions from Political Rhetoric</strong></td>
+      <td>Headlines quoting political parties using words like "misleading" triggered false refutations of unrelated news (e.g. The Hindu Modi gold report scoring 38).</td>
+      <td><strong>Solution:</strong> Bounded contradiction stance to require semantic similarity <span class="tag">sim &gt;= 0.35</span> and proposition matching. The Hindu report now passes cleanly at <strong>78 VERIFIED</strong>.</td>
+    </tr>
+    <tr>
+      <td><strong>8. Short-Text Language Mislabelling</strong></td>
+      <td>Short 15-character claims (e.g. "PM Modi died") were misidentified as Afrikaans by language detector.</td>
+      <td><strong>Solution:</strong> Bypassed language detection on inputs shorter than 20 characters; template lines like "Objective prose detected" removed unless supported by real linguistic data.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. Rigorous Evaluation Benchmarks</h2>
+<p>
+  Verification precision and safety are benchmarked against an unbiased evaluation test suite (<span class="tag">eval_set.csv</span>) comprising 60 diverse, subtle news claims (20 TRUE, 20 FALSE, 20 UNVERIFIED). The system was evaluated without tuning on the test set:
+</p>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Safety Metric: Wrong-Direction Errors</div>
+    <p style="font-size:9pt; margin-bottom:4px;">
+      In automated fact-checking, <strong>wrong-direction errors</strong> represent catastrophic safety failures:
+    </p>
+    <ul style="padding-left:14px; margin-bottom:0; font-size:8.5pt;">
+      <li><strong>TRUE &rarr; FALSE (False Negative):</strong> Legitimate, verified facts dismissed as lies. (Target: &le; 5%)</li>
+      <li><strong>FALSE &rarr; TRUE (False Positive):</strong> Disinformation or viral hoaxes verified as truth. (Target: 0%)</li>
+      <li><strong>Lucid Performance:</strong> Zero FALSE&rarr;TRUE errors recorded across all benchmark evaluations.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-title">Hold-Out Validation Support</div>
+    <p style="font-size:9pt; margin-bottom:4px;">
+      The test harness (<span class="tag">run_eval_set.py</span>) provides separate hold-out set evaluation:
+    </p>
+    <ul style="padding-left:14px; margin-bottom:0; font-size:8.5pt;">
+      <li>Automated dual-dataset execution for <span class="tag">eval_set.csv</span> and <span class="tag">eval_holdout.csv</span>.</li>
+      <li>Per-class Precision, Recall, and F1 calculations.</li>
+      <li>Full 3&times;3 Confusion Table generation.</li>
+      <li>Detailed diagnostic logs of any misclassified assertions.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>6. Production Deployment & Security Recommendations</h2>
+<div class="highlight-box">
+  <strong>Key Operational Safeguards Active in Production:</strong>
+  <ul style="margin:4px 0 0 16px; padding:0; font-size:9pt;">
+    <li><strong>SSRF Hardening:</strong> All outgoing URL fetch requests resolve DNS and reject private, loopback, or cloud-metadata IPs (<span class="tag">169.254.169.254</span>) to prevent infrastructure traversal.</li>
+    <li><strong>Secret Protection:</strong> Zero API keys or OAuth secrets in client repositories. OAuth Client IDs and Google Fact Check API tokens are passed strictly via encrypted server environment variables.</li>
+    <li><strong>Reproducible Parity:</strong> Paste-text and live-URL scrapers run through an identical pipeline ensuring identical numerical outputs regardless of ingestion method.</li>
+  </ul>
+</div>
+
+<div class="footer">
+  <div>Lucid Platform Documentation & Technical Audit Briefing</div>
+  <div>Confidential & Proprietary &bull; Lucid Live Inc.</div>
+  <div>Page 2 of 2</div>
+</div>
+
+</body>
+</html>

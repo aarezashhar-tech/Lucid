@@ -430,7 +430,9 @@ class EvidenceVerificationEngine:
                 re.I
             ))
 
-            if debunk_match or gn.get("stance") == "contradict":
+            # Contradiction requires the article to be specifically relevant to the claim (sim >= 0.35)
+            # A random article merely containing the word "misleading" or "false" must not contradict unrelated claims.
+            if ((debunk_match and sim >= 0.35) or (gn.get("stance") == "contradict" and sim >= 0.35)):
                 contradicting_sources.append(src)
                 pts = int(round((trust / 100.0) * 16))
                 snippets.append({
