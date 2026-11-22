@@ -125,6 +125,11 @@ class RAGRetrievalEngine:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LucidRAG/2.0"
         })
         self.wikipedia_service = get_wikipedia_service()
+        self.session_queried_sources: Dict[str, int] = {}
+
+    def reset_session_audit(self):
+        """Clears per-session queried sources audit log."""
+        self.session_queried_sources = {}
 
     def _match_publisher_metadata(self, pub_name: str, url: str = "") -> Dict[str, Any]:
         """Resolves source string to normalized publisher name, trust score, and category."""
@@ -492,13 +497,17 @@ class RAGRetrievalEngine:
         # 0. Wikipedia Official API lookup (supporting/contradicting encyclopedic reference)
         try:
             wiki_items = self.wikipedia_service.get_wikipedia_evidence_for_claim(claim_text)
+            self.session_queried_sources["Wikipedia (Official REST API)"] = self.session_queried_sources.get("Wikipedia (Official REST API)", 0) + len(wiki_items)
             add_candidates(wiki_items)
         except Exception as e:
+            self.session_queried_sources["Wikipedia (Official REST API)"] = self.session_queried_sources.get("Wikipedia (Official REST API)", 0)
             logger.debug(f"Wikipedia retrieval error: {e}")
 
-        # 1. Fact-check API query
-        factchecks = self._fetch_factcheck_evidence(claim_text)
-        add_candidates(factchecks)
+        # 1. Fact-check API query (only queried if API key configured)
+        if os.getenv("FACTCHECK_API_KEY", "").strip():
+            factchecks = self._fetch_factcheck_evidence(claim_text)
+            self.session_queried_sources["Google Fact Check Tools API"] = self.session_queried_sources.get("Google Fact Check Tools API", 0) + len(factchecks)
+            add_candidates(factchecks)
 
         # 2. Wire search with primary news wire priority
         if wire_articles is not None:
@@ -530,6 +539,7 @@ class RAGRetrievalEngine:
                     "retrievalChannel": "Wire News Search"
                 })
             add_candidates(converted)
+            self.session_queried_sources["Google News RSS Wire Search"] = self.session_queried_sources.get("Google News RSS Wire Search", 0) + len(converted)
         else:
             wire_query = f"{claim_text}"
             wire_results = self._fetch_rss_wire_evidence(wire_query, max_items=6)
@@ -539,21 +549,35 @@ class RAGRetrievalEngine:
             targeted_wire_q = f"{claim_text} (Reuters OR AP OR BBC OR \"Al Jazeera\" OR \"The Guardian\")"
             targeted_results = self._fetch_rss_wire_evidence(targeted_wire_q, max_items=4)
             add_candidates(targeted_results)
+            self.session_queried_sources["Google News RSS Wire Search"] = self.session_queried_sources.get("Google News RSS Wire Search", 0) + len(wire_results) + len(targeted_results)
 
         # 4. Institutional archives (UN, WHO, etc.)
-        inst_results = self._fetch_institutional_evidence_if_relevant(claim_text)
-        add_candidates(inst_results)
+        lower = claim_text.lower()
+        if any(k in lower for k in ["vaccine", "covid", "virus", "pandemic", "who", "health", "disease", "treatment", "fda", "cdc", "renewable", "solar", "wind", "energy", "iea", "emissions", "climate", "fossil", "capacity", "un", "united nations", "security council", "treaty", "resolution", "sanctions", "icj", "icc", "genocide", "ceasefire"]):
+            inst_results = self._fetch_institutional_evidence_if_relevant(claim_text)
+            self.session_queried_sources["Institutional Archives (UN/WHO/CDC)"] = self.session_queried_sources.get("Institutional Archives (UN/WHO/CDC)", 0) + len(inst_results)
+            add_candidates(inst_results)
 
         # 5. Canonical archive grounding
         canon_results = self._fetch_canonical_wire_archives(claim_text)
-        add_candidates(canon_results)
+        if canon_results:
+            self.session_queried_sources["Canonical Wire Archives"] = self.session_queried_sources.get("Canonical Wire Archives", 0) + len(canon_results)
+            add_candidates(canon_results)
 
         logger.info(f"RAG Retrieval for claim '{claim_text[:60]}...': found {len(all_candidates)} raw candidate sources.")
         return all_candidates[:max_items]
 
     def get_sources_searched_list(self) -> List[str]:
-        """Returns the formal list of sources searched for user transparency."""
-        return list(CORE_SOURCES_SEARCHED)
+        """Returns the formal list of sources actually queried with result counts for user transparency."""
+        if not self.session_queried_sources:
+            return [
+                "Google News RSS Wire Search (0 results)",
+                "Wikipedia (Official REST API) (0 results)"
+            ]
+        return [
+            f"{source} ({count} result{'s' if count != 1 else ''})"
+            for source, count in self.session_queried_sources.items()
+        ]
 
 
 _retriever = RAGRetrievalEngine()

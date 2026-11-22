@@ -157,14 +157,14 @@ def run_shared_verification_pipeline(
     con_contrib = factors.get("claimConsistency", {}).get("contribution", 0)
     lan_contrib = factors.get("languageQuality", {}).get("contribution", 0)
 
-    app.logger.info(
-        f"[SharedPipeline Scoring] {input_type.upper()} -> Text Length: {len(text)} chars | Trust Score: {result.get('trustScore')}/100 | Verdict: {result.get('verdict')} | "
-        f"Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
+    ts_display = result.get('trustScore')
+    ts_str = f"{ts_display}/100" if isinstance(ts_display, (int, float)) else str(ts_display)
+    log_line = (
+        f"[SharedPipeline Scoring] {input_type.upper()} -> Text Length: {len(text)} chars | Trust Score: {ts_str} | Verdict: {result.get('verdict')} | "
+        f"Components: [Evidence(45%): {evi_contrib}, ML(20%): {ml_contrib}, Language(15%): {lan_contrib}, Source(10%): {src_contrib}, Consistency(10%): {con_contrib}]"
     )
-    print(
-        f"[SharedPipeline Scoring] {input_type.upper()} -> Text Length: {len(text)} chars | Trust Score: {result.get('trustScore')}/100 | Verdict: {result.get('verdict')} | "
-        f"Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
-    )
+    app.logger.info(log_line)
+    print(log_line)
 
     return result
 

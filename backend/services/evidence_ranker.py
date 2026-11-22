@@ -211,9 +211,13 @@ class EvidenceRanker:
                 "reports", "reported", "struck", "rose", "raised", "increased",
                 "announced", "agreed", "signed", "passed", "according to",
                 "reuters", "ap news", "associated press", "bbc news", "al jazeera", "afp",
-                "intercepts", "intercepted", "says", "said", "evacuated"
+                "intercepts", "intercepted", "says", "said", "evacuated",
+                "record", "record-breaking", "records", "growth", "growing",
+                "surge", "surged", "expansion", "analysis", "statistics",
+                "official", "milestone", "capacity", "generation", "share",
+                "power", "energy", "annual", "quarter", "decade", "year"
             ]
-            has_affirmative = any(m in combined for m in affirmative_report_markers)
+            has_affirmative = (sim_score >= 0.60) or any(m in combined for m in affirmative_report_markers)
 
             # If Wikipedia summary matches the entity and proposition
             if "wikipedia" in combined and sim_score >= 0.65:

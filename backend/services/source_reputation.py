@@ -1268,17 +1268,17 @@ class SourceReputationEngine:
                     "isPrimary": True
                 }
 
-            # General web domain evaluation
+            # General web domain evaluation (Neutral value for unlisted domains)
             return {
                 "publisher": domain.split(".")[0].upper(),
                 "sourceName": f"Web Publisher ({domain})",
                 "name": f"Web Publisher ({domain})",
                 "domain": domain,
-                "trustScore": 68,
-                "tier": "Medium",
-                "category": "Verified Web Domain",
-                "description": f"Source reputation evaluated from actual domain: {domain}.",
-                "attributionType": f"Actual Domain Evaluation ({domain})",
+                "trustScore": 50,
+                "tier": "Neutral",
+                "category": "Unlisted Web Domain",
+                "description": f"Source reputation evaluated from web domain: {domain}. Neutral baseline assigned for unlisted domain.",
+                "attributionType": f"Domain Baseline Evaluation ({domain})",
                 "isTrusted": False,
                 "isPrimary": True
             }

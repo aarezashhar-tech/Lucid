@@ -48,13 +48,9 @@ def test_rag_retrieval_layer():
     retriever = get_rag_retriever()
     sources = retriever.get_sources_searched_list()
 
-    assert "Reuters" in sources
-    assert "AP News" in sources
-    assert "BBC" in sources
-    assert "Al Jazeera" in sources
-    assert "The Guardian" in sources
-    assert "AFP" in sources
-    assert "Google Fact Check API" in sources
+    # Honest sources actually queried by Lucid RAG engine
+    assert any("Google News RSS" in s for s in sources)
+    assert any("Wikipedia" in s for s in sources)
 
     # Retrieve for Palestinian boy conflict claim
     results = retriever.retrieve_evidence_for_claim("Israeli forces shot a Palestinian boy.")

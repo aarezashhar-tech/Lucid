@@ -50,7 +50,9 @@ class GroundedReasoningEngine:
         top_supporting: List[Dict[str, Any]],
         top_contradicting: List[Dict[str, Any]],
         sources_searched: List[str],
-        article_type: str = "News Report"
+        article_type: str = "News Report",
+        final_verdict: Optional[str] = None,
+        final_trust_score: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Executes strict RAG verdict determination and generates
@@ -92,9 +94,25 @@ class GroundedReasoningEngine:
         # -------------------------------------------------------------
         # 1. VERDICT DECISION MATRIX
         # -------------------------------------------------------------
-        if article_type == "Opinion Piece":
-            verdict = "OPINION / COMMENTARY"
-            trust_score = 80
+        if final_verdict:
+            verdict = final_verdict
+            trust_score = final_trust_score if final_trust_score is not None else (
+                "Not scored" if verdict == "Opinion - not fact-checked" else 50
+            )
+            risk_level = "CRITICAL" if verdict == "FALSE" else "HIGH" if verdict == "LIKELY FALSE" else "LOW" if verdict in ("VERIFIED", "LIKELY TRUE", "Opinion - not fact-checked") else "MEDIUM"
+            if verdict == "FALSE":
+                summary_reason = f"Conclusively disproven. Contradicted by authoritative evidence ({', '.join(list(contradicting_pubs)[:2]) or 'verified sources'})."
+            elif verdict == "VERIFIED":
+                summary_reason = f"Corroborated across {supp_count} independent sources ({', '.join(list(supporting_pubs)[:2]) or 'reputable sources'}) with zero contradicting evidence."
+            elif verdict == "LIKELY TRUE":
+                summary_reason = f"Supported by reputable reporting ({supp_count} citation(s)) without contradiction."
+            elif verdict == "Opinion - not fact-checked":
+                summary_reason = "Opinion / commentary piece — subjective perspectives are not evaluated as factual breaking-news claims."
+            else:
+                summary_reason = "No sufficiently relevant corroborating sources were found. Unverified pending independent evidence."
+        elif article_type in ("Opinion Piece", "Opinion"):
+            verdict = "Opinion - not fact-checked"
+            trust_score = "Not scored"
             risk_level = "LOW"
             summary_reason = (
                 f"Identified as an Opinion Piece ({len(opinion_claims)} viewpoint assertions). "
@@ -144,23 +162,19 @@ class GroundedReasoningEngine:
             summary_reason = "Conflicting reporting detected with contradictory assertions across wire sources."
         elif distinct_supp_count >= 2 and contra_count == 0:
             # VERIFIED: Multiple independent supporting sources without contradiction
-            # A claim must never be VERIFIED only because related articles were found.
             verdict = "VERIFIED"
-            trust_score = 94
+            trust_score = 90
             risk_level = "LOW"
             s_names = " and ".join(list(supporting_pubs)[:2])
             summary_reason = f"Corroborated across multiple independent reputable wire services: {s_names}."
         elif distinct_supp_count == 1 and supp_count >= 1 and contra_count == 0:
             # LIKELY TRUE: Strong supporting evidence
             verdict = "LIKELY TRUE"
-            trust_score = 84
+            trust_score = 80
             risk_level = "LOW"
             s_name = list(supporting_pubs)[0]
             summary_reason = f"Supported by reputable reporting from {s_name} without contradiction."
         else:
-            # UNVERIFIED: Insufficient retrieval results
-            # CRITICAL REQUIREMENT: A claim must never be VERIFIED only because related articles were found!
-            # Missing evidence must NEVER be treated as false!
             verdict = "UNVERIFIED"
             trust_score = 50
             risk_level = "MEDIUM"
@@ -198,38 +212,53 @@ class GroundedReasoningEngine:
 
         if not top_supporting:
             evidence_missing_citations.append(
-                "No external corroborating wire dispatches passed semantic matching threshold across Reuters, AP, BBC, Al Jazeera, or The Guardian."
+                "No external corroborating dispatches passed semantic matching threshold across queried sources."
             )
+            why_appears_true.append("No corroborating citations identified in queried sources.")
 
         if not top_contradicting and not has_ifcn_false:
             why_appears_false.append("No contradicting wire flags or negative fact checks were discovered in public registries.")
 
-        if verdict == "UNVERIFIED":
+        # Synthesis text: Dynamically generated from real evidence counts
+        if verdict == "Opinion - not fact-checked" or article_type in ("Opinion Piece", "Opinion"):
             synthesis = (
-                "Grounded Retrieval Synthesis: An exhaustive RAG search across Reuters, AP News, BBC, "
-                "Al Jazeera, The Guardian, AFP, and Google Fact Check API yielded 0 corroborating citations "
-                "for the candidate claims. In accordance with strict fact-checking methodology, absent evidence "
-                "is designated as UNVERIFIED rather than false."
+                "Grounded Retrieval Synthesis: Submission is identified as an Opinion / Commentary piece. "
+                "Subjective arguments and commentary express author perspective rather than verifiable breaking news, "
+                "and are not assigned a fact-based true/false trust score under journalistic standards."
             )
-        elif verdict in ("VERIFIED", "LIKELY TRUE"):
-            s_list = ", ".join(list(supporting_pubs)[:3])
+        elif supp_count > 0 and contra_count == 0:
+            s_list = ", ".join(list(supporting_pubs)[:3]) or "verified sources"
             synthesis = (
-                f"Grounded Retrieval Synthesis: Claim-by-claim semantic cross-referencing successfully grounded "
-                f"this submission in published reporting from {s_list}. Retrieved evidence exhibits high semantic "
-                f"similarity and institutional credibility without contradicting wire flags."
+                f"Grounded Retrieval Synthesis: Claim-by-claim cross-referencing successfully grounded "
+                f"this submission in published reporting from {s_list} ({supp_count} corroborating citation(s)). "
+                f"Retrieved evidence exhibits high semantic relevance and credibility without contradicting wire flags."
             )
-        elif verdict in ("FALSE", "LIKELY FALSE"):
-            c_list = ", ".join(list(contradicting_pubs)[:3])
+        elif contra_count > 0 and supp_count == 0:
+            c_list = ", ".join(list(contradicting_pubs)[:3]) or "authoritative sources"
             synthesis = (
                 f"Grounded Retrieval Synthesis: Retrieved investigative records from {c_list} directly contradict "
-                f"the candidate claims. Debunking analyses and official statements dispute the factual basis of the submission."
+                f"the candidate claim(s) ({contra_count} contradicting record(s) detected). "
+                f"Authoritative reporting and official records dispute the factual basis of the submission."
+            )
+        elif contra_count > 0 and supp_count > 0:
+            s_list = ", ".join(list(supporting_pubs)[:2]) or "supporting sources"
+            c_list = ", ".join(list(contradicting_pubs)[:2]) or "contradicting sources"
+            synthesis = (
+                f"Grounded Retrieval Synthesis: Conflicting evidence detected across queried sources "
+                f"({supp_count} supporting from {s_list} vs {contra_count} contradicting from {c_list}). "
+                f"Editorial review is recommended due to mixed reporting."
             )
         else:
-            synthesis = f"Grounded Retrieval Synthesis: Analysis completed for {article_type}."
+            sources_summary = ", ".join([s.split(' (')[0] for s in sources_searched]) if sources_searched else "queried sources"
+            synthesis = (
+                f"Grounded Retrieval Synthesis: An exhaustive search across {sources_summary} yielded 0 corroborating citations "
+                f"for the candidate claim(s). In accordance with strict fact-checking methodology, absent evidence "
+                f"is designated as UNVERIFIED rather than false."
+            )
 
         explanation = [
             summary_reason,
-            f"Sources searched: {', '.join(sources_searched[:5])}.",
+            f"Sources searched: {', '.join(sources_searched[:4]) if sources_searched else 'queried sources'}.",
             f"Evidence retrieved: {supp_count} supporting, {contra_count} contradicting.",
             f"Grounded Verdict: {verdict}."
         ]
@@ -242,7 +271,7 @@ class GroundedReasoningEngine:
             "explanation": explanation,
             "groundedReasoning": {
                 "synthesis": synthesis,
-                "whyAppearsTrue": why_appears_true or ["No external supporting evidence grounded in wire archives."],
+                "whyAppearsTrue": why_appears_true,
                 "whyAppearsFalse": why_appears_false,
                 "evidenceFound": evidence_found_citations,
                 "evidenceMissing": evidence_missing_citations or ["No additional corroborating documentation missing."]
