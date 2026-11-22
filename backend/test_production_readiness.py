@@ -4,7 +4,12 @@ import time
 from PIL import Image, ImageDraw
 import pypdf
 
-time.sleep(1)
+import pytest
+
+try:
+    requests.get('http://localhost:5000/api/health', timeout=1)
+except Exception:
+    pytest.skip("Local live server on localhost:5000 is not running for test_production_readiness.py", allow_module_level=True)
 
 print('=== 1. Health Check & ML Model Loading ===')
 r_health = requests.get('http://localhost:5000/api/health')

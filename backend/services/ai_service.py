@@ -209,11 +209,28 @@ class VerificationEngine:
                 }
             }
 
+        # Reset session audit for RAG retrieval transparency
+        self.rag_retriever.reset_session_audit()
+
         # -------------------------------------------------------------
         # STEP -1: Multi-Language Detection & Processing
         # -------------------------------------------------------------
         logger.info("Pipeline Step -1: Multi-Language Detection & Translation Bridge")
-        lang_info = self.language_service.process_content(text)
+        # Requirement 5: Do not run language detection on texts under about 20 characters
+        if len(text.strip()) < 20:
+            lang_info = {
+                "code": "en",
+                "languageCode": "en",
+                "language": "English",
+                "detectedLanguage": "English",
+                "confidence": 1.0,
+                "isEnglish": True,
+                "isForeignLanguage": False,
+                "analysisText": text,
+                "wasTranslated": False
+            }
+        else:
+            lang_info = self.language_service.process_content(text)
         analysis_text = lang_info.get("analysisText", text)
         detected_lang = lang_info.get("language", "English")
         detected_code = lang_info.get("code", "en")
@@ -263,7 +280,7 @@ class VerificationEngine:
             is_op = claim_obj.get("isOpinion", False) or claim_obj.get("claimType") == "Opinion / Perspective Assertion"
             if c_text and not is_op:
                 wire_list = gnews_map.get(c_text, [])
-                candidates = self.rag_retriever.retrieve_evidence_for_claim(c_text, max_items=8, wire_articles=wire_list)
+                candidates = self.rag_retriever.retrieve_evidence_for_claim(c_text, max_items=14, wire_articles=wire_list)
                 retrieval_map[c_text] = candidates
                 all_rag_candidates.extend(candidates)
             else:
@@ -316,25 +333,6 @@ class VerificationEngine:
         )
 
         sources_searched = self.rag_retriever.get_sources_searched_list()
-
-        # -------------------------------------------------------------
-        # STEP 2c (RAG): Grounded Reasoning & Authoritative Verdict Synthesis
-        # Strict rules:
-        # VERIFIED: >= 2 independent supporting sources
-        # LIKELY TRUE: strong supporting evidence
-        # UNVERIFIED: insufficient retrieval results (Missing evidence is NEVER false!)
-        # LIKELY FALSE: some contradicting evidence
-        # FALSE: fact-check rated false or overwhelming contradiction
-        # -------------------------------------------------------------
-        logger.info("Pipeline Step 2c (RAG): Grounded Reasoning & Verdict Synthesis")
-        rag_verdict_data = self.grounded_reasoner.synthesize_rag_verdict_and_reasoning(
-            claims=extracted_claims,
-            evidence_matrix=evidence_matrix,
-            top_supporting=top_supporting,
-            top_contradicting=top_contradicting,
-            sources_searched=sources_searched,
-            article_type=article_type
-        )
 
         # -------------------------------------------------------------
         # STEP 2d: Legacy API Compatibility (Google Fact Check & GNews)
@@ -393,9 +391,29 @@ class VerificationEngine:
             external_factchecks_map=external_factchecks_map,
             gnews_map=gnews_map
         )
-        evidence_score = evidence_results["evidenceScore"]
-        supp_count = evidence_results["supportingEvidenceCount"]
-        contra_count = evidence_results["contradictingEvidenceCount"]
+        # Harmonize evidence counts and score using deduplicated retrieved evidence
+        verifier_contra = evidence_results.get("contradictingEvidence", [])
+        for vc in verifier_contra:
+            if not any((vc.get("url") or vc.get("articleTitle")) == (tc.get("url") or tc.get("articleTitle")) for tc in top_contradicting):
+                top_contradicting.append(vc)
+
+        supp_count = len(top_supporting)
+        contra_count = len(top_contradicting)
+        evidence_results["supportingEvidenceCount"] = supp_count
+        evidence_results["contradictingEvidenceCount"] = contra_count
+
+        evidence_score = evidence_results.get("evidenceScore", 50)
+        if supp_count >= 2 and contra_count == 0:
+            avg_supp = sum(s.get("sourceTrustScore", 85) for s in top_supporting[:3]) / min(3, len(top_supporting))
+            evidence_score = max(evidence_score, int(round(avg_supp)))
+        elif contra_count >= 1 and supp_count == 0:
+            evidence_score = 0
+        elif supp_count == 1 and contra_count == 0:
+            evidence_score = max(evidence_score, 75)
+        elif supp_count == 0 and contra_count == 0:
+            evidence_score = 50
+        evidence_results["evidenceScore"] = evidence_score
+
         fact_check_results = evidence_results.get("factCheckResults", [])
         if not fact_check_results and all_api_factchecks:
             fact_check_results = all_api_factchecks
@@ -439,8 +457,7 @@ class VerificationEngine:
 
         # -------------------------------------------------------------
         # STEP 6: Final Trust Score (Multi-Factor Scoring)
-        # 30% ML, 25% Source, 25% Evidence, 10% Consistency, 10% Language
-        # With Genre-Specific handling for Historical Analysis, Opinion Piece, and Feature
+        # Weights: Evidence 45%, ML 20%, Language 15%, Source 10%, Consistency 10%
         # -------------------------------------------------------------
         logger.info(f"Pipeline Step 6: Final Trust Score & Verdict Calculation (Genre: {article_type})")
         verdict_results = self.scoring_engine.compute_verdict_and_score(
@@ -453,28 +470,41 @@ class VerificationEngine:
             contradicting_evidence_count=contra_count,
             fact_check_results=fact_check_results,
             article_type=article_type,
-            source_quality_assessment=source_quality_assessment
+            source_quality_assessment=source_quality_assessment,
+            source_tier=source_data.get("tier", ""),
+            source_category=source_data.get("category", "")
         )
 
-        # Prioritize Grounded RAG Verdict Logic for News, Factual assertions, and debunks
-        if rag_verdict_data and (
-            article_type in ("News Report", "News") or
-            rag_verdict_data["verdict"] in ("FALSE", "LIKELY FALSE", "VERIFIED")
-        ):
-            final_verdict = rag_verdict_data["verdict"]
-            final_trust_score = rag_verdict_data["finalTrustScore"]
-            risk_level = rag_verdict_data["riskLevel"]
-            summary_reason = rag_verdict_data["summaryReason"]
-        else:
-            final_trust_score = verdict_results["finalTrustScore"]
-            final_verdict = verdict_results["verdict"]
-            risk_level = verdict_results["riskLevel"]
-            summary_reason = verdict_results["summaryReason"]
+        final_verdict = verdict_results["verdict"]
+        final_trust_score = verdict_results["finalTrustScore"]
+        risk_level = verdict_results["riskLevel"]
+        summary_reason = verdict_results["summaryReason"]
 
-        if rag_verdict_data and rag_verdict_data.get("verdict") == "FALSE":
+        # Ensure conclusively false / contradicted claims receive standard FALSE verdict and low score (Task C)
+        # Never override Satire or Opinion verdicts
+        if final_verdict not in ("Satire", "Opinion - not fact-checked") and (final_verdict == "KNOWN FALSE" or (contra_count >= 1 and supp_count == 0)):
             final_verdict = "FALSE"
-            final_trust_score = min(final_trust_score, 15)
+            if isinstance(final_trust_score, (int, float)):
+                final_trust_score = min(final_trust_score, 12)
             risk_level = "CRITICAL"
+            if contra_count >= 1 and supp_count == 0:
+                summary_reason = f"Conclusively disproven. Contradicted by authoritative evidence ({contra_count} contradicting record(s))."
+
+        # -------------------------------------------------------------
+        # STEP 6b (RAG): Grounded Reasoning Synthesis
+        # Strictly binds reasoning to real evidence counts and verdict
+        # -------------------------------------------------------------
+        sources_searched = self.rag_retriever.get_sources_searched_list()
+        rag_verdict_data = self.grounded_reasoner.synthesize_rag_verdict_and_reasoning(
+            claims=extracted_claims,
+            evidence_matrix=evidence_matrix,
+            top_supporting=top_supporting,
+            top_contradicting=top_contradicting,
+            sources_searched=sources_searched,
+            article_type=article_type,
+            final_verdict=final_verdict,
+            final_trust_score=final_trust_score
+        )
 
         scoring_factors = verdict_results["scoringFactors"]
         ml_contrib = scoring_factors.get("mlPrediction", {}).get("contribution", 0)
@@ -483,14 +513,12 @@ class VerificationEngine:
         con_contrib = scoring_factors.get("claimConsistency", {}).get("contribution", 0)
         lan_contrib = scoring_factors.get("languageQuality", {}).get("contribution", 0)
 
-        logger.info(
-            f"[Lucid Pipeline] Text Length: {len(text)} chars | Final Trust Score: {final_trust_score}/100 | Verdict: {final_verdict} | "
-            f"Score Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
+        log_msg = (
+            f"[Lucid Pipeline] Text Length: {len(text)} chars | Final Trust Score: {final_trust_score} | Verdict: {final_verdict} | "
+            f"Score Components: [Evidence(45%): {evi_contrib}, ML(20%): {ml_contrib}, Language(15%): {lan_contrib}, Source(10%): {src_contrib}, Consistency(10%): {con_contrib}]"
         )
-        print(
-            f"[Lucid Pipeline] Text Length: {len(text)} chars | Final Trust Score: {final_trust_score}/100 | Verdict: {final_verdict} | "
-            f"Score Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
-        )
+        logger.info(log_msg)
+        print(log_msg)
 
         # -------------------------------------------------------------
         # STEP 7: AI Reasoning & Deliberation
@@ -540,25 +568,45 @@ class VerificationEngine:
                     "isPrimary": False
                 })
 
-        confidence = int(round(
-            (verdict_results["scoringFactors"]["evidenceStrength"]["score"] * 0.5) +
-            (verdict_results["scoringFactors"]["sourceReputation"]["score"] * 0.3) +
-            (max(prob_real, prob_fake) * 100 * 0.2)
-        ))
-        confidence = max(60, min(98, confidence))
+        evi_factor_score = verdict_results["scoringFactors"]["evidenceStrength"]["score"]
+        if evi_factor_score == "Not scored":
+            confidence = 85
+        elif supp_count == 0 and contra_count == 0:
+            # Requirement 4: Low confidence when zero evidence is found
+            confidence = 35
+        else:
+            confidence = int(round(
+                (float(evi_factor_score) * 0.5) +
+                (float(verdict_results["scoringFactors"]["sourceReputation"]["score"]) * 0.3) +
+                (max(prob_real, prob_fake) * 100 * 0.2)
+            ))
+            confidence = max(50, min(98, confidence))
 
         explanation = [
             summary_reason,
-            f"Multi-Factor Trust Score: {final_trust_score}/100 based on 5 analytical layers.",
-            f"Source Authority: {source_data['sourceName']} (Publisher: {primary_publisher}, Trust Score: {source_data['trustScore']}/100).",
+            f"Multi-Factor Trust Score: {final_trust_score}{'' if final_trust_score == 'Not scored' else '/100'} based on 5 analytical layers.",
+            f"Source Authority: {source_data['sourceName']} (Publisher: {primary_publisher}, Trust Score: {source_data['trustScore']}/100, Weight: 10%).",
             f"Evidence Corroboration: {supp_count} supporting citations, {contra_count} contradicting flags."
         ]
         if fact_check_results:
             explanation.append(f"Google Fact Check API matched {len(fact_check_results)} external fact check review(s).")
-        if ling_signals["sensational_score"] > 25:
+        
+        # Requirement 5: Remove the template line "Objective, attributable journalistic prose detected" unless from real language analysis
+        if ling_signals.get("sensational_score", 0) > 25:
             explanation.append(f"Sensationalist language markers detected ({ling_signals['sensational_score']}%).")
-        else:
-            explanation.append("Objective, attributable journalistic prose detected.")
+        elif len(text.split()) >= 40 and ling_signals.get("sensational_score", 0) <= 15 and ling_signals.get("clickbait_score", 0) <= 15:
+            explanation.append("Linguistic analysis: Attributable, objective journalistic phrasing detected.")
+        
+        if supp_count == 0 and contra_count == 0:
+            explanation.append("Confidence Assessment: Low confidence — no independent evidence found to corroborate or contradict the claims.")
+
+        empty_audit_data = {
+            "sourcesSearched": sources_searched,
+            "resultsFound": f"{supp_count} supporting, {contra_count} contradicting",
+            "reason": (
+                f"Contradicted by {contra_count} source(s)." if contra_count > 0 else "No sufficiently relevant corroborating sources were found."
+            )
+        } if supp_count == 0 else None
 
         return {
             "verdict": final_verdict,
@@ -573,7 +621,7 @@ class VerificationEngine:
             # RAG (Retrieval-Augmented Generation) Architecture
             "ragEnabled": True,
             "sourcesSearched": sources_searched,
-            "resultsFound": rag_verdict_data["evidenceAudit"]["resultsFound"],
+            "resultsFound": f"{supp_count} supporting, {contra_count} contradicting",
             "topSupportingSources": top_supporting[:6],
             "topContradictingSources": top_contradicting[:6],
             "evidenceMatrix": evidence_matrix,
@@ -592,15 +640,7 @@ class VerificationEngine:
             "sourceQualityAssessment": source_quality_assessment,
 
             # Evidence retrieval transparency
-            "emptyEvidenceAudit": {
-                "sourcesSearched": sources_searched,
-                "resultsFound": len(top_supporting) + len(top_contradicting),
-                "reason": (
-                    "No sufficiently relevant corroborating sources were found."
-                    if len(top_supporting) == 0 else
-                    f"Successfully grounded in {len(top_supporting)} supporting and {len(top_contradicting)} contradicting sources."
-                )
-            } if len(top_supporting) == 0 else evidence_results.get("emptyEvidenceAudit"),
+            "emptyEvidenceAudit": empty_audit_data,
 
             # Layer 0: Automatic Article Summarization
             "articleSummary": article_summary,
@@ -628,52 +668,44 @@ class VerificationEngine:
             "claims": evidence_results["claims"],
             "ragGroundedVerdict": rag_verdict_data,
             "evidence": {
-                "supporting": (
-                    [
-                        {
-                            "source": s.get("publisher", "Wire Source"),
-                            "sourceName": s.get("publisher", "Wire Source"),
-                            "articleTitle": s.get("articleTitle", ""),
-                            "publicationDate": s.get("publicationDate", ""),
-                            "sourceTrustScore": s.get("sourceTrustScore", 90),
-                            "url": s.get("url", ""),
-                            "matchingClaim": s.get("matchingClaim", ""),
-                            "stance": "support",
-                            "snippet": s.get("evidenceSnippet", ""),
-                            "trust": s.get("sourceTrustScore", 90),
-                            "relevance": s.get("relevanceScore", 85)
-                        }
-                        for s in top_supporting
-                    ] if (len(top_supporting) > 0 or len(top_contradicting) > 0) else evidence_results["supportingEvidence"]
-                ),
-                "contradicting": (
-                    [
-                        {
-                            "source": c.get("publisher", "Fact Checker"),
-                            "sourceName": c.get("publisher", "Fact Checker"),
-                            "articleTitle": c.get("articleTitle", ""),
-                            "publicationDate": c.get("publicationDate", ""),
-                            "sourceTrustScore": c.get("sourceTrustScore", 90),
-                            "url": c.get("url", ""),
-                            "matchingClaim": c.get("matchingClaim", ""),
-                            "stance": "contradict",
-                            "snippet": c.get("evidenceSnippet", ""),
-                            "trust": c.get("sourceTrustScore", 90),
-                            "relevance": c.get("relevanceScore", 85)
-                        }
-                        for c in top_contradicting
-                    ] if (len(top_supporting) > 0 or len(top_contradicting) > 0) else evidence_results["contradictingEvidence"]
-                ),
-                "supportingCount": len(top_supporting) if (len(top_supporting) > 0 or len(top_contradicting) > 0) else supp_count,
-                "contradictingCount": len(top_contradicting) if (len(top_supporting) > 0 or len(top_contradicting) > 0) else contra_count,
+                "supporting": [
+                    {
+                        "source": s.get("publisher", "Wire Source"),
+                        "sourceName": s.get("publisher", "Wire Source"),
+                        "articleTitle": s.get("articleTitle", ""),
+                        "publicationDate": s.get("publicationDate", ""),
+                        "sourceTrustScore": s.get("sourceTrustScore", 90),
+                        "url": s.get("url", ""),
+                        "matchingClaim": s.get("matchingClaim", ""),
+                        "stance": "support",
+                        "snippet": s.get("evidenceSnippet", ""),
+                        "trust": s.get("sourceTrustScore", 90),
+                        "relevance": s.get("relevanceScore", 85)
+                    }
+                    for s in top_supporting
+                ],
+                "contradicting": [
+                    {
+                        "source": c.get("publisher", "Fact Checker"),
+                        "sourceName": c.get("publisher", "Fact Checker"),
+                        "articleTitle": c.get("articleTitle", ""),
+                        "publicationDate": c.get("publicationDate", ""),
+                        "sourceTrustScore": c.get("sourceTrustScore", 90),
+                        "url": c.get("url", ""),
+                        "matchingClaim": c.get("matchingClaim", ""),
+                        "stance": "contradict",
+                        "snippet": c.get("evidenceSnippet", ""),
+                        "trust": c.get("sourceTrustScore", 90),
+                        "relevance": c.get("relevanceScore", 85)
+                    }
+                    for c in top_contradicting
+                ],
+                "supportingCount": supp_count,
+                "contradictingCount": contra_count,
                 "evidenceScore": evidence_score,
-                "supportingEvidenceStatus": evidence_results.get("supportingEvidenceStatus", "NO SUPPORTING EVIDENCE FOUND" if (len(top_supporting) == 0 and supp_count == 0) else "CORROBORATED"),
+                "supportingEvidenceStatus": "NO SUPPORTING EVIDENCE FOUND" if supp_count == 0 else "CORROBORATED",
                 "calculation": evidence_results.get("evidenceCalculation"),
-                "emptyEvidenceAudit": {
-                    "sourcesSearched": sources_searched,
-                    "resultsFound": len(top_supporting) + len(top_contradicting),
-                    "reason": "No sufficiently relevant corroborating sources were found."
-                } if (len(top_supporting) == 0 and supp_count == 0) else None
+                "emptyEvidenceAudit": empty_audit_data
             },
             "evidenceCalculation": evidence_results.get("evidenceCalculation"),
             "evidenceQuality": evidence_score,

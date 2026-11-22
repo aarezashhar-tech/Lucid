@@ -101,7 +101,9 @@ class MultiFactorScoringEngine:
         contradiction_threshold: int = 2,
         evidence_threshold: float = 60.0,
         article_type: str = "News Report",
-        source_quality_assessment: Dict[str, Any] = None
+        source_quality_assessment: Dict[str, Any] = None,
+        source_tier: str = "",
+        source_category: str = ""
     ) -> Dict[str, Any]:
         """
         Computes the final 5-factor weighted score and maps to the 6-tier verdict.
@@ -130,16 +132,184 @@ class MultiFactorScoringEngine:
         con_s = max(0, min(100, float(consistency_score)))
         lan_s = max(0, min(100, float(language_score)))
 
-        # Weighted calculation
-        # 25% ML, 10% Source, 40% Evidence, 10% Consistency, 15% Language
-        final_trust_score = round(
-            (0.25 * ml_s) +
-            (0.10 * src_s) +
-            (0.40 * evi_s) +
-            (0.10 * con_s) +
-            (0.15 * lan_s)
+        # -----------------------------------------------------------------
+        # 0. SATIRICAL CONTENT (Requirement 6)
+        # When domain or source is known satire, return "Satire" instead of a normal trust score.
+        # -----------------------------------------------------------------
+        is_satire = (
+            source_tier == "Satire"
+            or source_category == "Satirical Publication"
+            or article_type == "Satire"
+            or (source_quality_assessment and (
+                source_quality_assessment.get("tier") == "Satire"
+                or "Satire" in str(source_quality_assessment.get("sourceAuthority", ""))
+                or "Satire" in str(source_quality_assessment.get("category", ""))
+            ))
         )
-        final_trust_score = max(5, min(98, int(final_trust_score)))
+        if is_satire:
+            return {
+                "finalTrustScore": "Satire",
+                "verdict": "Satire",
+                "riskLevel": "LOW",
+                "summaryReason": "Satirical content — published by a known satire or parody publication and not intended as factual news.",
+                "scoringFactors": {
+                    "evidenceStrength": {
+                        "weight": 0.45,
+                        "score": "Satire",
+                        "contribution": 0.0,
+                        "label": "Evidence Strength (45%) — Satirical publication"
+                    },
+                    "mlPrediction": {
+                        "weight": 0.20,
+                        "score": "Satire",
+                        "contribution": 0.0,
+                        "label": "ML Pattern Classifier (20%) — Satirical publication"
+                    },
+                    "languageQuality": {
+                        "weight": 0.15,
+                        "score": int(round(lan_s)),
+                        "contribution": 0.0,
+                        "label": "Language Tone & Humor (15%)",
+                        "notes": language_notes
+                    },
+                    "sourceReputation": {
+                        "weight": 0.10,
+                        "score": int(round(src_s)),
+                        "contribution": 0.0,
+                        "label": "Domain & Source Authority (10%)"
+                    },
+                    "claimConsistency": {
+                        "weight": 0.10,
+                        "score": int(round(con_s)),
+                        "contribution": 0.0,
+                        "label": "Viewpoint Consistency (10%)",
+                        "notes": consistency_notes
+                    }
+                }
+            }
+
+        # -----------------------------------------------------------------
+        # 1. OPINION / COMMENTARY PIECES (Problem 3)
+        # Opinion must NOT get a fact-based trust score.
+        # Return "Not scored" for score and "Opinion - not fact-checked" for verdict.
+        # -----------------------------------------------------------------
+        if article_type in ("Opinion Piece", "Opinion"):
+            return {
+                "finalTrustScore": "Not scored",
+                "verdict": "Opinion - not fact-checked",
+                "riskLevel": "LOW",
+                "summaryReason": "Opinion / commentary piece — subjective arguments, perspectives, and commentary are not assigned a fact-based verification score.",
+                "scoringFactors": {
+                    "evidenceStrength": {
+                        "weight": 0.45,
+                        "score": "Not scored",
+                        "contribution": 0.0,
+                        "label": "Evidence Strength (45%) — N/A for Opinion"
+                    },
+                    "mlPrediction": {
+                        "weight": 0.20,
+                        "score": "Not scored",
+                        "contribution": 0.0,
+                        "label": "ML Pattern Classifier (20%) — N/A for Opinion"
+                    },
+                    "languageQuality": {
+                        "weight": 0.15,
+                        "score": int(round(lan_s)),
+                        "contribution": 0.0,
+                        "label": "Language Tone & Rhetoric (15%)",
+                        "notes": language_notes
+                    },
+                    "sourceReputation": {
+                        "weight": 0.10,
+                        "score": int(round(src_s)),
+                        "contribution": 0.0,
+                        "label": "Domain & Source Authority (10%)"
+                    },
+                    "claimConsistency": {
+                        "weight": 0.10,
+                        "score": int(round(con_s)),
+                        "contribution": 0.0,
+                        "label": "Viewpoint Consistency (10%)",
+                        "notes": consistency_notes
+                    }
+                }
+            }
+
+        if article_type == "Historical Analysis":
+            final_trust_score = round(
+                (0.40 * src_s) +
+                (0.25 * lan_s) +
+                (0.20 * ml_s) +
+                (0.15 * con_s)
+            )
+            final_trust_score = max(20, min(98, int(final_trust_score)))
+
+            if src_s >= 80:
+                verdict = "HISTORICAL ANALYSIS - VERIFIED AUTHORITY"
+                risk_level = "LOW"
+            elif src_s >= 60:
+                verdict = "HISTORICAL ANALYSIS - REPUTABLE SOURCE"
+                risk_level = "LOW"
+            else:
+                verdict = "HISTORICAL ANALYSIS - UNVERIFIED"
+                risk_level = "MEDIUM"
+
+            summary_reason = "Evaluated via Source Quality Assessment on historical authority, archival integrity, and scholarly standards rather than daily breaking news wire feeds."
+
+            return {
+                "finalTrustScore": final_trust_score,
+                "verdict": verdict,
+                "riskLevel": risk_level,
+                "summaryReason": summary_reason,
+                "scoringFactors": {
+                    "evidenceStrength": {
+                        "weight": 0.45,
+                        "score": int(round(evi_s)),
+                        "contribution": round(0.45 * evi_s, 1),
+                        "label": "Evidence Strength (45%)"
+                    },
+                    "mlPrediction": {
+                        "weight": 0.20,
+                        "score": int(round(ml_s)),
+                        "contribution": round(0.20 * ml_s, 1),
+                        "label": "ML Text Pattern Classifier (20%)"
+                    },
+                    "languageQuality": {
+                        "weight": 0.15,
+                        "score": int(round(lan_s)),
+                        "contribution": round(0.15 * lan_s, 1),
+                        "label": "Journalistic Language Integrity (15%)",
+                        "notes": language_notes
+                    },
+                    "sourceReputation": {
+                        "weight": 0.10,
+                        "score": int(round(src_s)),
+                        "contribution": round(0.10 * src_s, 1),
+                        "label": "Domain & Source Reputation (10%)"
+                    },
+                    "claimConsistency": {
+                        "weight": 0.10,
+                        "score": int(round(con_s)),
+                        "contribution": round(0.10 * con_s, 1),
+                        "label": "Factual Claim Consistency (10%)",
+                        "notes": consistency_notes
+                    }
+                }
+            }
+
+        # -----------------------------------------------------------------
+        # 2. FACTUAL VERIFICATION MULTI-FACTOR SCORING (Problems 1, 2, 5)
+        # Domain reputation is ONE small part (10%, strictly max 10-15%).
+        # Weights: Evidence 45%, ML 20%, Language 15%, Source 10%, Consistency 10%.
+        # -----------------------------------------------------------------
+        computed_score = round(
+            (0.45 * evi_s) +
+            (0.20 * ml_s) +
+            (0.15 * lan_s) +
+            (0.10 * src_s) +
+            (0.10 * con_s)
+        )
+        final_trust_score = max(5, min(98, int(computed_score)))
 
         # Detect Google Fact Check false/debunked rating if not explicitly supplied
         if has_false_fact_check is None:
@@ -169,133 +339,84 @@ class MultiFactorScoringEngine:
                     if has_false_fact_check:
                         break
 
-        # Check whether contradicting evidence exceeds supporting evidence by defined threshold
+        # Check whether contradicting evidence exists
         contra_exceeds_threshold = (
             contradicting_evidence_count >= contradiction_threshold and
             (contradicting_evidence_count - supporting_evidence_count) >= contradiction_threshold
         )
 
         # -----------------------------------------------------------------
-        # Genre-Specific Handling (Feature, Opinion, Historical Analysis)
+        # 3. VERDICT ASSIGNMENT WITH STRICT EVIDENCE SAFEGUARDS
+        # - A reliable publisher with a false claim inside must score LOW.
+        # - An unknown publisher with a true, well-sourced claim must not be punished.
+        # - FALSE: Conclusively contradicted by evidence or rated false.
+        # - UNVERIFIED: No evidence found (missing evidence is NEVER false!).
         # -----------------------------------------------------------------
-        # Feature articles and opinion pieces are not treated as breaking-news claims.
-        # Historical / analysis articles receive Source Quality Assessment.
-        if article_type == "Historical Analysis":
-            final_trust_score = round(
-                (0.40 * src_s) +
-                (0.25 * lan_s) +
-                (0.20 * ml_s) +
-                (0.15 * con_s)
-            )
-            final_trust_score = max(20, min(98, int(final_trust_score)))
+        if has_false_fact_check:
+            verdict = "KNOWN FALSE"
+            final_trust_score = min(final_trust_score, 12)
+            risk_level = "CRITICAL"
+            summary_reason = "Conclusively disproven. Flagged as false by Google Fact Check API."
 
-            if src_s >= 80:
-                verdict = "HISTORICAL ANALYSIS - VERIFIED AUTHORITY"
-                risk_level = "LOW"
-            elif src_s >= 60:
-                verdict = "HISTORICAL ANALYSIS - REPUTABLE SOURCE"
-                risk_level = "LOW"
-            else:
-                verdict = "HISTORICAL ANALYSIS - UNVERIFIED"
-                risk_level = "MEDIUM"
+        elif contra_exceeds_threshold:
+            verdict = "KNOWN FALSE"
+            final_trust_score = min(final_trust_score, 12)
+            risk_level = "CRITICAL"
+            summary_reason = f"Contradicting evidence exceeds supporting by {contradicting_evidence_count - supporting_evidence_count}. Contradicted by authoritative evidence."
 
-            summary_reason = "Evaluated via Source Quality Assessment on historical authority, archival integrity, and scholarly standards rather than daily breaking news wire feeds."
+        elif supporting_evidence_count > 0 and contradicting_evidence_count > 0:
+            verdict = "NEEDS REVIEW"
+            final_trust_score = min(final_trust_score, 38)
+            risk_level = "MEDIUM"
+            summary_reason = f"Mixed evidence detected across wire sources ({supporting_evidence_count} supporting vs {contradicting_evidence_count} contradicting citations). Contains refuted assertions."
 
-        elif article_type == "Opinion Piece":
-            final_trust_score = round(
-                (0.35 * src_s) +
-                (0.35 * lan_s) +
-                (0.15 * con_s) +
-                (0.15 * ml_s)
-            )
-            final_trust_score = max(20, min(98, int(final_trust_score)))
-            verdict = "OPINION / COMMENTARY"
-            risk_level = "LOW" if src_s >= 65 and lan_s >= 65 else "MEDIUM"
-            summary_reason = "Evaluated as an Opinion Piece (Subjective Viewpoint / Editorial). Subjective perspectives and rhetorical arguments are not evaluated as factual breaking-news claims."
+        elif contradicting_evidence_count > 0:
+            verdict = "LIKELY FALSE"
+            final_trust_score = min(final_trust_score, 35)
+            risk_level = "HIGH"
+            summary_reason = f"Likely inaccurate. Retrieved evidence disputes the claim with {contradicting_evidence_count} contradicting flag(s)."
 
-        elif article_type == "Feature Article":
-            final_trust_score = round(
-                (0.35 * src_s) +
-                (0.30 * lan_s) +
-                (0.20 * con_s) +
-                (0.15 * ml_s)
-            )
-            final_trust_score = max(25, min(98, int(final_trust_score)))
-            verdict = "FEATURE ARTICLE - CREDIBLE" if (src_s >= 75 and lan_s >= 65) else "FEATURE ARTICLE"
-            risk_level = "LOW" if src_s >= 70 else "MEDIUM"
-            summary_reason = "Evaluated as a Feature Article (Narrative / Human-Interest Story). Evaluated for thematic depth, narrative consistency, and source credibility rather than daily breaking news wire corroboration."
+        elif supporting_evidence_count == 0 and contradicting_evidence_count == 0:
+            verdict = "UNVERIFIED"
+            # Requirement 4: Zero evidence must not give half marks. Cap the final score at 50 and label low confidence.
+            final_trust_score = min(50, final_trust_score)
+            risk_level = "MEDIUM"
+            summary_reason = "No reliable supporting or contradicting citations attached. Low confidence — unverified pending independent evidence."
+
+        elif evidence_score < evidence_threshold and supporting_evidence_count < 2:
+            verdict = "UNVERIFIED"
+            final_trust_score = min(50, final_trust_score)
+            risk_level = "MEDIUM"
+            summary_reason = "Insufficient independent evidence citations. Low confidence — unverified pending further corroboration."
+
+        elif supporting_evidence_count >= 2 and contradicting_evidence_count == 0:
+            verdict = "VERIFIED"
+            final_trust_score = max(final_trust_score, 78)
+            risk_level = "LOW"
+            summary_reason = f"Corroborated across {supporting_evidence_count} independent reliable sources with zero contradicting evidence."
+
+        elif supporting_evidence_count >= 1 and contradicting_evidence_count == 0:
+            verdict = "LIKELY TRUE"
+            final_trust_score = max(final_trust_score, 68)
+            risk_level = "LOW"
+            summary_reason = f"Supported by reputable reporting ({supporting_evidence_count} corroborating citation(s)) without contradiction."
 
         else:
-            # Standard News Report factual verification
-            # 1. KNOWN FALSE:
-            #    - Only if Google Fact Check returns a false/debunked rating.
-            #    - Or contradicting evidence exceeds supporting evidence by defined threshold.
-            if has_false_fact_check or contra_exceeds_threshold:
-                verdict = "KNOWN FALSE"
-                risk_level = "CRITICAL"
+            verdict = "NEEDS REVIEW"
+            risk_level = "MEDIUM"
+            summary_reason = "Content requires editorial review due to mixed or incomplete evidence signals."
 
-            # 2. LIKELY FALSE:
-            #    - Some contradicting evidence exists but not enough for a definitive false verdict.
-            elif contradicting_evidence_count > 0 and supporting_evidence_count == 0:
-                verdict = "LIKELY FALSE"
-                risk_level = "HIGH"
-
-            # 3. Mixed evidence -> NEEDS REVIEW:
-            #    - Both supporting and contradicting citations exist, neither meeting KNOWN FALSE threshold.
-            elif supporting_evidence_count > 0 and contradicting_evidence_count > 0:
+        # Check for outdated supporting evidence on time-sensitive claims (Task 1)
+        has_outdated_claim = any(
+            c.get("isOutdated") or c.get("status") == "May be outdated"
+            for c in (claims or [])
+        )
+        if has_outdated_claim:
+            final_trust_score = min(final_trust_score, 60)
+            if verdict in ("VERIFIED", "LIKELY TRUE"):
                 verdict = "NEEDS REVIEW"
                 risk_level = "MEDIUM"
-
-            # 4. UNVERIFIED:
-            #    - No reliable supporting or contradicting citations attached.
-            #    - Evidence score below threshold due to missing citations.
-            #    - Missing evidence must NEVER be treated as evidence of falsity.
-            elif supporting_evidence_count == 0 and contradicting_evidence_count == 0:
-                verdict = "UNVERIFIED"
-                risk_level = "MEDIUM"
-            elif evidence_score < evidence_threshold and supporting_evidence_count < 2:
-                verdict = "UNVERIFIED"
-                risk_level = "MEDIUM"
-
-            # 5. Strong corroboration -> LIKELY TRUE or VERIFIED
-            elif final_trust_score >= 88 and supporting_evidence_count >= 2 and contradicting_evidence_count == 0 and src_s >= 80:
-                verdict = "VERIFIED"
-                risk_level = "LOW"
-            elif final_trust_score >= 70 and supporting_evidence_count >= 1:
-                verdict = "LIKELY TRUE"
-                risk_level = "LOW"
-            else:
-                verdict = "NEEDS REVIEW"
-                risk_level = "MEDIUM"
-
-            # Construct primary deliberation reason
-            reason_parts = []
-            if has_false_fact_check:
-                reason_parts.append("flagged false/debunked by Google Fact Check")
-
-            if src_s >= 85:
-                reason_parts.append("trusted source")
-            elif src_s <= 35:
-                reason_parts.append("low-credibility publisher")
-                
-            if supporting_evidence_count >= 2:
-                reason_parts.append(f"multiple supporting claims ({supporting_evidence_count} corroborations)")
-            elif contradicting_evidence_count >= 2:
-                reason_parts.append(f"flagged contradicting claims ({contradicting_evidence_count} counter-evidences)")
-                
-            if lan_s >= 80:
-                reason_parts.append("objective journalistic language")
-            elif lan_s <= 40:
-                reason_parts.append("sensationalist / clickbait styling")
-
-            if supporting_evidence_count == 0 and contradicting_evidence_count == 0:
-                reason_parts.append("no reliable supporting or contradicting citations attached")
-            elif contradicting_evidence_count == 0:
-                reason_parts.append("no significant contradicting evidence detected")
-            else:
-                reason_parts.append(f"{contradicting_evidence_count} contradiction(s) registered")
-
-            summary_reason = ", ".join(reason_parts).capitalize() + "."
+            summary_reason += " Supporting evidence is older than 6 months for time-sensitive claim(s) and may be outdated. Trust score capped at 60."
 
         return {
             "finalTrustScore": final_trust_score,
@@ -303,37 +424,37 @@ class MultiFactorScoringEngine:
             "riskLevel": risk_level,
             "summaryReason": summary_reason,
             "scoringFactors": {
-                "mlPrediction": {
-                    "weight": 0.25,
-                    "score": int(round(ml_s)),
-                    "contribution": round(0.25 * ml_s, 1),
-                    "label": "ML Text Pattern Classifier"
-                },
-                "sourceReputation": {
-                    "weight": 0.10,
-                    "score": int(round(src_s)),
-                    "contribution": round(0.10 * src_s, 1),
-                    "label": "Domain & Source Authority (Max 10-15%)"
-                },
                 "evidenceStrength": {
-                    "weight": 0.40,
+                    "weight": 0.45,
                     "score": int(round(evi_s)),
-                    "contribution": round(0.40 * evi_s, 1),
-                    "label": "Corroborated Evidence Network"
+                    "contribution": round(0.45 * evi_s, 1),
+                    "label": "Evidence Strength (45%)"
                 },
-                "claimConsistency": {
-                    "weight": 0.10,
-                    "score": int(round(con_s)),
-                    "contribution": round(0.10 * con_s, 1),
-                    "label": "Factual Claim Consistency",
-                    "notes": consistency_notes
+                "mlPrediction": {
+                    "weight": 0.20,
+                    "score": int(round(ml_s)),
+                    "contribution": round(0.20 * ml_s, 1),
+                    "label": "ML Text Pattern Classifier (20%)"
                 },
                 "languageQuality": {
                     "weight": 0.15,
                     "score": int(round(lan_s)),
                     "contribution": round(0.15 * lan_s, 1),
-                    "label": "Journalistic Language Integrity",
+                    "label": "Journalistic Language Integrity (15%)",
                     "notes": language_notes
+                },
+                "sourceReputation": {
+                    "weight": 0.10,
+                    "score": int(round(src_s)),
+                    "contribution": round(0.10 * src_s, 1),
+                    "label": "Domain & Source Reputation (10%)"
+                },
+                "claimConsistency": {
+                    "weight": 0.10,
+                    "score": int(round(con_s)),
+                    "contribution": round(0.10 * con_s, 1),
+                    "label": "Factual Claim Consistency (10%)",
+                    "notes": consistency_notes
                 }
             }
         }

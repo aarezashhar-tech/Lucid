@@ -100,6 +100,32 @@ class EvidenceRanker:
         except Exception:
             return 75
 
+    def _is_time_sensitive_claim(self, claim_text: str) -> bool:
+        """
+        Identifies whether a factual proposition is time-sensitive:
+        rates, office holders, prices, or temporal cues ('current', 'latest', 'now').
+        """
+        lower = claim_text.lower()
+        has_current_marker = bool(re.search(r'\b(current|currently|latest|now|present|presently|today|as of today|as of now|at present)\b', lower))
+        has_historical_year = bool(re.search(r'\bin\s+(19\d\d|20[0-2][0-4])\b', lower))
+        # Claims explicitly pegged to an archival historical past year without temporal cues are closed historical records
+        if has_historical_year and not has_current_marker:
+            return False
+
+        temporal_cues = r'\b(current|currently|latest|now|present|presently|today|as of|in effect|prevailing)\b'
+        rate_metrics = r'\b(repo rate|interest rate|policy rate|benchmark rate|inflation rate|discount rate|lending rate|tax rate|unemployment rate|exchange rate)\b'
+        price_metrics = r'\b(price of|stock price|share price|crude oil price|gold price|commodity price|gas price|fuel price)\b'
+        office_holders = r'\b(ceo|chief executive|president|prime minister|governor|chairman|chancellor|minister|mayor|managing director)\b'
+        rate_actions = r'\b(kept|keeps|holding|cut|cuts|raised|raises|hiked|hikes|lowered|lowers|unchanged at|steady at)\b.*\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)\b'
+
+        return bool(
+            re.search(temporal_cues, lower) or
+            re.search(rate_metrics, lower) or
+            re.search(price_metrics, lower) or
+            re.search(office_holders, lower) or
+            re.search(rate_actions, lower)
+        )
+
     def classify_stance(self, claim_text: str, evidence_item: Dict[str, Any], sim_score: float) -> Tuple[str, int]:
         """
         Determines stance of an evidence item relative to the claim:
@@ -114,7 +140,7 @@ class EvidenceRanker:
         fc_rating = str(evidence_item.get("factCheckRating", "")).lower().strip()
 
         # 0. Pre-calculated stance from specialized verification modules (e.g. Wikipedia biographical checks)
-        if evidence_item.get("stance") in ("support", "contradict", "neutral"):
+        if evidence_item.get("retrievalChannel") in ("Wikipedia REST API", "Wikidata API") and evidence_item.get("stance") in ("support", "contradict"):
             return (evidence_item["stance"], 98)
 
         # 1. Fact Check API explicit rating check
@@ -130,7 +156,11 @@ class EvidenceRanker:
         # Catches: conspiracy theory, debunked, false, misleading, no evidence, baseless, etc.
         has_contradiction = any(re.search(pat, combined, re.I) for pat in CONTRADICTION_PATTERNS)
         if has_contradiction:
-            return ("contradict", 98)
+            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
+            if is_specific_match and sim_score >= 0.35:
+                return ("contradict", 98)
+            else:
+                return ("neutral", 40)
 
         # 3. Biographical Claims Check: Death, Arrest, Resignation of People (Task C)
         is_death_claim = bool(re.search(r'\b(died|dead|killed|passed away|assassinated|death of)\b', claim_lower))
@@ -156,42 +186,16 @@ class EvidenceRanker:
             if is_resignation_claim and not any(term in combined for term in ["tendered resignation", "submitted resignation", "stepped down as"]):
                 return ("neutral", 40)
 
-        # 3b. Scientific Consensus & Critical Falsehood Verification
-        # A) Flat Earth / denial of spherical earth
-        if any(term in claim_lower for term in ["earth is flat", "flat earth", "earth is a disk", "earth is a plane"]):
-            if any(term in combined for term in ["round", "sphere", "spherical", "oblate spheroid", "orbit", "gravity", "earth isn’t flat", "not flat", "evidence"]):
-                return ("contradict", 98)
-            return ("neutral", 40)
+        # 3b. Role & Corporate Leadership attribution check
+        roles = ["founder", "co-founder", "ceo", "chief executive", "president", "prime minister"]
+        has_role_claim = any(r in claim_lower for r in roles)
+        if has_role_claim:
+            if any(term in combined for term in ["founded by", "founded in", "chief executive of", "ceo of", "president and ceo"]):
+                is_match, reason = self._check_specific_claim_match(claim_text, combined)
+                if not is_match and sim_score >= 0.35:
+                    return ("contradict", 95)
 
-        # B) Moon made of cheese
-        if "moon" in claim_lower and "cheese" in claim_lower:
-            return ("contradict", 98)
-
-        # C) Encyclopedic True Facts (e.g. Paris capital of France)
-        if "capital" in claim_lower and "france" in claim_lower and "paris" in claim_lower:
-            if "capital" in combined and "france" in combined:
-                return ("support", 96)
-
-        # D) 5G COVID-19 conspiracy theory
-        if "5g" in claim_lower and any(term in claim_lower for term in ["covid", "coronavirus", "pandemic", "virus"]):
-            if any(term in combined for term in ["spread", "cause", "tower", "cell", "link", "attack", "claim", "fear"]):
-                return ("contradict", 98)
-            return ("neutral", 40)
-
-        # E) Pope Francis Trump endorsement hoax
-        if ("pope" in claim_lower or "francis" in claim_lower) and "trump" in claim_lower:
-            return ("contradict", 98)
-
-        # F) Solar System planetary order
-        if any(term in claim_lower for term in ["sun's closest planet is mars", "closest planet to the sun is mars", "closest planet is mars"]):
-            return ("contradict", 98)
-
-        # G) Milky Way location
-        if any(term in claim_lower for term in ["earth is not inside the milky way", "not in the milky way", "outside the milky way"]):
-            if any(term in combined for term in ["milky way", "galaxy", "solar system", "orion"]):
-                return ("contradict", 98)
-
-        # H) Directional Negation Polarity Check:
+        # 3c. Directional Negation Polarity Check:
         has_negation = bool(re.search(r'\b(is\s+not|isn\'?t|not\s+inside|not\s+in|never|no|none)\b', claim_lower))
         if has_negation:
             if "not inside" in claim_lower and ("inside" in combined or "located in" in combined or "orbits in" in combined or "part of" in combined):
@@ -199,10 +203,20 @@ class EvidenceRanker:
             if "is not round" in claim_lower and "oblate spheroid" not in claim_lower and ("round" in combined or "sphere" in combined):
                 return ("contradict", 90)
 
-        # 4. Strict NLP Stance: SUPPORTS vs NEUTRAL
-        # A claim must NEVER be verified or supported merely because related articles exist!
-        # Semantic similarity indicates relevance, NOT affirmative endorsement.
-        if sim_score >= 0.55:
+        # 4. Strict NLP Stance: SUPPORTS vs RELATED vs NEUTRAL
+        # Requirement 2: A headline counts as "Supported" only if it matches the specific claim (same entities, numbers, or event).
+        # Topic similarity alone must be shown as "Related", not "Supported".
+        if sim_score >= 0.40:
+            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
+            if not is_specific_match:
+                if "conflicting organization" in match_reason.lower() and sim_score >= 0.35:
+                    return ("contradict", 95)
+                # Task 1: Time-sensitive conflicting metric (rates, prices, office holders)
+                if self._is_time_sensitive_claim(claim_text) and "conflicting percentage" in match_reason.lower() and sim_score >= 0.35:
+                    return ("contradict", 95)
+                conf = int(min(90, max(50, sim_score * 100)))
+                return ("related", conf)
+
             # Check for affirmative reporting verbs confirming the core proposition
             affirmative_report_markers = [
                 "confirmed", "study finds", "findings show", "data shows",
@@ -211,12 +225,16 @@ class EvidenceRanker:
                 "reports", "reported", "struck", "rose", "raised", "increased",
                 "announced", "agreed", "signed", "passed", "according to",
                 "reuters", "ap news", "associated press", "bbc news", "al jazeera", "afp",
-                "intercepts", "intercepted", "says", "said", "evacuated"
+                "intercepts", "intercepted", "says", "said", "evacuated",
+                "record", "record-breaking", "records", "growth", "growing",
+                "surge", "surged", "expansion", "analysis", "statistics",
+                "official", "milestone", "capacity", "generation", "share",
+                "power", "energy", "annual", "quarter", "decade", "year"
             ]
-            has_affirmative = any(m in combined for m in affirmative_report_markers)
+            has_affirmative = (sim_score >= 0.50) or any(m in combined for m in affirmative_report_markers)
 
             # If Wikipedia summary matches the entity and proposition
-            if "wikipedia" in combined and sim_score >= 0.65:
+            if "wikipedia" in combined and sim_score >= 0.55:
                 has_affirmative = True
 
             # If the claim asserts causality ('causes', 'caused', 'linked to') or viral myth,
@@ -229,25 +247,180 @@ class EvidenceRanker:
                 conf = int(min(98, max(65, sim_score * 100 + 10)))
                 return ("support", conf)
             else:
-                return ("neutral", 55)
+                return ("related", 55)
 
         elif sim_score >= 0.25:
             return ("neutral", 50)
         else:
             return ("neutral", 30)
 
+    def _check_specific_claim_match(self, claim_text: str, combined_text: str) -> Tuple[bool, str]:
+        """
+        Validates whether candidate evidence matches the SPECIFIC claim (entities, numbers, location, event)
+        rather than just broad topic similarity.
+        """
+        claim_lower = claim_text.lower()
+        comb_lower = combined_text.lower()
+
+        # 1. Geographic / Region alignment
+        REGIONS = [
+            "latin america", "south america", "north america", "europe", "european",
+            "asia", "asian", "middle east", "africa", "african", "india", "indian",
+            "china", "chinese", "uk", "britain", "british", "us", "usa", "america", "american",
+            "russia", "russian", "japan", "japanese", "germany", "german", "france", "french"
+        ]
+        claim_regions = {r for r in REGIONS if re.search(rf'\b{re.escape(r)}\b', claim_lower)}
+        comb_regions = {r for r in REGIONS if re.search(rf'\b{re.escape(r)}\b', comb_lower)}
+
+        if claim_regions and comb_regions:
+            def base_reg(r):
+                for pair in [("european", "europe"), ("latin america", "south america"), ("asian", "asia"), ("african", "africa"), ("american", "us"), ("british", "uk")]:
+                    if r in pair: return pair[0]
+                return r
+            base_claim = {base_reg(r) for r in claim_regions}
+            base_comb = {base_reg(r) for r in comb_regions}
+            if not (base_claim & base_comb):
+                return False, "Conflicting geographic regions (claim vs evidence)."
+
+        # 2. Acronyms & Named Agencies (e.g. WHO, Reuters, IEA, NASA, UN, CDC, FDA)
+        claim_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', claim_text))
+        stopwords_caps = {"THE", "AND", "FOR", "NOT", "YES", "NEW", "ALL", "TOP", "HAS", "HAD", "TWO"}
+        claim_acronyms -= stopwords_caps
+        if claim_acronyms:
+            comb_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', combined_text))
+            comb_acronyms -= stopwords_caps
+            acronym_matched = False
+            for acr in claim_acronyms:
+                if acr in comb_acronyms or acr.lower() in comb_lower:
+                    acronym_matched = True
+                    break
+            if not acronym_matched:
+                spelled_out = {
+                    "WHO": "world health organization",
+                    "IEA": "international energy agency",
+                    "UN": "united nations",
+                    "CDC": "centers for disease control",
+                    "FDA": "food and drug administration",
+                    "NASA": "national aeronautics"
+                }
+                for acr in claim_acronyms:
+                    if acr in spelled_out and spelled_out[acr] in comb_lower:
+                        acronym_matched = True
+                        break
+            if not acronym_matched and len(claim_acronyms) >= 1:
+                return False, "Candidate does not corroborate specific agency/entity named in claim."
+
+        # 3. Numeric / Percentage metrics check
+        claim_pcts = set(re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)', claim_text, re.I))
+        comb_pcts = set(re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)', combined_text, re.I))
+        if claim_pcts and not (claim_pcts & comb_pcts):
+            if comb_pcts:
+                return False, "Candidate cites conflicting percentage metric."
+            else:
+                return False, "Candidate does not corroborate specific percentage metric in claim."
+
+        claim_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', claim_text))
+        comb_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', combined_text))
+        if claim_years and comb_years and not (claim_years & comb_years):
+            return False, "Candidate cites conflicting year or date metric."
+
+        # Conflicting Organization for Leadership Roles (e.g. 'Alphabet CEO' vs 'Nvidia CEO')
+        ROLES_REGEX = r'(?:([A-Z][a-zA-Z0-9]+)\s+(?:CEO|founder|president|prime minister))|(?:(?:CEO|founder|president|prime minister)\s+of\s+([A-Z][a-zA-Z0-9]+))'
+        claim_role_orgs = {x[0] or x[1] for x in re.findall(ROLES_REGEX, claim_text, re.I)}
+        comb_role_orgs = {x[0] or x[1] for x in re.findall(ROLES_REGEX, combined_text, re.I)}
+        NON_ORGS = {
+            "THE", "A", "AN", "THIS", "THAT", "ITS", "THEIR", "HIS", "HER", "OUR", "MY", "YOUR",
+            "AND", "OR", "BUT", "AS", "IS", "WAS", "WERE", "BEEN", "BY", "FOR", "IN", "ON", "AT",
+            "TO", "OF", "WITH", "FROM", "FORMER", "CURRENT", "ACTING", "INTERIM", "DEPUTY",
+            "CO", "VICE", "EXECUTIVE", "SENIOR", "CHIEF", "NEW", "LONGTIME", "HONORARY"
+        }
+        claim_role_orgs = {o.upper() for o in claim_role_orgs if o and o.upper() not in NON_ORGS}
+        comb_role_orgs = {o.upper() for o in comb_role_orgs if o and o.upper() not in NON_ORGS}
+        if claim_role_orgs and comb_role_orgs and not (claim_role_orgs & comb_role_orgs):
+            return False, f"Conflicting organization for claimed leadership role ({', '.join(comb_role_orgs)} vs {', '.join(claim_role_orgs)})."
+
+        # 4. Core entity / content noun overlap
+        stop_words = {
+            "this", "that", "these", "those", "have", "been", "were", "with", "from",
+            "about", "after", "before", "reported", "noted", "stated", "according", "similar",
+            "findings", "across", "other", "their", "which", "could", "would", "should"
+        }
+        claim_words = {w for w in re.findall(r'\b[a-zA-Z]{4,}\b', claim_lower) if w not in stop_words}
+        comb_words = {w for w in re.findall(r'\b[a-zA-Z]{4,}\b', comb_lower) if w not in stop_words}
+        overlap = claim_words & comb_words
+
+        overlap_ratio = len(overlap) / max(len(claim_words), 1)
+        if len(claim_words) >= 4 and (len(overlap) < 2 or (len(overlap) == 2 and overlap_ratio < 0.25)):
+            return False, "Insufficient entity/event overlap between headline and claim."
+
+        # Check for multiple distinct named entities in relational claims (e.g. 'Pope Francis endorsed Trump')
+        stopwords_pe = {
+            "The", "A", "An", "In", "On", "At", "To", "For", "With", "By", "From", "About",
+            "After", "Before", "During", "Under", "Global", "Recent", "New", "First",
+            "According", "Addressing", "Several", "Many", "Some", "Local", "Former", "Current",
+            "Major", "Leading", "Following", "Amid", "Despite", "Meanwhile", "Earlier", "Later"
+        }
+        ROLE_STOPWORDS = {
+            "chief executive officer", "chief executive", "executive officer", "ceo",
+            "founder", "co-founder", "president", "prime minister", "managing director",
+            "vice president", "chairman", "director general", "spokesperson", "minister", "secretary"
+        }
+        KNOWN_ACRONYMS = {
+            "reserve bank of india": "rbi",
+            "reserve bank": "rbi",
+            "world health organization": "who",
+            "international energy agency": "iea",
+            "united nations": "un",
+            "european central bank": "ecb",
+            "centers for disease control": "cdc",
+            "food and drug administration": "fda",
+            "monetary policy committee": "mpc"
+        }
+        raw_ents = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', claim_text)
+        ent_phrases = []
+        for e in raw_ents:
+            clean_e = re.sub(r'^(The|A|An)\s+', '', e).strip()
+            if clean_e and clean_e not in stopwords_pe and clean_e.lower() not in ROLE_STOPWORDS:
+                ent_phrases.append(clean_e)
+
+        def entity_in_evidence(entity_str: str) -> bool:
+            e_lower = entity_str.lower()
+            if any(w.lower() in comb_lower for w in entity_str.split()):
+                return True
+            acr = KNOWN_ACRONYMS.get(e_lower, "")
+            if acr and re.search(rf'\b{acr}\b', comb_lower):
+                return True
+            return False
+
+        # In relational claims (e.g. endorsements, meetings, appointments between multiple people/parties),
+        # all named participants must be present in the candidate evidence.
+        is_relational = bool(re.search(r'\b(endorsed|endorses|endorsing|endorsement|sued|suing|met with|married|accused|appointed|nominated)\b', claim_lower))
+        if is_relational and len(ent_phrases) >= 2:
+            missing_ents = [e for e in ent_phrases if not entity_in_evidence(e)]
+            if missing_ents:
+                return False, f"Evidence does not mention participant entity '{missing_ents[0]}' from claim."
+        elif ent_phrases:
+            # For non-relational claims, at least one key named entity (or its acronym) must match
+            if not any(entity_in_evidence(e) for e in ent_phrases):
+                return False, f"Evidence does not mention entity '{ent_phrases[0]}' from claim."
+
+        return True, "Matches specific claim."
+
     def rank_evidence_for_claim(self, claim_text: str, candidate_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Ranks all candidate sources for a claim using embeddings, credibility, and recency.
-        Returns categorized supporting, contradicting, and neutral items.
+        Returns categorized supporting, contradicting, related, and neutral items.
         """
         if not candidate_items:
             return {
                 "supporting": [],
                 "contradicting": [],
+                "related": [],
                 "neutral": [],
                 "supportingCount": 0,
-                "contradictingCount": 0
+                "contradictingCount": 0,
+                "relatedCount": 0,
+                "neutralCount": 0
             }
 
         evaluated: List[Dict[str, Any]] = []
@@ -263,8 +436,8 @@ class EvidenceRanker:
             # 2. Stance classification
             stance, stance_conf = self.classify_stance(claim_text, item, sim)
 
-            # 3. Trust score
-            trust = item.get("sourceTrustScore", 80)
+            # 3. Trust score (neutral 50 baseline for unlisted sources)
+            trust = item.get("sourceTrustScore", 50)
 
             # 4. Recency score
             recency = self._calculate_recency_score(item.get("publicationDate", ""))
@@ -290,19 +463,23 @@ class EvidenceRanker:
 
         # Sort each stance bucket by composite score descending
         supporting = [it for it in evaluated if it["stance"] == "support" and it["relevanceScore"] >= 30]
-        contradicting = [it for it in evaluated if it["stance"] == "contradict" and (it["relevanceScore"] >= 20 or "Contradicted by" in it.get("evidenceSnippet", ""))]
+        contradicting = [it for it in evaluated if it["stance"] == "contradict" and (it["relevanceScore"] >= 20 or "Contradicted by" in it.get("evidenceSnippet", "") or "[Derived check]" in it.get("evidenceSnippet", ""))]
+        related = [it for it in evaluated if it["stance"] == "related"]
         neutral = [it for it in evaluated if it["stance"] == "neutral"]
 
         supporting.sort(key=lambda x: (x["compositeRankScore"], x["relevanceScore"]), reverse=True)
         contradicting.sort(key=lambda x: (x["compositeRankScore"], x["relevanceScore"]), reverse=True)
+        related.sort(key=lambda x: x["compositeRankScore"], reverse=True)
         neutral.sort(key=lambda x: x["compositeRankScore"], reverse=True)
 
         return {
             "supporting": supporting,
             "contradicting": contradicting,
+            "related": related,
             "neutral": neutral,
             "supportingCount": len(supporting),
             "contradictingCount": len(contradicting),
+            "relatedCount": len(related),
             "neutralCount": len(neutral)
         }
 
@@ -351,10 +528,11 @@ class EvidenceRanker:
             ranked_data = self.rank_evidence_for_claim(claim_text, candidates)
             supp = ranked_data["supporting"]
             contra = ranked_data["contradicting"]
+            related = ranked_data.get("related", [])
 
             # Source links list
             all_links = []
-            for it in supp + contra:
+            for it in supp + contra + related:
                 u = it.get("url")
                 if u and u not in all_links:
                     all_links.append(u)
@@ -375,19 +553,45 @@ class EvidenceRanker:
                 status = "Supported"
                 conf = max(70, min(92, supp[0]["compositeRankScore"]))
                 summary = f"Supported by reporting from {supp[0]['publisher']}."
+            elif related:
+                status = "Unverified"
+                conf = 0
+                summary = f"Topic-related coverage found ({related[0]['publisher']}), but does not specifically verify the claim proposition."
             else:
                 # Missing evidence must NEVER be treated as false!
                 status = "Unverified"
                 conf = 0
                 summary = "No sufficiently relevant corroborating sources were found. Unverified pending corroboration."
 
+            # Outdated evidence check for time-sensitive claims (Task 1)
+            # If supporting evidence is older than 6 months, mark the claim 'may be outdated'
+            is_ts = self._is_time_sensitive_claim(claim_text)
+            if is_ts and status in ("Verified", "Supported") and supp:
+                supp_dates = []
+                today_dt = date.today()
+                for s_item in supp:
+                    pdate_str = s_item.get("publicationDate", "")
+                    if pdate_str:
+                        try:
+                            dt = datetime.strptime(pdate_str[:10], "%Y-%m-%d").date()
+                            supp_dates.append((today_dt - dt).days)
+                        except Exception:
+                            pass
+                if supp_dates and all(days > 180 for days in supp_dates):
+                    status = "May be outdated"
+                    conf = min(conf, 60)
+                    summary += " Supporting evidence is older than 6 months for this time-sensitive claim and may be outdated."
+                    claim_obj["isOutdated"] = True
+
             # Update the claim_obj with grounded metadata
             claim_obj["status"] = status
             claim_obj["confidence"] = conf
             claim_obj["supportingEvidenceCount"] = len(supp)
             claim_obj["contradictingEvidenceCount"] = len(contra)
+            claim_obj["relatedEvidenceCount"] = len(related)
             claim_obj["supportingSources"] = [s["publisher"] for s in supp[:3]]
             claim_obj["contradictingSources"] = [c["publisher"] for c in contra[:3]]
+            claim_obj["relatedSources"] = [r["publisher"] for r in related[:3]]
             claim_obj["analysisNotes"] = summary
 
             matrix_entry = {
@@ -399,6 +603,7 @@ class EvidenceRanker:
                 "confidence": conf,
                 "supportingEvidence": supp[:4],
                 "contradictingEvidence": contra[:4],
+                "relatedEvidence": related[:4],
                 "sourceLinks": all_links,
                 "evidenceSummary": summary
             }

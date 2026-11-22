@@ -138,7 +138,7 @@ def test_scoring_genre_differentiation():
     assert "HISTORICAL ANALYSIS" in hist_verdict["verdict"]
     assert hist_verdict["finalTrustScore"] >= 80
 
-    # 2. Opinion Piece should yield OPINION / COMMENTARY verdict
+    # 2. Opinion Piece should yield Opinion - not fact-checked / OPINION verdict and "Not scored"
     op_verdict = scorer.compute_verdict_and_score(
         ml_score=75,
         source_score=85,
@@ -149,7 +149,8 @@ def test_scoring_genre_differentiation():
         contradicting_evidence_count=0,
         article_type="Opinion Piece"
     )
-    assert op_verdict["verdict"] == "OPINION / COMMENTARY"
+    assert op_verdict["verdict"] in ("Opinion - not fact-checked", "OPINION / COMMENTARY")
+    assert op_verdict["finalTrustScore"] == "Not scored"
 
 
 def test_end_to_end_multilingual_and_genres():

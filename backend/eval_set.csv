@@ -1,0 +1,61 @@
+id,text,expected_label,notes
+1,"ISRO successfully launched the Chandrayaan-3 lunar mission from Sriharikota in July 2023.",TRUE,Official space agency milestone
+2,"The Reserve Bank of India kept the benchmark repo rate unchanged at 6.5 percent in 2024.",TRUE,RBI monetary policy decision
+3,"Keir Starmer became Prime Minister of the United Kingdom following the general election in July 2024.",TRUE,UK election outcome
+4,"NVIDIA reported significant revenue growth driven by demand for its Hopper architecture AI chips.",TRUE,NVIDIA corporate earnings
+5,"The European Central Bank cut interest rates in 2024 following easing euro zone inflation.",TRUE,ECB monetary policy
+6,"NASA's James Webb Space Telescope operates at the second Lagrange point approximately 1.5 million kilometers from Earth.",TRUE,NASA astrophysics fact
+7,"The World Health Organization declared the end of the global health emergency for COVID-19 in May 2023.",TRUE,WHO official declaration
+8,"France hosted the 2024 Summer Olympic Games in Paris.",TRUE,Olympic Games host and year
+9,"Arvind Kejriwal was granted bail by the Supreme Court of India in the Delhi excise policy case in September 2024.",TRUE,Supreme Court legal judgment
+10,"The Indian Space Research Organisation landed the Vikram lander on the Moon in August 2023.",TRUE,Chandrayaan-3 landing
+11,"Jensen Huang is the co-founder and Chief Executive Officer of NVIDIA.",TRUE,NVIDIA corporate leadership
+12,"The United Kingdom formally departed the European Union single market at the end of 2020.",TRUE,Brexit implementation
+13,"The International Energy Agency publishes the annual World Energy Outlook report.",TRUE,IEA official report
+14,"Sundar Pichai serves as the Chief Executive Officer of Alphabet and Google.",TRUE,Alphabet corporate leadership
+15,"The Nobel Peace Prize for 2024 was awarded to Nihon Hidankyo for efforts to achieve a world free of nuclear weapons.",TRUE,Nobel Prize official award
+16,"The Federal Reserve raised its federal funds rate target above 5 percent to counter post-pandemic inflation.",TRUE,Federal Reserve policy
+17,"The Panama Canal implemented transit restrictions due to severe drought conditions affecting Gatun Lake in 2023 and 2024.",TRUE,Maritime transit fact
+18,"Narendra Modi was sworn in for a third term as Prime Minister of India in June 2024.",TRUE,Indian general election swearing-in
+19,"The Bank of Japan ended its negative interest rate policy in March 2024.",TRUE,Bank of Japan monetary policy
+20,"Mount Everest is the highest mountain above sea level, located in the Himalayas on the border between Nepal and China.",TRUE,Geographical consensus
+21,"Sundar Pichai continues as NVIDIA founder and Chief Executive Officer.",FALSE,False leadership: Pichai leads Alphabet not NVIDIA
+22,"Prime Minister Narendra Modi passed away in a New Delhi hospital yesterday.",FALSE,False death claim: office holder is alive
+23,"The Reserve Bank of India unexpectedly reduced the repo rate to 1.2 percent in 2024.",FALSE,False number: repo rate was held at 6.5% not 1.2%
+24,"ISRO's Chandrayaan-3 mission landed on the lunar surface in August 2019.",FALSE,False year: Chandrayaan-3 landed in 2023 not 2019
+25,"Barack Obama was elected Prime Minister of the United Kingdom in 2024.",FALSE,False person and role: Obama is former US president
+26,"The European Central Bank increased benchmark interest rates to 18 percent in 2024.",FALSE,False number: deposit facility rate was ~3.75%
+27,"The Earth is completely flat and encased under a solid dome.",FALSE,Conclusively disproven scientific falsehood
+28,"NASA confirmed that the Moon is composed entirely of solid green cheddar cheese.",FALSE,Conclusively disproven scientific falsehood
+29,"Former US President Donald Trump was appointed Director-General of the World Health Organization in 2024.",FALSE,False leadership appointment
+30,"The 2024 Summer Olympic Games were hosted in Berlin Germany.",FALSE,False location: hosted in Paris France
+31,"The Federal Reserve lowered US interest rates to zero in October 2024.",FALSE,False monetary policy number
+32,"Keir Starmer resigned as UK Prime Minister two weeks after winning the 2024 general election.",FALSE,False resignation of living head of government
+33,"Scientists confirmed that drinking tap water causes instant conversion of human blood into gasoline.",FALSE,Conclusively disproven biological impossibility
+34,"The United Kingdom voted to rejoin the European Union single market in August 2024.",FALSE,False geopolitical event
+35,"Apple Inc acquired Microsoft Corporation for ten trillion dollars in cash in 2024.",FALSE,False corporate mega-merger
+36,"The World Health Organization confirmed that 5G cellular antennas are the sole biological cause of COVID-19.",FALSE,Debunked conspiracy myth
+37,"NVIDIA CEO Jensen Huang announced the total shutdown of all GPU production worldwide in 2024.",FALSE,False corporate announcement
+38,"The Bank of Japan raised its benchmark policy rate to 25 percent in 2024.",FALSE,False central bank rate number
+39,"Arvind Kejriwal was sentenced to life imprisonment without parole by the Supreme Court of India in 2024.",FALSE,False legal ruling: he was granted bail
+40,"The James Webb Space Telescope crashed into the Atlantic Ocean during its launch.",FALSE,False mission status: deployed successfully to L2
+41,"A retired schoolteacher in rural Shropshire found an intact Roman coin while walking his dog last Tuesday morning.",UNVERIFIED,Hyper-local obscure event with zero wire evidence
+42,"Local baker in Idaho invents a new sourdough starter using rainwater and tap water in his basement.",UNVERIFIED,Private obscure assertion with zero evidence
+43,"A stray ginger cat wandered into the library basement on Elm Street and slept on the archives shelf.",UNVERIFIED,Hyper-local unrecorded incident
+44,"Two amateur mechanics in Brisbane converted an old lawnmower to run on used cooking oil behind their garage.",UNVERIFIED,Hyper-local undocumented event
+45,"A small private collector in Zurich quietly purchased an anonymous 18th-century sketch at an unlisted flea market.",UNVERIFIED,Private unverifiable transaction
+46,"Neighbours on Maple Drive reported hearing a brief whistle sound around 3 AM last Thursday.",UNVERIFIED,Ephemeral personal observation
+47,"A student in Pune solved a 100-piece wooden puzzle in under four minutes during his lunch break.",UNVERIFIED,Trivial personal claim
+48,"A flock of twenty seagulls landed briefly on the roof of an empty warehouse in Grimsby.",UNVERIFIED,Undocumented trivial wildlife event
+49,"An independent researcher in Leeds claims that listening to classical flute music improves houseplant growth rate by 3 percent.",UNVERIFIED,Unsubstantiated obscure hypothesis
+50,"A local carpenter in Graz crafted a wooden chess set using reclaimed oak from an old barn door.",UNVERIFIED,Private hobbyist activity
+51,"Two cyclists took a detour through an unpaved forest trail near Blackwood and spotted a brown hare.",UNVERIFIED,Trivial unrecorded personal event
+52,"A small family cafe in Split introduced a lavender-infused lemonade recipe last weekend.",UNVERIFIED,Hyper-local commercial menu variation
+53,"An amateur astronomer in New Hampshire noticed a brief flicker in his backyard telescope while observing Jupiter.",UNVERIFIED,Unrecorded private observation
+54,"A jogger in Calgary found a dropped pair of blue woollen mittens on a park bench and left them on the post.",UNVERIFIED,Ephemeral personal anecdote
+55,"A ceramicist in Kyoto accidentally created a unique turquoise glaze while experimenting with wood ash.",UNVERIFIED,Private studio experiment
+56,"A book club of six retirees in Bath decided to read Victorian maritime poetry next month.",UNVERIFIED,Private group schedule
+57,"A homeowner in Adelaide discovered an old iron horseshoe buried under his tomato patch.",UNVERIFIED,Private backyard discovery
+58,"An antique clock in an attic in Norwich started chiming unexpectedly after fifteen years of silence.",UNVERIFIED,Private household incident
+59,"A hobbyist in Munich assembled a radio receiver using vintage vacuum tubes from the 1950s.",UNVERIFIED,Private DIY activity
+60,"A resident in Thunder Bay observed an unusually bright shooting star over the lake at 4:15 AM.",UNVERIFIED,Ephemeral private sighting

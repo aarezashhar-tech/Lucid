@@ -1,0 +1,41 @@
+id,text,expected_label,notes
+1,"Spain won the 2026 FIFA World Cup final by defeating Argentina 1-0 after extra time.",TRUE,2026 FIFA World Cup
+2,"Royal Challengers Bengaluru defeated Gujarat Titans in the IPL 2026 final to win the title.",TRUE,IPL 2026 final
+3,"Justice Surya Kant is the incumbent Chief Justice of India.",TRUE,Incumbent CJI 2026
+4,"ISRO's Chandrayaan-3 mission successfully soft-landed near the lunar south pole in August 2023.",TRUE,ISRO Chandrayaan-3
+5,"The Indian Constitution came into effect on January 26, 1950.",TRUE,Indian Constitution
+6,"Water boils at 100 degrees Celsius at standard atmospheric pressure.",TRUE,Physical science
+7,"The Reserve Bank of India was established on April 1, 1935.",TRUE,RBI foundation
+8,"Mount Everest is located in the Himalayas on the border of Nepal and China.",TRUE,Geography
+9,"The human heart has four chambers.",TRUE,Human biology
+10,"Python was created by Guido van Rossum and first released in 1991.",TRUE,Computer history
+11,"The capital of Australia is Canberra.",TRUE,Geography
+12,"Penicillin was discovered by Alexander Fleming in 1928.",TRUE,Medical discovery
+13,"Mars has two moons named Phobos and Deimos.",TRUE,Astronomy
+14,"The Suez Canal connects the Mediterranean Sea to the Red Sea.",TRUE,Geography
+15,"Argentina defeated Spain in the 2026 FIFA World Cup final.",FALSE,2026 FIFA World Cup trap
+16,"Chennai Super Kings won the IPL 2026 final against Mumbai Indians.",FALSE,IPL 2026 trap
+17,"Justice D. Y. Chandrachud is currently serving as the Chief Justice of India.",FALSE,Former CJI trap
+18,"The capital of Australia is Sydney.",FALSE,Geography trap
+19,"ISRO's Chandrayaan-3 mission failed to land on the Moon and crashed in 2023.",FALSE,Space mission trap
+20,"The Great Wall of China is easily visible from the Moon with the naked eye.",FALSE,Common myth
+21,"Humans only use 10 percent of their brains.",FALSE,Neurology myth
+22,"Vaccines are proven to cause autism in children.",FALSE,Medical myth
+23,"Albert Einstein won the Nobel Prize in Physics for his theory of general relativity.",FALSE,Nobel prize trap
+24,"The Amazon River is located in Africa.",FALSE,Geography trap
+25,"Drinking bleach cures viral infections in humans.",FALSE,Dangerous medical falsehood
+26,"The Reserve Bank of India was founded in 1952 after Indian independence.",FALSE,Historical date trap
+27,"Jupiter is the smallest planet in the solar system.",FALSE,Astronomy trap
+28,"The Eiffel Tower is located in Rome, Italy.",FALSE,Geography trap
+29,"A secret committee in Bengaluru plans to abolish all engineering entrance exams by 2028.",UNVERIFIED,Unverifiable rumor
+30,"The next major earthquake in Japan will happen on March 14, 2027.",UNVERIFIED,Future prediction
+31,"My neighbor Ravi sold his motorcycle for 45,000 rupees last Tuesday.",UNVERIFIED,Private personal assertion
+32,"Python is a much better programming language than JavaScript for every project.",UNVERIFIED,Subjective value judgment
+33,"An undisclosed startup in Chennai just raised 500 crore rupees in stealth mode yesterday.",UNVERIFIED,Unsubstantiated startup rumor
+34,"Aliens built an underground base beneath the Mariana Trench in the 1990s.",UNVERIFIED,Conspiracy fiction
+35,"The Indian cricket team will win the 2027 ODI World Cup without losing a single match.",UNVERIFIED,Future sports prediction
+36,"Coffee tastes significantly better than filter tea in the morning.",UNVERIFIED,Taste preference
+37,"A leaked internal memo says Google will shut down Gmail before 2030.",UNVERIFIED,Leaked memo rumor
+38,"Local shopkeepers in Vaniyambadi agreed to close all stores on Mondays starting next month.",UNVERIFIED,Hyperlocal unverified claim
+39,"Artificial intelligence will completely replace all software engineers by 2028.",UNVERIFIED,Speculative technological prediction
+40,"The unnamed CEO of a private logistics firm in Pune resigned during a closed-door meeting today.",UNVERIFIED,Anonymous corporate rumor

@@ -204,17 +204,18 @@ export interface SourceReputation {
 
 export interface ScoringFactorItem {
   weight: number;
-  score: number;
+  score: number | string;
   contribution: number;
   label: string;
+  notes?: string;
 }
 
 export interface ScoringFactors {
-  mlPrediction: ScoringFactorItem;
-  sourceReputation: ScoringFactorItem;
-  evidenceStrength: ScoringFactorItem;
-  claimConsistency: ScoringFactorItem;
-  languageQuality: ScoringFactorItem;
+  evidenceStrength?: ScoringFactorItem;
+  mlPrediction?: ScoringFactorItem;
+  languageQuality?: ScoringFactorItem;
+  sourceReputation?: ScoringFactorItem;
+  claimConsistency?: ScoringFactorItem;
 }
 
 export interface ArticleSummary {
@@ -229,8 +230,8 @@ export interface ArticleSummary {
 export interface VerificationResult {
   prediction: "REAL" | "FAKE" | "UNKNOWN";
   confidence: number;
-  credibility?: number;
-  trustScore: number;
+  credibility?: number | string;
+  trustScore: number | string;
   riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "UNKNOWN";
   verdict: VerdictType;
   summaryReason?: string;
@@ -324,7 +325,7 @@ export interface HistoryItem {
   id: string;
   title: string;
   time: string;
-  score: number;
+  score: number | string;
   verdict: VerdictType;
   data: VerificationResult;
 }
@@ -1754,11 +1755,11 @@ function ReportScreen({
     : derivedFromText || "Verified Article";
 
   const scoring = result.scoringFactors || {
-    mlPrediction: { weight: 0.3, score: result.prediction === "REAL" ? 82 : 28, contribution: 24.6, label: "ML Prediction" },
-    sourceReputation: { weight: 0.25, score: result.sourceReputation?.trustScore ?? 85, contribution: 21.2, label: "Source Reputation" },
-    evidenceStrength: { weight: 0.25, score: result.evidence?.evidenceScore ?? 80, contribution: 20.0, label: "Evidence Strength" },
-    claimConsistency: { weight: 0.1, score: 92, contribution: 9.2, label: "Claim Consistency" },
-    languageQuality: { weight: 0.1, score: result.languageIntegrity ?? 88, contribution: 8.8, label: "Language Quality" },
+    evidenceStrength: { weight: 0.45, score: result.evidence?.evidenceScore ?? 80, contribution: 36.0, label: "Evidence Strength (45%)" },
+    mlPrediction: { weight: 0.20, score: result.prediction === "REAL" ? 82 : 28, contribution: 16.4, label: "ML Text Pattern Classifier (20%)" },
+    languageQuality: { weight: 0.15, score: result.languageIntegrity ?? 88, contribution: 13.2, label: "Journalistic Language Integrity (15%)" },
+    sourceReputation: { weight: 0.10, score: result.sourceReputation?.trustScore ?? 85, contribution: 8.5, label: "Domain & Source Authority (10%)" },
+    claimConsistency: { weight: 0.10, score: 92, contribution: 9.2, label: "Factual Claim Consistency (10%)" },
   };
 
   const suppCount = result.evidence?.supportingCount ?? result.claims?.filter((c) => c.status === "Supported").length ?? 3;
@@ -2344,19 +2345,14 @@ function ReportScreen({
                 <span className="font-bold text-on-surface block mb-1">Sources searched:</span>
                 <div className="text-on-surface-variant pl-1 space-y-0.5">
                   {(
-                    result.sourcesSearched ||
-                    result.emptyEvidenceAudit?.sourcesSearched || [
-                      "Reuters",
-                      "AP News",
-                      "BBC",
-                      "Al Jazeera",
-                      "The Guardian",
-                      "AFP",
-                      "Google Fact Check API",
-                      "IFCN Fact Check sources",
-                      "Official government websites",
-                      "UN, WHO & recognised institutions"
-                    ]
+                    (result.sourcesSearched && result.sourcesSearched.length > 0)
+                      ? result.sourcesSearched
+                      : (result.emptyEvidenceAudit?.sourcesSearched && result.emptyEvidenceAudit.sourcesSearched.length > 0)
+                      ? result.emptyEvidenceAudit.sourcesSearched
+                      : [
+                          "Google News RSS Wire Search",
+                          "Wikipedia (Official REST API)"
+                        ]
                   ).map((src, i) => (
                     <div key={i}>- {src.replace(/^-\s*/, '')}</div>
                   ))}
@@ -2568,7 +2564,11 @@ function ReportScreen({
             <div className="flex items-center gap-3">
               <div
                 className={`w-12 h-12 rounded-full flex items-center justify-center shadow-xs ${
-                  verdict === "VERIFIED" || verdict === "LIKELY TRUE"
+                  verdict === "Satire"
+                    ? "bg-purple-600 text-white"
+                    : verdict === "Opinion - not fact-checked"
+                    ? "bg-primary/20 text-primary"
+                    : verdict === "VERIFIED" || verdict === "LIKELY TRUE"
                     ? "bg-tertiary text-on-tertiary"
                     : verdict === "KNOWN FALSE" || verdict === "LIKELY FALSE" || verdict === "FALSE"
                     ? "bg-error text-on-error"
@@ -2576,7 +2576,15 @@ function ReportScreen({
                 }`}
               >
                 <MatIcon
-                  name={verdict === "VERIFIED" || verdict === "LIKELY TRUE" ? "verified" : "warning"}
+                  name={
+                    verdict === "Satire"
+                      ? "theater_comedy"
+                      : verdict === "Opinion - not fact-checked"
+                      ? "rate_review"
+                      : verdict === "VERIFIED" || verdict === "LIKELY TRUE"
+                      ? "verified"
+                      : "warning"
+                  }
                   size={26}
                   fill
                 />
@@ -2595,18 +2603,28 @@ function ReportScreen({
               <small className="font-label-xs text-label-xs text-outline uppercase tracking-wider block font-bold">
                 Trust Score
               </small>
-              <b
-                className={`font-headline-lg text-headline-lg ${
-                  result.trustScore >= 75
-                    ? "text-tertiary"
-                    : result.trustScore >= 50
-                    ? "text-amber-500"
-                    : "text-error"
-                }`}
-              >
-                {result.trustScore}
-                <small className="text-sm font-normal text-outline">/100</small>
-              </b>
+              {typeof result.trustScore === "string" || isNaN(Number(result.trustScore)) ? (
+                <span className={`inline-block px-3 py-1 mt-1 rounded-full text-sm font-semibold ${
+                  result.trustScore === "Satire"
+                    ? "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300"
+                    : "bg-surface-container-high text-on-surface-variant"
+                }`}>
+                  {result.trustScore}
+                </span>
+              ) : (
+                <b
+                  className={`font-headline-lg text-headline-lg ${
+                    Number(result.trustScore) >= 75
+                      ? "text-tertiary"
+                      : Number(result.trustScore) >= 50
+                      ? "text-amber-500"
+                      : "text-error"
+                  }`}
+                >
+                  {result.trustScore}
+                  <small className="text-sm font-normal text-outline">/100</small>
+                </b>
+              )}
             </div>
           </div>
 
@@ -2663,6 +2681,56 @@ function ReportScreen({
                 </ul>
               </div>
             )}
+          </div>
+        </section>
+
+        {/* SECTION 6: Multi-Factor Scoring Breakdown */}
+        <section className="bg-surface-container rounded-xl p-4 sm:p-6 border border-surface-container-high/60 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-container-high/40 pb-3">
+            <div className="flex items-center gap-2">
+              <MatIcon name="analytics" size={20} className="text-primary" />
+              <h3 className="font-headline-sm text-headline-sm text-on-surface uppercase tracking-wide">
+                Multi-Factor Trust Scoring Breakdown
+              </h3>
+            </div>
+            <span className="font-label-xs text-label-xs text-outline font-medium">
+              Domain weight capped at 10% · Evidence-led evaluation
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {[
+              { key: "evidenceStrength", factor: scoring.evidenceStrength, icon: "fact_check", desc: "45% weight · Corroborating citations" },
+              { key: "mlPrediction", factor: scoring.mlPrediction, icon: "psychology", desc: "20% weight · Linguistic pattern classifier" },
+              { key: "languageQuality", factor: scoring.languageQuality, icon: "article", desc: "15% weight · Journalistic tone integrity" },
+              { key: "sourceReputation", factor: scoring.sourceReputation, icon: "domain", desc: "10% weight · Publisher & domain authority" },
+              { key: "claimConsistency", factor: scoring.claimConsistency, icon: "balance", desc: "10% weight · Internal claim coherence" },
+            ].map(({ key, factor, icon, desc }) => {
+              if (!factor) return null;
+              const isNotScored = factor.score === "Not scored" || typeof factor.score === "string";
+              return (
+                <div key={key} className="p-3.5 rounded-lg bg-surface-container-low border border-surface-container-high/30 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <div className="flex items-center gap-1.5 text-on-surface font-semibold text-xs">
+                        <MatIcon name={icon} size={16} className="text-primary shrink-0" />
+                        <span className="truncate">{factor.label || key}</span>
+                      </div>
+                      <span className="font-mono text-xs font-bold text-on-surface">
+                        {isNotScored ? "N/A" : `${factor.score}/100`}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-outline mb-2">{desc}</p>
+                  </div>
+                  <div className="pt-2 border-t border-surface-container-high/20 flex items-center justify-between text-[11px]">
+                    <span className="text-on-surface-variant">Contribution:</span>
+                    <span className="font-mono font-bold text-primary">
+                      {isNotScored ? "N/A" : `+${factor.contribution} pts`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
 

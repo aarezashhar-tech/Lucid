@@ -178,11 +178,20 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
     Queries Google News RSS endpoint without requiring an API key.
     Extracts Source Name, Title, Publication Date, URL, and calculates Agreement & Trust.
     """
-    clean_query = re.sub(r'[^\w\s]', '', claim_text[:90]).strip()
+    clean_query = re.sub(r'[^\w\s.-]', '', claim_text).strip('. ')
     if not clean_query:
         return []
 
-    url = f"{GOOGLE_NEWS_RSS_URL}?q={urllib.parse.quote(clean_query)}&hl=en-US&gl=US&ceid=US:en"
+    # Trim subordinate clauses or cut cleanly at word boundary
+    m = re.search(r'^(.*?)\s+(?:following|according to|amid|after|as|during)\b', clean_query, re.I)
+    if m and len(m.group(1)) >= 25:
+        search_text = m.group(1)
+    elif len(clean_query) > 90:
+        search_text = clean_query[:90].rsplit(' ', 1)[0]
+    else:
+        search_text = clean_query
+
+    url = f"{GOOGLE_NEWS_RSS_URL}?q={urllib.parse.quote(search_text)}&hl=en-US&gl=US&ceid=US:en"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 LucidVerifier/2.0"
     }

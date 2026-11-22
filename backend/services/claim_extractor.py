@@ -60,6 +60,8 @@ VERB_PATTERN = re.compile(
     r'evacuated|rescued|arrested|detained|charged|sentenced|convicted|sued|released|freed|fled|displaced|'
     r'said|told|spoke|commented|wrote|posted|tweeted|broadcast|published|noted|argued|'
     r'began|started|ended|concluded|halted|stopped|delayed|continued|occurred|happened|sparked|'
+    r'continue|continues|continuing|serve|serves|served|serving|remain|remains|remained|remaining|'
+    r'hold|holds|held|holding|act|acts|acted|acting|become|becomes|became|becoming|lead|leads|led|leading|'
     r'cause|causes|caused|causing|control|controls|controlled|controlling|'
     r'contain|contains|contained|containing|affect|affects|affected|affecting|'
     r'alter|alters|altered|infect|infects|infected|transmit|transmits|transmitted|'
@@ -324,11 +326,21 @@ class ClaimExtractionEngine:
         normalized = ". ".join(merged_paragraphs)
         normalized = re.sub(r'[ \t]+', ' ', normalized)
 
+        # Protect honorifics and abbreviations with periods so they do not break sentences mid-entity
+        abbrs = [
+            'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Gov', 'Sen', 'Rep', 'Gen', 'Col', 'Capt', 'Lt',
+            'St', 'vs', 'U.S', 'U.K', 'e.g', 'i.e', 'approx', 'dept', 'govt', 'corp', 'inc'
+        ]
+        clean_norm = normalized
+        for ab in abbrs:
+            clean_norm = re.sub(rf'\b{re.escape(ab)}\.', f'{ab}__DOT__', clean_norm, flags=re.IGNORECASE)
+
         # Regex split on sentence boundaries (. ! ?) while keeping quotes together
-        raw_splits = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'“‘])', normalized)
+        raw_splits = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'“‘])', clean_norm)
 
         cleaned_sentences: List[str] = []
         for segment in raw_splits:
+            segment = segment.replace('__DOT__', '.')
             s = segment.strip().strip('"').strip('“').strip('”').strip("'")
             if self.is_valid_factual_claim(s):
                 if not s.endswith(('.', '!', '?')):
@@ -438,7 +450,7 @@ class ClaimExtractionEngine:
                 if self.is_valid_factual_claim(cand_single):
                     cand_to_test = cand_single
 
-            if self.is_valid_factual_claim(cand_to_test):
+            if self.is_valid_factual_claim(cand_to_test) or (len(cand_to_test.split()) >= 3 and not any(re.search(pat, cand_to_test, re.IGNORECASE) for pat in UI_NOISE_PATTERNS)):
                 norm_cand = normalize_claim_text(cand_to_test)
                 signals = self.extract_entities_and_signals(norm_cand)
                 claims.append({
