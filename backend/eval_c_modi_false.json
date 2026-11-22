@@ -1,0 +1,660 @@
+{
+  "verdict": "FALSE",
+  "trustScore": 12,
+  "credibility": 12,
+  "confidence": 50,
+  "riskLevel": "CRITICAL",
+  "prediction": "REAL",
+  "summaryReason": "Conclusively disproven. Contradicted by authoritative evidence (1 contradicting record(s)).",
+  "explanation": [
+    "Conclusively disproven. Contradicted by authoritative evidence (1 contradicting record(s)).",
+    "Multi-Factor Trust Score: 12/100 based on 5 analytical layers.",
+    "Source Authority: Unspecified / Self-Published Content (Publisher: Unknown, Trust Score: 50/100, Weight: 10%).",
+    "Evidence Corroboration: 0 supporting citations, 1 contradicting flags."
+  ],
+  "ragEnabled": true,
+  "sourcesSearched": [
+    "Wikipedia (Official REST API) (1 result)",
+    "Google News RSS Wire Search (5 results)"
+  ],
+  "resultsFound": "0 supporting, 1 contradicting",
+  "topSupportingSources": [],
+  "topContradictingSources": [
+    {
+      "articleTitle": "[Derived check] Wikipedia Biography: Narendra Modi",
+      "publisher": "Wikipedia",
+      "publicationDate": "2026-11-18",
+      "url": "https://en.wikipedia.org/wiki/Narendra_Modi",
+      "evidenceSnippet": "[Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \"",
+      "sourceTrustScore": 88,
+      "sourceCategory": "Encyclopedic Reference",
+      "retrievalChannel": "Wikipedia REST API",
+      "stance": "contradict",
+      "matchingClaim": "PM Modi died.",
+      "relevanceScore": 60,
+      "semanticSimilarity": 0.6021,
+      "compositeRankScore": 78,
+      "stanceConfidence": 98
+    }
+  ],
+  "evidenceMatrix": [
+    {
+      "claimNumber": 1,
+      "claim": "PM Modi died.",
+      "claimType": "Factual Proposition",
+      "isOpinion": false,
+      "status": "Contradicted",
+      "confidence": 78,
+      "supportingEvidence": [],
+      "contradictingEvidence": [
+        {
+          "articleTitle": "[Derived check] Wikipedia Biography: Narendra Modi",
+          "publisher": "Wikipedia",
+          "publicationDate": "2026-11-18",
+          "url": "https://en.wikipedia.org/wiki/Narendra_Modi",
+          "evidenceSnippet": "[Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \"",
+          "sourceTrustScore": 88,
+          "sourceCategory": "Encyclopedic Reference",
+          "retrievalChannel": "Wikipedia REST API",
+          "stance": "contradict",
+          "matchingClaim": "PM Modi died.",
+          "relevanceScore": 60,
+          "semanticSimilarity": 0.6021,
+          "compositeRankScore": 78,
+          "stanceConfidence": 98
+        }
+      ],
+      "relatedEvidence": [],
+      "sourceLinks": [
+        "https://en.wikipedia.org/wiki/Narendra_Modi"
+      ],
+      "evidenceSummary": "Claim contradicted by 1 source(s), including Wikipedia."
+    }
+  ],
+  "groundedReasoning": {
+    "synthesis": "Grounded Retrieval Synthesis: Retrieved investigative records from Wikipedia directly contradict the candidate claim(s) (1 contradicting record(s) detected). Authoritative reporting and official records dispute the factual basis of the submission.",
+    "whyAppearsTrue": [
+      "No corroborating citations identified in queried sources."
+    ],
+    "whyAppearsFalse": [
+      "Disputed by Wikipedia: [Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \""
+    ],
+    "evidenceFound": [
+      "Wikipedia (2026-11-18): \"[Derived check] Wikipedia Biography: Narendra Modi\" \u2014 [Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \""
+    ],
+    "evidenceMissing": [
+      "No external corroborating dispatches passed semantic matching threshold across queried sources."
+    ]
+  },
+  "language": {
+    "code": "en",
+    "languageCode": "en",
+    "language": "English",
+    "detectedLanguage": "English",
+    "confidence": 1.0,
+    "isEnglish": true,
+    "isForeignLanguage": false,
+    "analysisText": "PM Modi died",
+    "wasTranslated": false
+  },
+  "detectedLanguage": "English",
+  "languageCode": "en",
+  "wasTranslated": false,
+  "originalLanguageText": null,
+  "articleType": "News Report",
+  "articleTypeClassification": {
+    "articleType": "News Report",
+    "confidence": 75,
+    "indicators": [
+      "Standard event reporting format."
+    ],
+    "evaluationMode": "factual_verification",
+    "description": "News Report: Factual breaking news evaluated against wire corroboration and fact-checking consensus."
+  },
+  "sourceQualityAssessment": {
+    "overallRating": "Unverified Historical Commentary",
+    "sourceQualityScore": 50,
+    "sourceAuthority": "Unknown (Unverified Authority Tier)",
+    "scholarlyStandards": "Unverified - Content lacks independent institutional archival verification.",
+    "methodologicalRigor": "Retrospective claims without accredited historiographical backing.",
+    "archivalIntegrity": "Contextual narrative review.",
+    "assessmentSummary": "Evaluated under Source Quality Assessment: Unknown demonstrates unverified-tier source quality. Historical and analysis articles are judged on archival depth, scholarly standards, and source credibility rather than daily breaking news wire feeds.",
+    "verificationMode": "Source Quality Assessment"
+  },
+  "emptyEvidenceAudit": {
+    "sourcesSearched": [
+      "Wikipedia (Official REST API) (1 result)",
+      "Google News RSS Wire Search (5 results)"
+    ],
+    "resultsFound": "0 supporting, 1 contradicting",
+    "reason": "Contradicted by 1 source(s)."
+  },
+  "articleSummary": {
+    "executiveSummary": "PM Modi died.",
+    "keyTakeaways": [
+      "PM Modi died"
+    ],
+    "tldr": "PM Modi died",
+    "title": "PM Modi died",
+    "provider": "Extractive NLP Engine"
+  },
+  "summary": {
+    "executiveSummary": "PM Modi died.",
+    "keyTakeaways": [
+      "PM Modi died"
+    ],
+    "tldr": "PM Modi died",
+    "title": "PM Modi died",
+    "provider": "Extractive NLP Engine"
+  },
+  "articleTitle": "PM Modi died",
+  "publisher": "Unknown",
+  "sourceType": "",
+  "sourceDomain": "direct-submission",
+  "primarySource": {
+    "publisher": "Unknown",
+    "name": "Unspecified / Self-Published Content",
+    "domain": "direct-submission",
+    "sourceType": "",
+    "isPrimary": true,
+    "trustScore": 50
+  },
+  "sourceReputation": {
+    "publisher": "Unknown",
+    "sourceName": "Unspecified / Self-Published Content",
+    "name": "Unspecified / Self-Published Content",
+    "domain": "direct-submission",
+    "trustScore": 50,
+    "tier": "Unverified",
+    "category": "Unattributed Text Input",
+    "description": "No recognized authoritative news wire, government domain, or verified publisher attributed.",
+    "attributionType": "Missing Source Attribution",
+    "isTrusted": false,
+    "isPrimary": true
+  },
+  "sourceCredibility": 50,
+  "claims": [
+    {
+      "id": "claim-1",
+      "claimNumber": 1,
+      "claim": "PM Modi died.",
+      "claimType": "Factual Proposition",
+      "isOpinion": false,
+      "genre": "News Report",
+      "entities": [
+        "Modi"
+      ],
+      "numbers": [],
+      "isTestableProposition": true,
+      "status": "Contradicted",
+      "supportingSources": [],
+      "contradictingSources": [
+        "Wikipedia"
+      ],
+      "supportingEvidenceCount": 0,
+      "contradictingEvidenceCount": 1,
+      "confidence": 98,
+      "analysisNotes": "[Derived check] Official biographical records in Wikipedia and Wikidata confirm Narendra Modi is living (no date of death recorded in Wikidata).",
+      "relatedEvidenceCount": 0,
+      "relatedSources": [],
+      "evidenceSnippets": [
+        {
+          "source": "Wikipedia",
+          "sourceName": "Wikipedia",
+          "articleTitle": "[Derived check] Wikipedia Biography: Narendra Modi",
+          "publicationDate": "2026-11-18",
+          "sourceTrustScore": 88,
+          "url": "https://en.wikipedia.org/wiki/Narendra_Modi",
+          "matchingClaim": "PM Modi died.",
+          "stance": "contradict",
+          "snippet": "[Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \"",
+          "trust": 88,
+          "pointsAssigned": "-25 pts",
+          "calculationReason": "[Derived check] Official biographical records in Wikipedia and Wikidata confirm Narendra Modi is living (no date of death recorded in Wikidata)."
+        }
+      ],
+      "factCheckMatches": [],
+      "gnewsArticles": [
+        {
+          "sourceName": "ThePrint",
+          "articleTitle": "PM Modi, give us justice, says father of Kashmiri Pandit who died in hit-and-run",
+          "publicationDate": "2026-07-02",
+          "publicationTime": "Thu, 02 Jul 2026 07:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPU3ZEMldPQnB1azJKQmlIN1J3Vlc5dG1TREdNSkdYd3ZwVHNyVlc3QkMtamx3TlI0ZkhqTzFTdzV2WUFvd3FGQWlmdDN6aHRDdzhwM0M4TzZMZnY3eld4QzJqblFXUnZVaFBra2MxbDZ5TFRUc0RvV0ZvSzlMS09lYnhJLVVNWEZuWk5mUzFwMksxamhMV0ZicmY0dmZwQ2YxQlHSAacBQVVfeXFMT2N6YlR0TDh0cmZtZTVxSmxXTDJ3SGZzdkQySWtDUTBUQVZ5c3NYT01XX1U5RVB5X1RZTzVudW1iQ2hTcmxpczk5LXpTMTNZZWwxUm5rdVJHYndPMHd5MVZzZWdFUzRZbGl0OHAxZzM3N2RaWXphTmdkOER0ckNOTVgzMjNmSU5hRVN1bUJzV1FBTVpfSWZ1Qk01LUR3LTZTaGNlNlVWajQ?oc=5",
+          "matchingClaim": "PM Modi died.",
+          "agreementScore": 55,
+          "description": "PM Modi, give us justice, says father of Kashmiri Pandit who died in hit-and-run ThePrint",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 55% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "The Times of India",
+          "articleTitle": "PM Modi speaks to Yogi Adityanath, offers condolences over mother's death",
+          "publicationDate": "2026-11-20",
+          "publicationTime": "Fri, 20 Nov 2026 10:21:00 GMT",
+          "sourceTrustScore": 90,
+          "url": "https://news.google.com/rss/articles/CBMi1gFBVV95cUxPNmJlYXBwM2VaMkN1eFVuQ2FjZUpqdjFpTkp1Z2NkVE5Wdl9sRHBZXzdZRV90cUIweVhScXlBczdSTmRYWDlJblBHdERHUVpzMHlsRkJsS0R6aVRPelhha0ZObmxMNHNlR25yY1pWMFNtcG95d0REMjllcVl6OGE1dGRRMmtLX25UR19uXzZlSE5iV1BRSkxPS05RcXRMcU14cV9rNlZKekJiVENPejJ0WEpIUVlxZ2hmdWRCQWJKLWlYV2lpUS1sME1LQ2Q2VnQyeU5SU3RB0gHbAUFVX3lxTE0yajZraXFVUXBMb3Z0NmhCUFZTckJvek80LXF4UUpMVndZQUc2YWNvckFYNnlqc2UzZ0xOSlRlZTNrQ1NUZVZlVjBBeWtMQm1GdW11X2NjTk9MelJ2dzl0WnBnNFJ3OEhrVXNmUmZvVmw0RWhSOEVoY1FPOURxd2lOV3hEZXA0NkEyNm02LVhESmdScVFwMmR2cmswYk1WckJhcEFCd05KYURRbUNKam9CdUV4blg4c2taWlgwaDMwVXc4VHZCOEo4SVROZUhsR3UxTmpvNG5FNkFKTQ?oc=5",
+          "matchingClaim": "PM Modi died.",
+          "agreementScore": 35,
+          "description": "PM Modi speaks to Yogi Adityanath, offers condolences over mother's death The Times of India",
+          "isTrustedSource": true,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (90/100 Trust, 35% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "The Indian Express",
+          "articleTitle": "BJP MP Ramrao Sakharam Wadkute dies of cardiac arrest, PM Modi offers condolences",
+          "publicationDate": "2026-11-22",
+          "publicationTime": "Sun, 22 Nov 2026 07:27:07 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMiwgFBVV95cUxOcTlSX3FMRTFpRkthNTBzNkhOWmVJemU1c3l4dU1MRFYwVDI4NS11T1NLOGxzOThxaGNnazF2enRwbElVb1BIN3FzNlI2VWlVQ1ppV1VaOFR0QnRSN295clF6bVBpamtXQkJpNnRTTGp3WUlDX05YU0FMT3RXR1ZXMzNvUEdXRXk1aDNYdlB0RXpLVDdBT0kzY3FCMmIzU2tRRjJiS0R0ajFCMk1Td1kyUHpVd20xbldxQVNDdnFsb1JiUdIByAFBVV95cUxPT2E3MXBISlg1a3h4ZDZyRFhvY0xzNUY1R2ltamVHNV90ZFB1Wng5YUkxdnBwNkNuZ3hILUpWVHlXX1VaeWg4ckh4OE5zbGk3aWFwbWdXU0dfSGhWRVlSbHVhS0VOZXdUOXVjTVVhOTIydWJ0MHVfMV9sN1AwdTFJRjN2ZFZQTDJvTnRQLW9CZGdWVjdqMm9jWXVKMS1CRWJLdVJ0bnpLemlBcGlhYWNUbEY1M2hERE0tQUlNQXRTV0ROMGFhS2xUNQ?oc=5",
+          "matchingClaim": "PM Modi died.",
+          "agreementScore": 35,
+          "description": "BJP MP Ramrao Sakharam Wadkute dies of cardiac arrest, PM Modi offers condolences The Indian Express",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 35% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "Swarajya",
+          "articleTitle": "PM Modi Calls Yogi Adityanath To Condole Death Of His Mother Savitri Devi At 91",
+          "publicationDate": "2026-11-20",
+          "publicationTime": "Fri, 20 Nov 2026 11:34:37 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMitAFBVV95cUxOdUlDTzlIeHFUMWhWNFFzbTNveEoxQldrVlRvcTZMTTVURWRtVWFOY09FYm5jRTZMMm16VWxtN2dKb1dDallHcDVjczBYMlNWcUo4ZnBVeFViSXhfOER6ODVFMndUWFdUQURHMVc4RHNVM3U4TFdWTVRDemthZjhtZWlSYnpvbGNBMk5UY3dzSy1nUDJkd2tRa2hUa293cExNcWFWWFFZUmM3MmhCaVlDM0ItUTDSAcQBQVVfeXFMUGloS3FMVmNlblRleWRiQzB6RjVyS0tId2d6RVhody0tcUpLMF9uTXVlMUhvUDZ0ajZxb3FPYVZxc3JyWnllMFhLMjdQYzVwTjJwR0V6SExFaW13V0EzdXFMdlpILXVzUmVLLUVhZGtuU3JfdHFSNzhLYy1MVE5CdGtjRkRYU2hJNWNITW91YlFUVkZMajhMV2pvdmhnM0x2ckVOeS03TUNnSm9SNkprTFRKcjUyeVFxS2YwVmc0SUVWcWVUOA?oc=5",
+          "matchingClaim": "PM Modi died.",
+          "agreementScore": 35,
+          "description": "PM Modi Calls Yogi Adityanath To Condole Death Of His Mother Savitri Devi At 91 Swarajya",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 35% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "The New York Times",
+          "articleTitle": "Opinion | The World\u2019s Largest Democracy Gets a Second Chance",
+          "publicationDate": "2026-07-31",
+          "publicationTime": "Fri, 31 Jul 2026 07:00:00 GMT",
+          "sourceTrustScore": 90,
+          "url": "https://news.google.com/rss/articles/CBMigwFBVV95cUxNYUdLVm5CenhGU2hpdnVveG9acGdyVnNuSnhQd2Y2R0VxQkc2YTB4SVJISWg3X2ZhLUlRRkdvd1pscTlQRTBodmRSaGlwSmRhUlpza0h0bGdDM0dIYkhQX0ROYU43WUhMeGstZ1h6ZzdRMnB2SW1vblgxYlFuVW82enJDOA?oc=5",
+          "matchingClaim": "PM Modi died.",
+          "agreementScore": 15,
+          "description": "Opinion | The World\u2019s Largest Democracy Gets a Second Chance The New York Times",
+          "isTrustedSource": true,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (90/100 Trust, 15% Moderate Match) -> Baseline Reference"
+        }
+      ]
+    }
+  ],
+  "ragGroundedVerdict": {
+    "verdict": "FALSE",
+    "finalTrustScore": 12,
+    "riskLevel": "CRITICAL",
+    "summaryReason": "Conclusively disproven. Contradicted by authoritative evidence (Wikipedia).",
+    "explanation": [
+      "Conclusively disproven. Contradicted by authoritative evidence (Wikipedia).",
+      "Sources searched: Wikipedia (Official REST API) (1 result), Google News RSS Wire Search (5 results).",
+      "Evidence retrieved: 0 supporting, 1 contradicting.",
+      "Grounded Verdict: FALSE."
+    ],
+    "groundedReasoning": {
+      "synthesis": "Grounded Retrieval Synthesis: Retrieved investigative records from Wikipedia directly contradict the candidate claim(s) (1 contradicting record(s) detected). Authoritative reporting and official records dispute the factual basis of the submission.",
+      "whyAppearsTrue": [
+        "No corroborating citations identified in queried sources."
+      ],
+      "whyAppearsFalse": [
+        "Disputed by Wikipedia: [Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \""
+      ],
+      "evidenceFound": [
+        "Wikipedia (2026-11-18): \"[Derived check] Wikipedia Biography: Narendra Modi\" \u2014 [Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \""
+      ],
+      "evidenceMissing": [
+        "No external corroborating dispatches passed semantic matching threshold across queried sources."
+      ]
+    },
+    "evidenceAudit": {
+      "sourcesSearched": [
+        "Wikipedia (Official REST API) (1 result)",
+        "Google News RSS Wire Search (5 results)"
+      ],
+      "resultsFound": {
+        "supporting": 0,
+        "contradicting": 1,
+        "total": 1
+      },
+      "reason": "No sufficiently relevant corroborating sources were found."
+    }
+  },
+  "evidence": {
+    "supporting": [],
+    "contradicting": [
+      {
+        "source": "Wikipedia",
+        "sourceName": "Wikipedia",
+        "articleTitle": "[Derived check] Wikipedia Biography: Narendra Modi",
+        "publicationDate": "2026-11-18",
+        "sourceTrustScore": 88,
+        "url": "https://en.wikipedia.org/wiki/Narendra_Modi",
+        "matchingClaim": "PM Modi died.",
+        "stance": "contradict",
+        "snippet": "[Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \"",
+        "trust": 88,
+        "relevance": 60
+      }
+    ],
+    "supportingCount": 0,
+    "contradictingCount": 1,
+    "evidenceScore": 0,
+    "supportingEvidenceStatus": "NO SUPPORTING EVIDENCE FOUND",
+    "calculation": {
+      "formula": "Evidence Score = Base Score + Wire Support Bonus + GNews Corroboration Boost - Contradiction Penalty (Verifiable Citations Required)",
+      "baseScore": 25,
+      "supportingSourcesCount": 0,
+      "contradictingSourcesCount": 1,
+      "supportingEvidenceStatus": "NO SUPPORTING EVIDENCE FOUND",
+      "wireCorroborationPoints": 0,
+      "gnewsBoost": 0,
+      "contradictionPenalty": 5,
+      "finalEvidenceScore": 14,
+      "citationRequirementEnforced": true,
+      "verifiedCitationsCount": 1,
+      "unattachedCitationsCount": 0,
+      "sourceContributions": [
+        {
+          "sourceName": "Wikipedia",
+          "articleTitle": "[Derived check] Wikipedia Biography: Narendra Modi",
+          "publicationDate": "2026-11-18",
+          "sourceTrustScore": 88,
+          "url": "https://en.wikipedia.org/wiki/Narendra_Modi",
+          "matchingClaim": "PM Modi died.",
+          "stance": "CONTRADICT",
+          "pointsAssigned": "-25 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "[Derived check] Official biographical records in Wikipedia and Wikidata confirm Narendra Modi is living (no date of death recorded in Wikidata)."
+        }
+      ],
+      "explanation": "NO SUPPORTING EVIDENCE FOUND. 1 verified contradiction(s) detected with 0 supporting citations.",
+      "sourcesSearched": [
+        "Reuters",
+        "AP",
+        "BBC",
+        "Google Fact Check",
+        "GNews"
+      ],
+      "resultsFound": 1,
+      "reason": "No sufficiently relevant corroborating sources were found.",
+      "emptyEvidenceAudit": {
+        "sourcesSearched": [
+          "Reuters",
+          "AP",
+          "BBC",
+          "Google Fact Check",
+          "GNews"
+        ],
+        "resultsFound": 1,
+        "reason": "No sufficiently relevant corroborating sources were found."
+      }
+    },
+    "emptyEvidenceAudit": {
+      "sourcesSearched": [
+        "Wikipedia (Official REST API) (1 result)",
+        "Google News RSS Wire Search (5 results)"
+      ],
+      "resultsFound": "0 supporting, 1 contradicting",
+      "reason": "Contradicted by 1 source(s)."
+    }
+  },
+  "evidenceCalculation": {
+    "formula": "Evidence Score = Base Score + Wire Support Bonus + GNews Corroboration Boost - Contradiction Penalty (Verifiable Citations Required)",
+    "baseScore": 25,
+    "supportingSourcesCount": 0,
+    "contradictingSourcesCount": 1,
+    "supportingEvidenceStatus": "NO SUPPORTING EVIDENCE FOUND",
+    "wireCorroborationPoints": 0,
+    "gnewsBoost": 0,
+    "contradictionPenalty": 5,
+    "finalEvidenceScore": 14,
+    "citationRequirementEnforced": true,
+    "verifiedCitationsCount": 1,
+    "unattachedCitationsCount": 0,
+    "sourceContributions": [
+      {
+        "sourceName": "Wikipedia",
+        "articleTitle": "[Derived check] Wikipedia Biography: Narendra Modi",
+        "publicationDate": "2026-11-18",
+        "sourceTrustScore": 88,
+        "url": "https://en.wikipedia.org/wiki/Narendra_Modi",
+        "matchingClaim": "PM Modi died.",
+        "stance": "CONTRADICT",
+        "pointsAssigned": "-25 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "[Derived check] Official biographical records in Wikipedia and Wikidata confirm Narendra Modi is living (no date of death recorded in Wikidata)."
+      }
+    ],
+    "explanation": "NO SUPPORTING EVIDENCE FOUND. 1 verified contradiction(s) detected with 0 supporting citations.",
+    "sourcesSearched": [
+      "Reuters",
+      "AP",
+      "BBC",
+      "Google Fact Check",
+      "GNews"
+    ],
+    "resultsFound": 1,
+    "reason": "No sufficiently relevant corroborating sources were found.",
+    "emptyEvidenceAudit": {
+      "sourcesSearched": [
+        "Reuters",
+        "AP",
+        "BBC",
+        "Google Fact Check",
+        "GNews"
+      ],
+      "resultsFound": 1,
+      "reason": "No sufficiently relevant corroborating sources were found."
+    }
+  },
+  "evidenceQuality": 0,
+  "factCheckResults": [],
+  "gnewsArticles": [
+    {
+      "sourceName": "ThePrint",
+      "articleTitle": "PM Modi, give us justice, says father of Kashmiri Pandit who died in hit-and-run",
+      "publicationDate": "2026-07-02",
+      "publicationTime": "Thu, 02 Jul 2026 07:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPU3ZEMldPQnB1azJKQmlIN1J3Vlc5dG1TREdNSkdYd3ZwVHNyVlc3QkMtamx3TlI0ZkhqTzFTdzV2WUFvd3FGQWlmdDN6aHRDdzhwM0M4TzZMZnY3eld4QzJqblFXUnZVaFBra2MxbDZ5TFRUc0RvV0ZvSzlMS09lYnhJLVVNWEZuWk5mUzFwMksxamhMV0ZicmY0dmZwQ2YxQlHSAacBQVVfeXFMT2N6YlR0TDh0cmZtZTVxSmxXTDJ3SGZzdkQySWtDUTBUQVZ5c3NYT01XX1U5RVB5X1RZTzVudW1iQ2hTcmxpczk5LXpTMTNZZWwxUm5rdVJHYndPMHd5MVZzZWdFUzRZbGl0OHAxZzM3N2RaWXphTmdkOER0ckNOTVgzMjNmSU5hRVN1bUJzV1FBTVpfSWZ1Qk01LUR3LTZTaGNlNlVWajQ?oc=5",
+      "matchingClaim": "PM Modi died.",
+      "agreementScore": 55,
+      "description": "PM Modi, give us justice, says father of Kashmiri Pandit who died in hit-and-run ThePrint",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 55% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "The Times of India",
+      "articleTitle": "PM Modi speaks to Yogi Adityanath, offers condolences over mother's death",
+      "publicationDate": "2026-11-20",
+      "publicationTime": "Fri, 20 Nov 2026 10:21:00 GMT",
+      "sourceTrustScore": 90,
+      "url": "https://news.google.com/rss/articles/CBMi1gFBVV95cUxPNmJlYXBwM2VaMkN1eFVuQ2FjZUpqdjFpTkp1Z2NkVE5Wdl9sRHBZXzdZRV90cUIweVhScXlBczdSTmRYWDlJblBHdERHUVpzMHlsRkJsS0R6aVRPelhha0ZObmxMNHNlR25yY1pWMFNtcG95d0REMjllcVl6OGE1dGRRMmtLX25UR19uXzZlSE5iV1BRSkxPS05RcXRMcU14cV9rNlZKekJiVENPejJ0WEpIUVlxZ2hmdWRCQWJKLWlYV2lpUS1sME1LQ2Q2VnQyeU5SU3RB0gHbAUFVX3lxTE0yajZraXFVUXBMb3Z0NmhCUFZTckJvek80LXF4UUpMVndZQUc2YWNvckFYNnlqc2UzZ0xOSlRlZTNrQ1NUZVZlVjBBeWtMQm1GdW11X2NjTk9MelJ2dzl0WnBnNFJ3OEhrVXNmUmZvVmw0RWhSOEVoY1FPOURxd2lOV3hEZXA0NkEyNm02LVhESmdScVFwMmR2cmswYk1WckJhcEFCd05KYURRbUNKam9CdUV4blg4c2taWlgwaDMwVXc4VHZCOEo4SVROZUhsR3UxTmpvNG5FNkFKTQ?oc=5",
+      "matchingClaim": "PM Modi died.",
+      "agreementScore": 35,
+      "description": "PM Modi speaks to Yogi Adityanath, offers condolences over mother's death The Times of India",
+      "isTrustedSource": true,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (90/100 Trust, 35% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "The Indian Express",
+      "articleTitle": "BJP MP Ramrao Sakharam Wadkute dies of cardiac arrest, PM Modi offers condolences",
+      "publicationDate": "2026-11-22",
+      "publicationTime": "Sun, 22 Nov 2026 07:27:07 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMiwgFBVV95cUxOcTlSX3FMRTFpRkthNTBzNkhOWmVJemU1c3l4dU1MRFYwVDI4NS11T1NLOGxzOThxaGNnazF2enRwbElVb1BIN3FzNlI2VWlVQ1ppV1VaOFR0QnRSN295clF6bVBpamtXQkJpNnRTTGp3WUlDX05YU0FMT3RXR1ZXMzNvUEdXRXk1aDNYdlB0RXpLVDdBT0kzY3FCMmIzU2tRRjJiS0R0ajFCMk1Td1kyUHpVd20xbldxQVNDdnFsb1JiUdIByAFBVV95cUxPT2E3MXBISlg1a3h4ZDZyRFhvY0xzNUY1R2ltamVHNV90ZFB1Wng5YUkxdnBwNkNuZ3hILUpWVHlXX1VaeWg4ckh4OE5zbGk3aWFwbWdXU0dfSGhWRVlSbHVhS0VOZXdUOXVjTVVhOTIydWJ0MHVfMV9sN1AwdTFJRjN2ZFZQTDJvTnRQLW9CZGdWVjdqMm9jWXVKMS1CRWJLdVJ0bnpLemlBcGlhYWNUbEY1M2hERE0tQUlNQXRTV0ROMGFhS2xUNQ?oc=5",
+      "matchingClaim": "PM Modi died.",
+      "agreementScore": 35,
+      "description": "BJP MP Ramrao Sakharam Wadkute dies of cardiac arrest, PM Modi offers condolences The Indian Express",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 35% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "Swarajya",
+      "articleTitle": "PM Modi Calls Yogi Adityanath To Condole Death Of His Mother Savitri Devi At 91",
+      "publicationDate": "2026-11-20",
+      "publicationTime": "Fri, 20 Nov 2026 11:34:37 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMitAFBVV95cUxOdUlDTzlIeHFUMWhWNFFzbTNveEoxQldrVlRvcTZMTTVURWRtVWFOY09FYm5jRTZMMm16VWxtN2dKb1dDallHcDVjczBYMlNWcUo4ZnBVeFViSXhfOER6ODVFMndUWFdUQURHMVc4RHNVM3U4TFdWTVRDemthZjhtZWlSYnpvbGNBMk5UY3dzSy1nUDJkd2tRa2hUa293cExNcWFWWFFZUmM3MmhCaVlDM0ItUTDSAcQBQVVfeXFMUGloS3FMVmNlblRleWRiQzB6RjVyS0tId2d6RVhody0tcUpLMF9uTXVlMUhvUDZ0ajZxb3FPYVZxc3JyWnllMFhLMjdQYzVwTjJwR0V6SExFaW13V0EzdXFMdlpILXVzUmVLLUVhZGtuU3JfdHFSNzhLYy1MVE5CdGtjRkRYU2hJNWNITW91YlFUVkZMajhMV2pvdmhnM0x2ckVOeS03TUNnSm9SNkprTFRKcjUyeVFxS2YwVmc0SUVWcWVUOA?oc=5",
+      "matchingClaim": "PM Modi died.",
+      "agreementScore": 35,
+      "description": "PM Modi Calls Yogi Adityanath To Condole Death Of His Mother Savitri Devi At 91 Swarajya",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 35% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "The New York Times",
+      "articleTitle": "Opinion | The World\u2019s Largest Democracy Gets a Second Chance",
+      "publicationDate": "2026-07-31",
+      "publicationTime": "Fri, 31 Jul 2026 07:00:00 GMT",
+      "sourceTrustScore": 90,
+      "url": "https://news.google.com/rss/articles/CBMigwFBVV95cUxNYUdLVm5CenhGU2hpdnVveG9acGdyVnNuSnhQd2Y2R0VxQkc2YTB4SVJISWg3X2ZhLUlRRkdvd1pscTlQRTBodmRSaGlwSmRhUlpza0h0bGdDM0dIYkhQX0ROYU43WUhMeGstZ1h6ZzdRMnB2SW1vblgxYlFuVW82enJDOA?oc=5",
+      "matchingClaim": "PM Modi died.",
+      "agreementScore": 15,
+      "description": "Opinion | The World\u2019s Largest Democracy Gets a Second Chance The New York Times",
+      "isTrustedSource": true,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (90/100 Trust, 15% Moderate Match) -> Baseline Reference"
+    }
+  ],
+  "scoringFactors": {
+    "evidenceStrength": {
+      "weight": 0.45,
+      "score": 0,
+      "contribution": 0.0,
+      "label": "Evidence Strength (45%)"
+    },
+    "mlPrediction": {
+      "weight": 0.2,
+      "score": 50,
+      "contribution": 10.0,
+      "label": "ML Text Pattern Classifier (20%)"
+    },
+    "languageQuality": {
+      "weight": 0.15,
+      "score": 80,
+      "contribution": 12.0,
+      "label": "Journalistic Language Integrity (15%)",
+      "notes": "Acceptable prose with mild emotional or colloquial tone."
+    },
+    "sourceReputation": {
+      "weight": 0.1,
+      "score": 50,
+      "contribution": 5.0,
+      "label": "Domain & Source Reputation (10%)"
+    },
+    "claimConsistency": {
+      "weight": 0.1,
+      "score": 20,
+      "contribution": 2.0,
+      "label": "Factual Claim Consistency (10%)",
+      "notes": "Consistent falsehood pattern across all extracted claims."
+    }
+  },
+  "languageIntegrity": 80,
+  "sources": [
+    {
+      "name": "Unspecified / Self-Published Content",
+      "publisher": "Unknown",
+      "code": "SRC",
+      "domain": "direct-submission",
+      "type": "Unattributed Text Input",
+      "trust": 50,
+      "tier": "Unverified",
+      "description": "No recognized authoritative news wire, government domain, or verified publisher attributed.",
+      "isPrimary": true
+    },
+    {
+      "name": "Wikipedia",
+      "publisher": "Wikipedia",
+      "code": "W",
+      "domain": "https://en.wikipedia.org/wiki/Narendra_Modi",
+      "type": "Corroborating Evidence Registry",
+      "trust": 88,
+      "tier": "Evidence Corroboration",
+      "description": "[Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas Modi is an Indian politician who has served as the prime minister of India since 26 May 2014. Modi was the chief minister of Gujarat from 2001 to 2014 and is the Member of Parliament (MP) for Varanasi. He is a member of \"",
+      "isPrimary": false
+    }
+  ],
+  "disclaimer": "This verdict is generated using machine learning and evidence scoring. It does not guarantee factual accuracy.",
+  "reasoning": {
+    "synthesis": "Verdict reached: LIKELY FALSE (Trust Score: 29/100). The evaluation synthesizes 30% ML pattern classification, 25% source authority (Unspecified / Self-Published Content), 25% evidence corroboration (0 supporting, 1 contradicting), and 20% linguistic/consistency audits. Final verdict is governed by multi-factor mathematical scoring, not solely text pattern classification.",
+    "whyAppearsTrue": [
+      "Language phrasing is neutral, objective, and conforms to standard newsroom reporting standards."
+    ],
+    "whyAppearsFalse": [
+      "Flagged by 1 contradicting source registries or established debunk databases.",
+      "Factual propositions conflict with empirical consensus and official government or regulatory statements."
+    ],
+    "evidenceFound": [
+      "Contradicting: Wikipedia - [Derived check] Wikidata: no date of death recorded (living person). Wikipedia extract: \"Narendra Damodardas M..."
+    ],
+    "evidenceMissing": [
+      "Direct attribution to an accredited primary news wire or verified official spokesperson.",
+      "Cryptographic or digital signature verification for source document integrity."
+    ],
+    "disclaimer": "This verdict is generated using machine learning and evidence scoring. It does not guarantee factual accuracy.",
+    "provider": "Lucid Multi-Factor Analytical Reasoner (Rule-Based + NLP)"
+  },
+  "emotionalLanguage": "None",
+  "clickbaitScore": 12,
+  "sensationalTerms": [],
+  "timeline": [
+    {
+      "step": "Claim Extraction",
+      "detail": "Segmented 1 atomic testable factual claims",
+      "status": "done"
+    },
+    {
+      "step": "Google Fact Check API",
+      "detail": "Queried claims:search endpoint (0 review records)",
+      "status": "done"
+    },
+    {
+      "step": "GNews API Corroboration",
+      "detail": "Searched recent trusted news wires (5 article matches)",
+      "status": "done"
+    },
+    {
+      "step": "Source Reputation Audit",
+      "detail": "Evaluated domain authority: Unspecified / Self-Published Content (50/100)",
+      "status": "done"
+    },
+    {
+      "step": "Evidence Cross-Referencing",
+      "detail": "Queried wire archives (0 supporting, 1 contradicting)",
+      "status": "done"
+    },
+    {
+      "step": "ML Model Inference",
+      "detail": "Executed TF-IDF + Logistic Regression pattern analysis (30% weight)",
+      "status": "done"
+    },
+    {
+      "step": "Multi-Factor Synthesis",
+      "detail": "Calculated 5-layer weighted trust score (12/100) -> FALSE",
+      "status": "done"
+    }
+  ],
+  "aiIntegrations": {
+    "geminiConfigured": false,
+    "openAiConfigured": false,
+    "factCheckConfigured": false,
+    "gnewsConfigured": false,
+    "provider": "Lucid Multi-Factor Analytical Reasoner (Rule-Based + NLP)"
+  }
+}

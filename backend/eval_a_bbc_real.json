@@ -1,0 +1,1814 @@
+{
+  "verdict": "VERIFIED",
+  "trustScore": 92,
+  "credibility": 92,
+  "confidence": 91,
+  "riskLevel": "LOW",
+  "prediction": "REAL",
+  "summaryReason": "Corroborated across 6 independent reliable sources with zero contradicting evidence.",
+  "explanation": [
+    "Corroborated across 6 independent reliable sources with zero contradicting evidence.",
+    "Multi-Factor Trust Score: 92/100 based on 5 analytical layers.",
+    "Source Authority: BBC News (Publisher: BBC, Trust Score: 92/100, Weight: 10%).",
+    "Evidence Corroboration: 6 supporting citations, 0 contradicting flags.",
+    "Linguistic analysis: Attributable, objective journalistic phrasing detected."
+  ],
+  "ragEnabled": true,
+  "sourcesSearched": [
+    "Wikipedia (Official REST API) (9 results)",
+    "Google News RSS Wire Search (15 results)",
+    "Institutional Archives (UN/WHO/CDC) (4 results)",
+    "Canonical Wire Archives (2 results)"
+  ],
+  "resultsFound": "6 supporting, 0 contradicting",
+  "topSupportingSources": [
+    {
+      "articleTitle": "Global renewable capacity is set to grow strongly, driven by solar PV - IEA",
+      "publisher": "International Energy Agency (IEA)",
+      "publicationDate": "2025-10-07",
+      "url": "https://news.google.com/rss/articles/CBMimAFBVV95cUxOUzFQNDNiaHdxWEQyZjFOX184djY3a1ZRb3VuUXdXNU1tVHFmZHZrRS1TRXZMUE5zZjRvSnItRnQxa1ZUaVZSRVlRRnlfazlLNG1Sbl9iWGc3dWpNTDBpbGUyRElkNkdIOEhnR1I5S3BXOEY5dFdZLUNrem1kbWFpdHhNTzR3T1M1Y0tBZ0hWeTZmbEdoSlNRZA?oc=5",
+      "evidenceSnippet": "Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+      "sourceTrustScore": 98,
+      "sourceCategory": "International Institution",
+      "retrievalChannel": "Wire News Search",
+      "relevanceScore": 65,
+      "semanticSimilarity": 0.6514,
+      "compositeRankScore": 79,
+      "stance": "support",
+      "stanceConfidence": 75,
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+    },
+    {
+      "articleTitle": "Executive summary - Solar PV Global Supply Chains - IEA",
+      "publisher": "International Energy Agency (IEA)",
+      "publicationDate": "2022-07-07",
+      "url": "https://news.google.com/rss/articles/CBMigAFBVV95cUxQTFVva0xrVUZNOXlHLUp2Z2o5aU5xRWR3VkVPQWh4dzM5aXNYTUtkcVg3clJqQnZ4YmpRTTB0NTkyME05QlhZeVhIYnFsQURJbElFSWlnbTBxU3NTd1k4Ul83b2VVUjdEOUg2ZHlqeF9HaVh0a0MzMUVjbU1uQlQ1Zg?oc=5",
+      "evidenceSnippet": "Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+      "sourceTrustScore": 98,
+      "sourceCategory": "International Institution",
+      "retrievalChannel": "Wire News Search",
+      "relevanceScore": 62,
+      "semanticSimilarity": 0.6244,
+      "compositeRankScore": 77,
+      "stance": "support",
+      "stanceConfidence": 72,
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+    },
+    {
+      "articleTitle": "Technology: Solar PV and wind - Global Energy Review 2026 - IEA",
+      "publisher": "International Energy Agency (IEA)",
+      "publicationDate": "2026-04-20",
+      "url": "https://news.google.com/rss/articles/CBMiigFBVV95cUxOV1hQcWRreURkWFJyNmJEOVlzNXpBckFMSGZSbjlsMXlmQ2hzc2VGQUdkQ0RwQko1YUtsUlFfajdIOGhjSGg5X1o0emEzOXFNcHN2Tm1lZms2Q1hYd1dSVm1KQXVHMWNXb1NMM3pSWXhXaVNEU0RzRWV4bTJCZS1lZFBQMlBSUEhWcGc?oc=5",
+      "evidenceSnippet": "Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency",
+      "sourceTrustScore": 98,
+      "sourceCategory": "International Institution",
+      "retrievalChannel": "Wire News Search",
+      "relevanceScore": 58,
+      "semanticSimilarity": 0.5804,
+      "compositeRankScore": 76,
+      "stance": "support",
+      "stanceConfidence": 68,
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+    },
+    {
+      "articleTitle": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions - IEA",
+      "publisher": "International Energy Agency (IEA)",
+      "publicationDate": "2022-07-07",
+      "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxNYW8xYVNzaFZzZ1QzWFZ5cHNXbmUyUWsxdU0tczJOTUx1dkR1RzlFbFlDQWMwYUtpaGhUZzZkU1ZFMGtod19Qc3lWam9BVGJFOEszS2NFVnp1WEp0dU9pRzhrdHhNYXdGdW1rXzJNc0trS1ZsS0NRblhnYUNwR2wwMVRLU25jMGVuSTJEelc5Vm44ZGYwZ0VCY2U5bkVIRzJzbXBaYW9TN1hna0xZTjNEQXpZN1lwM3ZLMHJ6SGVOUnlueERnMm1zdWlMOA?oc=5",
+      "evidenceSnippet": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions IEA - International Energy Agency",
+      "sourceTrustScore": 98,
+      "sourceCategory": "International Institution",
+      "retrievalChannel": "Wire News Search",
+      "relevanceScore": 51,
+      "semanticSimilarity": 0.5075,
+      "compositeRankScore": 71,
+      "stance": "support",
+      "stanceConfidence": 65,
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+    },
+    {
+      "articleTitle": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility - IEA",
+      "publisher": "International Energy Agency (IEA)",
+      "publicationDate": "2026-02-06",
+      "url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxNV3Nvem5vd2pHZnhjRktRWUpsQ285Wlh4MVRUMWtVQ0ZmRlZVQm12YnZzcEZUYUNIRmZBS2xCNXZodzBXWkJSVDV6UTMxaEZ5aXltUzZDei1jV08wUzlNMkZwLVVzaEVxLXR2d0JTem5rOXFXOS0yVFl0R0tQcHRsXzJKNE1lcVBUWnFCUHZMdVEtVXhkdmxIYzIxZGVoU1huektJVDVLNlUzQVJmODNPWEdDRlBGOC12ZjhUSEFnbkZvd21jYTUydUtieHhOeDd6ekhtZmRUR3U?oc=5",
+      "evidenceSnippet": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility IEA - International Energy Agency",
+      "sourceTrustScore": 98,
+      "sourceCategory": "International Institution",
+      "retrievalChannel": "Wire News Search",
+      "relevanceScore": 42,
+      "semanticSimilarity": 0.4242,
+      "compositeRankScore": 69,
+      "stance": "support",
+      "stanceConfidence": 65,
+      "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades."
+    },
+    {
+      "articleTitle": "Wikipedia: Renewable energy",
+      "publisher": "Wikipedia",
+      "publicationDate": "2026-11-19",
+      "url": "https://en.wikipedia.org/wiki/Renewable_energy",
+      "evidenceSnippet": "Renewable energy is energy made from renewable natural resources that are replenished on a human timescale. The most widely used renewable energy types are solar energy, wind power, bioenergy/biomass, and hydropower. Bioenergy and geothermal power are also significant in some countries. Renewable en",
+      "sourceTrustScore": 88,
+      "sourceCategory": "Encyclopedic Reference",
+      "retrievalChannel": "Wikipedia REST API",
+      "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "source": "Wikipedia",
+      "sourceName": "Wikipedia",
+      "relevanceScore": 45,
+      "semanticSimilarity": 0.454,
+      "compositeRankScore": 68,
+      "stance": "support",
+      "stanceConfidence": 65
+    }
+  ],
+  "topContradictingSources": [],
+  "evidenceMatrix": [
+    {
+      "claimNumber": 1,
+      "claim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "claimType": "Narrative Statement",
+      "isOpinion": false,
+      "status": "Verified",
+      "confidence": 80,
+      "supportingEvidence": [
+        {
+          "articleTitle": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility - IEA",
+          "publisher": "International Energy Agency (IEA)",
+          "publicationDate": "2026-02-06",
+          "url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxNV3Nvem5vd2pHZnhjRktRWUpsQ285Wlh4MVRUMWtVQ0ZmRlZVQm12YnZzcEZUYUNIRmZBS2xCNXZodzBXWkJSVDV6UTMxaEZ5aXltUzZDei1jV08wUzlNMkZwLVVzaEVxLXR2d0JTem5rOXFXOS0yVFl0R0tQcHRsXzJKNE1lcVBUWnFCUHZMdVEtVXhkdmxIYzIxZGVoU1huektJVDVLNlUzQVJmODNPWEdDRlBGOC12ZjhUSEFnbkZvd21jYTUydUtieHhOeDd6ekhtZmRUR3U?oc=5",
+          "evidenceSnippet": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility IEA - International Energy Agency",
+          "sourceTrustScore": 98,
+          "sourceCategory": "International Institution",
+          "retrievalChannel": "Wire News Search",
+          "relevanceScore": 42,
+          "semanticSimilarity": 0.4242,
+          "compositeRankScore": 69,
+          "stance": "support",
+          "stanceConfidence": 65,
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades."
+        },
+        {
+          "articleTitle": "Wikipedia: Renewable energy",
+          "publisher": "Wikipedia",
+          "publicationDate": "2026-11-19",
+          "url": "https://en.wikipedia.org/wiki/Renewable_energy",
+          "evidenceSnippet": "Renewable energy is energy made from renewable natural resources that are replenished on a human timescale. The most widely used renewable energy types are solar energy, wind power, bioenergy/biomass, and hydropower. Bioenergy and geothermal power are also significant in some countries. Renewable en",
+          "sourceTrustScore": 88,
+          "sourceCategory": "Encyclopedic Reference",
+          "retrievalChannel": "Wikipedia REST API",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "source": "Wikipedia",
+          "sourceName": "Wikipedia",
+          "relevanceScore": 45,
+          "semanticSimilarity": 0.454,
+          "compositeRankScore": 68,
+          "stance": "support",
+          "stanceConfidence": 65
+        }
+      ],
+      "contradictingEvidence": [],
+      "relatedEvidence": [],
+      "sourceLinks": [
+        "https://news.google.com/rss/articles/CBMi2AFBVV95cUxNV3Nvem5vd2pHZnhjRktRWUpsQ285Wlh4MVRUMWtVQ0ZmRlZVQm12YnZzcEZUYUNIRmZBS2xCNXZodzBXWkJSVDV6UTMxaEZ5aXltUzZDei1jV08wUzlNMkZwLVVzaEVxLXR2d0JTem5rOXFXOS0yVFl0R0tQcHRsXzJKNE1lcVBUWnFCUHZMdVEtVXhkdmxIYzIxZGVoU1huektJVDVLNlUzQVJmODNPWEdDRlBGOC12ZjhUSEFnbkZvd21jYTUydUtieHhOeDd6ekhtZmRUR3U?oc=5",
+        "https://en.wikipedia.org/wiki/Renewable_energy"
+      ],
+      "evidenceSummary": "Corroborated across multiple independent sources: International Energy Agency (IEA) and Wikipedia."
+    },
+    {
+      "claimNumber": 2,
+      "claim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "claimType": "Narrative Statement",
+      "isOpinion": false,
+      "status": "Verified",
+      "confidence": 80,
+      "supportingEvidence": [
+        {
+          "articleTitle": "Global renewable capacity is set to grow strongly, driven by solar PV - IEA",
+          "publisher": "International Energy Agency (IEA)",
+          "publicationDate": "2025-10-07",
+          "url": "https://news.google.com/rss/articles/CBMimAFBVV95cUxOUzFQNDNiaHdxWEQyZjFOX184djY3a1ZRb3VuUXdXNU1tVHFmZHZrRS1TRXZMUE5zZjRvSnItRnQxa1ZUaVZSRVlRRnlfazlLNG1Sbl9iWGc3dWpNTDBpbGUyRElkNkdIOEhnR1I5S3BXOEY5dFdZLUNrem1kbWFpdHhNTzR3T1M1Y0tBZ0hWeTZmbEdoSlNRZA?oc=5",
+          "evidenceSnippet": "Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+          "sourceTrustScore": 98,
+          "sourceCategory": "International Institution",
+          "retrievalChannel": "Wire News Search",
+          "relevanceScore": 65,
+          "semanticSimilarity": 0.6514,
+          "compositeRankScore": 79,
+          "stance": "support",
+          "stanceConfidence": 75,
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+        },
+        {
+          "articleTitle": "Executive summary - Solar PV Global Supply Chains - IEA",
+          "publisher": "International Energy Agency (IEA)",
+          "publicationDate": "2022-07-07",
+          "url": "https://news.google.com/rss/articles/CBMigAFBVV95cUxQTFVva0xrVUZNOXlHLUp2Z2o5aU5xRWR3VkVPQWh4dzM5aXNYTUtkcVg3clJqQnZ4YmpRTTB0NTkyME05QlhZeVhIYnFsQURJbElFSWlnbTBxU3NTd1k4Ul83b2VVUjdEOUg2ZHlqeF9HaVh0a0MzMUVjbU1uQlQ1Zg?oc=5",
+          "evidenceSnippet": "Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+          "sourceTrustScore": 98,
+          "sourceCategory": "International Institution",
+          "retrievalChannel": "Wire News Search",
+          "relevanceScore": 62,
+          "semanticSimilarity": 0.6244,
+          "compositeRankScore": 77,
+          "stance": "support",
+          "stanceConfidence": 72,
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+        },
+        {
+          "articleTitle": "Technology: Solar PV and wind - Global Energy Review 2026 - IEA",
+          "publisher": "International Energy Agency (IEA)",
+          "publicationDate": "2026-04-20",
+          "url": "https://news.google.com/rss/articles/CBMiigFBVV95cUxOV1hQcWRreURkWFJyNmJEOVlzNXpBckFMSGZSbjlsMXlmQ2hzc2VGQUdkQ0RwQko1YUtsUlFfajdIOGhjSGg5X1o0emEzOXFNcHN2Tm1lZms2Q1hYd1dSVm1KQXVHMWNXb1NMM3pSWXhXaVNEU0RzRWV4bTJCZS1lZFBQMlBSUEhWcGc?oc=5",
+          "evidenceSnippet": "Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency",
+          "sourceTrustScore": 98,
+          "sourceCategory": "International Institution",
+          "retrievalChannel": "Wire News Search",
+          "relevanceScore": 58,
+          "semanticSimilarity": 0.5804,
+          "compositeRankScore": 76,
+          "stance": "support",
+          "stanceConfidence": 68,
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+        },
+        {
+          "articleTitle": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions - IEA",
+          "publisher": "International Energy Agency (IEA)",
+          "publicationDate": "2022-07-07",
+          "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxNYW8xYVNzaFZzZ1QzWFZ5cHNXbmUyUWsxdU0tczJOTUx1dkR1RzlFbFlDQWMwYUtpaGhUZzZkU1ZFMGtod19Qc3lWam9BVGJFOEszS2NFVnp1WEp0dU9pRzhrdHhNYXdGdW1rXzJNc0trS1ZsS0NRblhnYUNwR2wwMVRLU25jMGVuSTJEelc5Vm44ZGYwZ0VCY2U5bkVIRzJzbXBaYW9TN1hna0xZTjNEQXpZN1lwM3ZLMHJ6SGVOUnlueERnMm1zdWlMOA?oc=5",
+          "evidenceSnippet": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions IEA - International Energy Agency",
+          "sourceTrustScore": 98,
+          "sourceCategory": "International Institution",
+          "retrievalChannel": "Wire News Search",
+          "relevanceScore": 51,
+          "semanticSimilarity": 0.5075,
+          "compositeRankScore": 71,
+          "stance": "support",
+          "stanceConfidence": 65,
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide."
+        }
+      ],
+      "contradictingEvidence": [],
+      "relatedEvidence": [],
+      "sourceLinks": [
+        "https://news.google.com/rss/articles/CBMimAFBVV95cUxOUzFQNDNiaHdxWEQyZjFOX184djY3a1ZRb3VuUXdXNU1tVHFmZHZrRS1TRXZMUE5zZjRvSnItRnQxa1ZUaVZSRVlRRnlfazlLNG1Sbl9iWGc3dWpNTDBpbGUyRElkNkdIOEhnR1I5S3BXOEY5dFdZLUNrem1kbWFpdHhNTzR3T1M1Y0tBZ0hWeTZmbEdoSlNRZA?oc=5",
+        "https://news.google.com/rss/articles/CBMigAFBVV95cUxQTFVva0xrVUZNOXlHLUp2Z2o5aU5xRWR3VkVPQWh4dzM5aXNYTUtkcVg3clJqQnZ4YmpRTTB0NTkyME05QlhZeVhIYnFsQURJbElFSWlnbTBxU3NTd1k4Ul83b2VVUjdEOUg2ZHlqeF9HaVh0a0MzMUVjbU1uQlQ1Zg?oc=5",
+        "https://news.google.com/rss/articles/CBMiigFBVV95cUxOV1hQcWRreURkWFJyNmJEOVlzNXpBckFMSGZSbjlsMXlmQ2hzc2VGQUdkQ0RwQko1YUtsUlFfajdIOGhjSGg5X1o0emEzOXFNcHN2Tm1lZms2Q1hYd1dSVm1KQXVHMWNXb1NMM3pSWXhXaVNEU0RzRWV4bTJCZS1lZFBQMlBSUEhWcGc?oc=5",
+        "https://news.google.com/rss/articles/CBMiywFBVV95cUxNYW8xYVNzaFZzZ1QzWFZ5cHNXbmUyUWsxdU0tczJOTUx1dkR1RzlFbFlDQWMwYUtpaGhUZzZkU1ZFMGtod19Qc3lWam9BVGJFOEszS2NFVnp1WEp0dU9pRzhrdHhNYXdGdW1rXzJNc0trS1ZsS0NRblhnYUNwR2wwMVRLU25jMGVuSTJEelc5Vm44ZGYwZ0VCY2U5bkVIRzJzbXBaYW9TN1hna0xZTjNEQXpZN1lwM3ZLMHJ6SGVOUnlueERnMm1zdWlMOA?oc=5",
+        "https://en.wikipedia.org/wiki/International_Energy_Agency"
+      ],
+      "evidenceSummary": "Corroborated across multiple independent sources: International Energy Agency (IEA) and International Energy Agency (IEA)."
+    },
+    {
+      "claimNumber": 3,
+      "claim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+      "claimType": "Narrative Statement",
+      "isOpinion": false,
+      "status": "Unverified",
+      "confidence": 0,
+      "supportingEvidence": [],
+      "contradictingEvidence": [],
+      "relatedEvidence": [
+        {
+          "articleTitle": "\u2018A Unique Moment\u2019: New Regional Air Pollution Plans Aim to Cut Health Burden Across Latin America",
+          "publisher": "Health Policy Watch",
+          "publicationDate": "2026-04-17",
+          "url": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQNjRSaGRFUHJabDZUc1huM1M5cmVvVmRDT3V5WDBqeGlLQUhXVGxBX2ZxbXRkclJQS05ab0R3N0hnTVIzbk5YdlVBZFNaUWVDMlhtZ3RPdlAwWFVnX1ZoN3ViMEpEMHY4Y0tiLUt2RGFTSWFpRzExSktsZVZZUFAzUUdYa2EzeGFWLXB6dlBNbThWeWVsaWU2UWRCdGFaRHpOQUJJZEdGWmNiYkU3SDExSUhhMGJJczA5XzRkUkZiREhCeVlIX3c?oc=5",
+          "evidenceSnippet": "\u2018A Unique Moment\u2019: New Regional Air Pollution Plans Aim to Cut Health Burden Across Latin America Health Policy Watch",
+          "sourceTrustScore": 50,
+          "sourceCategory": "News Media",
+          "retrievalChannel": "Wire News Search",
+          "relevanceScore": 61,
+          "semanticSimilarity": 0.6105,
+          "compositeRankScore": 60,
+          "stance": "related",
+          "stanceConfidence": 61,
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities."
+        },
+        {
+          "articleTitle": "E.P.A. to Stop Considering Lives Saved When Setting Rules on Air Pollution",
+          "publisher": "The New York Times",
+          "publicationDate": "2026-01-12",
+          "url": "https://news.google.com/rss/articles/CBMie0FVX3lxTE1yMEk4QVVZR1RPRzVoQzdpYnZlV040czdTYWJHZ2wyekZQTkdNSlRITnhOeVB1QnY0bGVxazRUdFh3d09sb2hZWDRrR1Bvcmltc1ZfSjRGb3VlTEtVeXdQTkROdVk5Z3ZLVFhySzdpMGpmV3htUmVHTWg3WQ?oc=5",
+          "evidenceSnippet": "E.P.A. to Stop Considering Lives Saved When Setting Rules on Air Pollution The New York Times",
+          "sourceTrustScore": 50,
+          "sourceCategory": "News Media",
+          "retrievalChannel": "Wire News Search",
+          "relevanceScore": 41,
+          "semanticSimilarity": 0.414,
+          "compositeRankScore": 50,
+          "stance": "related",
+          "stanceConfidence": 50,
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities."
+        }
+      ],
+      "sourceLinks": [
+        "https://news.google.com/rss/articles/CBMixgFBVV95cUxQNjRSaGRFUHJabDZUc1huM1M5cmVvVmRDT3V5WDBqeGlLQUhXVGxBX2ZxbXRkclJQS05ab0R3N0hnTVIzbk5YdlVBZFNaUWVDMlhtZ3RPdlAwWFVnX1ZoN3ViMEpEMHY4Y0tiLUt2RGFTSWFpRzExSktsZVZZUFAzUUdYa2EzeGFWLXB6dlBNbThWeWVsaWU2UWRCdGFaRHpOQUJJZEdGWmNiYkU3SDExSUhhMGJJczA5XzRkUkZiREhCeVlIX3c?oc=5",
+        "https://news.google.com/rss/articles/CBMie0FVX3lxTE1yMEk4QVVZR1RPRzVoQzdpYnZlV040czdTYWJHZ2wyekZQTkdNSlRITnhOeVB1QnY0bGVxazRUdFh3d09sb2hZWDRrR1Bvcmltc1ZfSjRGb3VlTEtVeXdQTkROdVk5Z3ZLVFhySzdpMGpmV3htUmVHTWg3WQ?oc=5"
+      ],
+      "evidenceSummary": "Topic-related coverage found (Health Policy Watch), but does not specifically verify the claim proposition."
+    }
+  ],
+  "groundedReasoning": {
+    "synthesis": "Grounded Retrieval Synthesis: Claim-by-claim cross-referencing successfully grounded this submission in published reporting from International Energy Agency (IEA), Wikipedia (6 corroborating citation(s)). Retrieved evidence exhibits high semantic relevance and credibility without contradicting wire flags.",
+    "whyAppearsTrue": [
+      "Corroborated by International Energy Agency (IEA): Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+      "Corroborated by International Energy Agency (IEA): Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+      "Corroborated by International Energy Agency (IEA): Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency"
+    ],
+    "whyAppearsFalse": [
+      "No contradicting wire flags or negative fact checks were discovered in public registries."
+    ],
+    "evidenceFound": [
+      "International Energy Agency (IEA) (2025-10-07): \"Global renewable capacity is set to grow strongly, driven by solar PV - IEA\" \u2014 Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+      "International Energy Agency (IEA) (2022-07-07): \"Executive summary - Solar PV Global Supply Chains - IEA\" \u2014 Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+      "International Energy Agency (IEA) (2026-04-20): \"Technology: Solar PV and wind - Global Energy Review 2026 - IEA\" \u2014 Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency"
+    ],
+    "evidenceMissing": [
+      "No additional corroborating documentation missing."
+    ]
+  },
+  "language": {
+    "code": "en",
+    "languageCode": "en",
+    "language": "English",
+    "detectedLanguage": "English",
+    "confidence": 1.0,
+    "isEnglish": true,
+    "isForeignLanguage": false,
+    "direction": "ltr",
+    "originalText": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades. According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide. The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+    "translatedText": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades. According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide. The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+    "analysisText": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades. According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide. The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+    "wasTranslated": false
+  },
+  "detectedLanguage": "English",
+  "languageCode": "en",
+  "wasTranslated": false,
+  "originalLanguageText": null,
+  "articleType": "Feature Article",
+  "articleTypeClassification": {
+    "articleType": "Feature Article",
+    "confidence": 75,
+    "indicators": [],
+    "evaluationMode": "narrative_credibility",
+    "description": "Feature Article: In-depth narrative and human-interest storytelling. Evaluated for thematic credibility, source depth, and context rather than breaking-news wire corroboration."
+  },
+  "sourceQualityAssessment": {
+    "overallRating": "Authoritative Historical / Academic Standard",
+    "sourceQualityScore": 92,
+    "sourceAuthority": "BBC (High Authority Tier)",
+    "scholarlyStandards": "High - Institutional and archival documentation adhering to scholarly standards.",
+    "methodologicalRigor": "Structured chronological analysis referencing historical records and archival context.",
+    "archivalIntegrity": "Contextual narrative review.",
+    "assessmentSummary": "Evaluated under Source Quality Assessment: BBC demonstrates high-tier source quality. Historical and analysis articles are judged on archival depth, scholarly standards, and source credibility rather than daily breaking news wire feeds.",
+    "verificationMode": "Source Quality Assessment"
+  },
+  "emptyEvidenceAudit": null,
+  "articleSummary": {
+    "executiveSummary": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades. According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide. The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+    "keyTakeaways": [
+      "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities."
+    ],
+    "tldr": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+    "quickSummary": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades. According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+    "title": "Global renewable energy capacity rose by 50% in 2023: IEA report",
+    "provider": "Extractive NLP Engine"
+  },
+  "summary": {
+    "executiveSummary": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades. According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide. The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+    "keyTakeaways": [
+      "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities."
+    ],
+    "tldr": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+    "quickSummary": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades. According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+    "title": "Global renewable energy capacity rose by 50% in 2023: IEA report",
+    "provider": "Extractive NLP Engine"
+  },
+  "articleTitle": "Global renewable energy capacity rose by 50% in 2023: IEA report",
+  "publisher": "BBC",
+  "sourceType": "",
+  "sourceDomain": "bbc.com",
+  "primarySource": {
+    "publisher": "BBC",
+    "name": "BBC News",
+    "domain": "bbc.com",
+    "sourceType": "",
+    "isPrimary": true,
+    "trustScore": 92
+  },
+  "sourceReputation": {
+    "publisher": "BBC",
+    "sourceName": "BBC News",
+    "name": "BBC News",
+    "domain": "bbc.com",
+    "trustScore": 92,
+    "tier": "High",
+    "category": "Public Broadcaster",
+    "description": "Established public service broadcaster with strict editorial guidelines and FactCheck desk.",
+    "attributionType": "Publisher Metadata Hint ('BBC News')",
+    "isTrusted": true,
+    "isPrimary": true
+  },
+  "sourceCredibility": 92,
+  "claims": [
+    {
+      "id": "claim-1",
+      "claimNumber": 1,
+      "claim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "claimType": "Narrative Statement",
+      "isOpinion": false,
+      "genre": "Feature Article",
+      "entities": [],
+      "numbers": [
+        "50",
+        "two"
+      ],
+      "isTestableProposition": true,
+      "status": "Supported",
+      "supportingSources": [
+        "BBC News",
+        "International Energy Agency (IEA)",
+        "Reuters",
+        "Bloomberg News",
+        "UN"
+      ],
+      "contradictingSources": [],
+      "supportingEvidenceCount": 5,
+      "contradictingEvidenceCount": 0,
+      "confidence": 96,
+      "analysisNotes": "Directly backed by IEA Global Renewable Energy Market Report.",
+      "relatedEvidenceCount": 0,
+      "relatedSources": [],
+      "evidenceSnippets": [
+        {
+          "source": "International Energy Agency (IEA)",
+          "sourceName": "International Energy Agency (IEA)",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in International Energy Agency (IEA) wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "trust": 92,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "Reuters",
+          "sourceName": "Reuters",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 95,
+          "url": "https://reuters.com",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in Reuters wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "trust": 95,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "Bloomberg News",
+          "sourceName": "Bloomberg News",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in Bloomberg News wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "trust": 92,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "UN",
+          "sourceName": "UN",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 100,
+          "url": "https://un.org",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in UN wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "trust": 100,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)",
+          "isPrimary": false
+        }
+      ],
+      "factCheckMatches": [],
+      "gnewsArticles": [
+        {
+          "sourceName": "POWER Magazine",
+          "articleTitle": "The Age of Electricity and 5 Other Forces Reshaping the Global Energy Outlook",
+          "publicationDate": "2026-01-02",
+          "publicationTime": "Fri, 02 Jan 2026 08:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMipgFBVV95cUxOZkZsSFk1R0NNVFNrSWgwdFlLX0hyaGMxdWR5SHF3YlBTaHd6Q3RkSXVpVFczenF1dkE4NWRRQUlwdHU5TVp1cVJVNGtqcERKYllFWFNJeXhPYnd4NGZ2bEhNakNyTGJHNUxtb2FFNzR0Q2w0TThRSDgwS2IxWUYwR1AwMldjdW9peHYxTUVaTHNtY1F4ZHNLNld5eFpkclBYRFdMeGl3?oc=5",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "agreementScore": 20,
+          "description": "The Age of Electricity and 5 Other Forces Reshaping the Global Energy Outlook POWER Magazine",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 20% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "CGEP",
+          "articleTitle": "The Effects of Load Growth on Electricity Prices in the United States: A Literature Review",
+          "publicationDate": "2026-06-23",
+          "publicationTime": "Tue, 23 Jun 2026 07:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxQdmJtNUlWZVdBNXhjODJpYjV6VW9EVkZacndqdDFxU055TzRzYTYxRHZtR2JtNmkyX3AzcTUtd2lZT3Z4ZmlMTlZ3dkthSnpLTm1qd3YtREZrWW43Nm9oQmM5QXMxVkRDWDhCRkdXbHVYNHVQTVQ3S2c1OGJMSGVYbVRGUThoUnBUaUVvd3c5bnVxbWZTZGZkOHhwS0s1WVBmS0xvOTRxSVVxb1NvRDRTd0lqRk1XbmUyeEhCeFhyYWdvY2JFM1lfeDBJRDRlZGZSNUJiTE9vNDQ?oc=5",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "agreementScore": 18,
+          "description": "The Effects of Load Growth on Electricity Prices in the United States: A Literature Review CGEP",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 18% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "WIPO",
+          "articleTitle": "Global Innovation Index 2026 - Global Innovation Tracker",
+          "publicationDate": "2026-09-29",
+          "publicationTime": "Tue, 29 Sep 2026 14:27:01 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPWm80RHRaQWlLSGh4XzMzbXZUc1NPaW9PN0hBN2pWWUkyVkVjejEyQm1LNU9XeTZZSjh5LUVJOXJrek92UkhjanNncGNoQ0ZNTkJfRlNyZW5HRE1peHZ6d0E1TENia0xvQlBnWVQ5bWZsakZCWU1yZDZEZmdRX3pWZUU1dmloVUwwRmdZRExhcmlTd1ZrSG42ZE1TVExLeW12Z1E?oc=5",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "agreementScore": 16,
+          "description": "Global Innovation Index 2026 - Global Innovation Tracker WIPO",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 16% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "Ember Energy",
+          "articleTitle": "Electricity demand and supply trends",
+          "publicationDate": "2026-04-21",
+          "publicationTime": "Tue, 21 Apr 2026 03:25:09 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMirgFBVV95cUxNZUFiVldqa3VGNzdDa0dwNm1vSTNRN2xhejFvbGZQSTV4ZEdnMUh1NS02RDJ6NEEyUVpCTEVHX29rOFRLOE15b1g2XzRMYVJBNHBrR1FBQXllYTJLaVA0US1qZU5LeFdjMG84Mlp0OVlWX3p0S1VFdXpWbHpYRVVNTXZEY0hHWndkRktrN0tJa0hZb0hDOEI1ak9UTC16TXlReUJJOE96ekt4ZXZDb2c?oc=5",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "agreementScore": 12,
+          "description": "Electricity demand and supply trends Ember Energy",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 12% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "International Energy Agency",
+          "articleTitle": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility - IEA",
+          "publicationDate": "2026-02-06",
+          "publicationTime": "Fri, 06 Feb 2026 08:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxNV3Nvem5vd2pHZnhjRktRWUpsQ285Wlh4MVRUMWtVQ0ZmRlZVQm12YnZzcEZUYUNIRmZBS2xCNXZodzBXWkJSVDV6UTMxaEZ5aXltUzZDei1jV08wUzlNMkZwLVVzaEVxLXR2d0JTem5rOXFXOS0yVFl0R0tQcHRsXzJKNE1lcVBUWnFCUHZMdVEtVXhkdmxIYzIxZGVoU1huektJVDVLNlUzQVJmODNPWEdDRlBGOC12ZjhUSEFnbkZvd21jYTUydUtieHhOeDd6ekhtZmRUR3U?oc=5",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "agreementScore": 11,
+          "description": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility IEA - International Energy Agency",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 11% Moderate Match) -> Baseline Reference"
+        }
+      ]
+    },
+    {
+      "id": "claim-2",
+      "claimNumber": 2,
+      "claim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "claimType": "Narrative Statement",
+      "isOpinion": false,
+      "genre": "Feature Article",
+      "entities": [
+        "International",
+        "Energy",
+        "Agency"
+      ],
+      "numbers": [
+        "three"
+      ],
+      "isTestableProposition": true,
+      "status": "Supported",
+      "supportingSources": [
+        "BBC News",
+        "International Energy Agency (IEA)",
+        "Reuters",
+        "Bloomberg News",
+        "UN"
+      ],
+      "contradictingSources": [],
+      "supportingEvidenceCount": 5,
+      "contradictingEvidenceCount": 0,
+      "confidence": 96,
+      "analysisNotes": "Directly backed by IEA Global Renewable Energy Market Report.",
+      "relatedEvidenceCount": 0,
+      "relatedSources": [],
+      "evidenceSnippets": [
+        {
+          "source": "International Energy Agency (IEA)",
+          "sourceName": "International Energy Agency (IEA)",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in International Energy Agency (IEA) wire archives: According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "trust": 92,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "Reuters",
+          "sourceName": "Reuters",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 95,
+          "url": "https://reuters.com",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in Reuters wire archives: According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "trust": 95,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "Bloomberg News",
+          "sourceName": "Bloomberg News",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in Bloomberg News wire archives: According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "trust": 92,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "UN",
+          "sourceName": "UN",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 100,
+          "url": "https://un.org",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in UN wire archives: According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "trust": 100,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)",
+          "isPrimary": false
+        }
+      ],
+      "factCheckMatches": [],
+      "gnewsArticles": [
+        {
+          "sourceName": "International Energy Agency",
+          "articleTitle": "Technology: Solar PV and wind - Global Energy Review 2026 - IEA",
+          "publicationDate": "2026-04-20",
+          "publicationTime": "Mon, 20 Apr 2026 08:36:13 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMiigFBVV95cUxOV1hQcWRreURkWFJyNmJEOVlzNXpBckFMSGZSbjlsMXlmQ2hzc2VGQUdkQ0RwQko1YUtsUlFfajdIOGhjSGg5X1o0emEzOXFNcHN2Tm1lZms2Q1hYd1dSVm1KQXVHMWNXb1NMM3pSWXhXaVNEU0RzRWV4bTJCZS1lZFBQMlBSUEhWcGc?oc=5",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "agreementScore": 38,
+          "description": "Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 38% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "International Energy Agency",
+          "articleTitle": "Executive summary - Solar PV Global Supply Chains - IEA",
+          "publicationDate": "2022-07-07",
+          "publicationTime": "Thu, 07 Jul 2022 05:07:17 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMigAFBVV95cUxQTFVva0xrVUZNOXlHLUp2Z2o5aU5xRWR3VkVPQWh4dzM5aXNYTUtkcVg3clJqQnZ4YmpRTTB0NTkyME05QlhZeVhIYnFsQURJbElFSWlnbTBxU3NTd1k4Ul83b2VVUjdEOUg2ZHlqeF9HaVh0a0MzMUVjbU1uQlQ1Zg?oc=5",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "agreementScore": 38,
+          "description": "Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 38% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "International Energy Agency",
+          "articleTitle": "Global renewable capacity is set to grow strongly, driven by solar PV - IEA",
+          "publicationDate": "2025-10-07",
+          "publicationTime": "Tue, 07 Oct 2025 07:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMimAFBVV95cUxOUzFQNDNiaHdxWEQyZjFOX184djY3a1ZRb3VuUXdXNU1tVHFmZHZrRS1TRXZMUE5zZjRvSnItRnQxa1ZUaVZSRVlRRnlfazlLNG1Sbl9iWGc3dWpNTDBpbGUyRElkNkdIOEhnR1I5S3BXOEY5dFdZLUNrem1kbWFpdHhNTzR3T1M1Y0tBZ0hWeTZmbEdoSlNRZA?oc=5",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "agreementScore": 37,
+          "description": "Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 37% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "International Energy Agency",
+          "articleTitle": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions - IEA",
+          "publicationDate": "2022-07-07",
+          "publicationTime": "Thu, 07 Jul 2022 07:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxNYW8xYVNzaFZzZ1QzWFZ5cHNXbmUyUWsxdU0tczJOTUx1dkR1RzlFbFlDQWMwYUtpaGhUZzZkU1ZFMGtod19Qc3lWam9BVGJFOEszS2NFVnp1WEp0dU9pRzhrdHhNYXdGdW1rXzJNc0trS1ZsS0NRblhnYUNwR2wwMVRLU25jMGVuSTJEelc5Vm44ZGYwZ0VCY2U5bkVIRzJzbXBaYW9TN1hna0xZTjNEQXpZN1lwM3ZLMHJ6SGVOUnlueERnMm1zdWlMOA?oc=5",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "agreementScore": 26,
+          "description": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions IEA - International Energy Agency",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 26% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "Mail & Guardian",
+          "articleTitle": "Global energy crisis sharpens Africa's push for electricity access",
+          "publicationDate": "2026-11-20",
+          "publicationTime": "Fri, 20 Nov 2026 12:41:55 GMT",
+          "sourceTrustScore": 90,
+          "url": "https://news.google.com/rss/articles/CBMitAFBVV95cUxNSkNaVGY4Uy03SUFDRDJPbDdJa0JJa2tXVTYyOVBiYU55QVA1Y05rZ1QtMlpxbHIxa3pwNmY0TUplVVotWVI2SzUxWTdrUkphOXZSR3pINnp4QlNTT2wtb3FvakFHdHJPd2FsSlZhdDlyV25GNXljQWdvMldZVlN1VDA5NExOc1BJNnRlb1QteTRjMkdkeEs2V3dGbWZtWmpTaE5UOG4tZEJ1clRmZGw0Z1BGWF8?oc=5",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "agreementScore": 24,
+          "description": "Global energy crisis sharpens Africa's push for electricity access Mail & Guardian",
+          "isTrustedSource": true,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (90/100 Trust, 24% Moderate Match) -> Baseline Reference"
+        }
+      ]
+    },
+    {
+      "id": "claim-3",
+      "claimNumber": 3,
+      "claim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+      "claimType": "Narrative Statement",
+      "isOpinion": false,
+      "genre": "Feature Article",
+      "entities": [
+        "World",
+        "Health",
+        "Organization",
+        "Reuters"
+      ],
+      "numbers": [],
+      "isTestableProposition": true,
+      "status": "Supported",
+      "supportingSources": [
+        "BBC News",
+        "International Energy Agency (IEA)",
+        "Reuters",
+        "Bloomberg News",
+        "UN"
+      ],
+      "contradictingSources": [],
+      "supportingEvidenceCount": 5,
+      "contradictingEvidenceCount": 0,
+      "confidence": 96,
+      "analysisNotes": "Directly backed by IEA Global Renewable Energy Market Report.",
+      "relatedEvidenceCount": 2,
+      "relatedSources": [
+        "Health Policy Watch",
+        "The New York Times"
+      ],
+      "evidenceSnippets": [
+        {
+          "source": "International Energy Agency (IEA)",
+          "sourceName": "International Energy Agency (IEA)",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in International Energy Agency (IEA) wire archives: The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "trust": 92,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "Reuters",
+          "sourceName": "Reuters",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 95,
+          "url": "https://reuters.com",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in Reuters wire archives: The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "trust": 95,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "Bloomberg News",
+          "sourceName": "Bloomberg News",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in Bloomberg News wire archives: The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "trust": 92,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)",
+          "isPrimary": false
+        },
+        {
+          "source": "UN",
+          "sourceName": "UN",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 100,
+          "url": "https://un.org",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "support",
+          "snippet": "Corroborating reporting logged in UN wire archives: The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "trust": 100,
+          "pointsAssigned": "+8 pts",
+          "calculationReason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)",
+          "isPrimary": false
+        }
+      ],
+      "factCheckMatches": [],
+      "gnewsArticles": [
+        {
+          "sourceName": "World Health Organization (WHO)",
+          "articleTitle": "One Health",
+          "publicationDate": "2026-05-08",
+          "publicationTime": "Fri, 08 May 2026 07:00:00 GMT",
+          "sourceTrustScore": 95,
+          "url": "https://news.google.com/rss/articles/CBMia0FVX3lxTE9IeGxoMVNuTDE3WGlIWHQ5VXREc0FEMzM1cFJaM1NqdVQ3NV9UVjh5bW9iWE1vQnE3MDB3UnpDVmRxU1Y2ek9Pbl9QelNlSHpobnNUU1VMT0RnNnZBOUdpTmNqVjhVYUdYbEJV?oc=5",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "agreementScore": 31,
+          "description": "One Health World Health Organization (WHO)",
+          "isTrustedSource": true,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (95/100 Trust, 31% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "World Health Organization (WHO)",
+          "articleTitle": "Drinking-water",
+          "publicationDate": "2026-11-19",
+          "publicationTime": "Thu, 19 Nov 2026 08:00:00 GMT",
+          "sourceTrustScore": 95,
+          "url": "https://news.google.com/rss/articles/CBMicEFVX3lxTE1RZmxIaURaLVNlQ0tBdVdwWjVEYWlBWUhjUk9VODBONEtOLVg0dU9MS3lUX0hJVTRUd3lOZ1lTbHFJd2VyUXUtRG1XdWFwb2FYZlRkeVZ1U0ZkLS1YZ2N5UW93Wkc2d0FZWkFYZkVmaEk?oc=5",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "agreementScore": 30,
+          "description": "Drinking-water World Health Organization (WHO)",
+          "isTrustedSource": true,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (95/100 Trust, 30% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "The New York Times",
+          "articleTitle": "E.P.A. to Stop Considering Lives Saved When Setting Rules on Air Pollution",
+          "publicationDate": "2026-01-12",
+          "publicationTime": "Mon, 12 Jan 2026 08:00:00 GMT",
+          "sourceTrustScore": 90,
+          "url": "https://news.google.com/rss/articles/CBMie0FVX3lxTE1yMEk4QVVZR1RPRzVoQzdpYnZlV040czdTYWJHZ2wyekZQTkdNSlRITnhOeVB1QnY0bGVxazRUdFh3d09sb2hZWDRrR1Bvcmltc1ZfSjRGb3VlTEtVeXdQTkROdVk5Z3ZLVFhySzdpMGpmV3htUmVHTWg3WQ?oc=5",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "agreementScore": 28,
+          "description": "E.P.A. to Stop Considering Lives Saved When Setting Rules on Air Pollution The New York Times",
+          "isTrustedSource": true,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (90/100 Trust, 28% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "Frontiers",
+          "articleTitle": "Health implications of the rapid rise of data centers in Virginia: an exploratory assessment",
+          "publicationDate": "2026-02-05",
+          "publicationTime": "Thu, 05 Feb 2026 08:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxQWnBSSkQwSllMM3hnWGxwd191c1h6U2ZueHo4dnp2M2RNOFVJaDVvS2dpaldTTFd0ejdoYnNJMWZEZFZ0d3RqeXVzam9ndEprN0lCWlZNc3Zod2hVcnhzQzRWd0E4ak1ueTFzNUQxQURyeFFWcTUxSjhpT01RYl9aWUVwbURId1JtUGgtM0ln?oc=5",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "agreementScore": 23,
+          "description": "Health implications of the rapid rise of data centers in Virginia: an exploratory assessment Frontiers",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 23% Moderate Match) -> Baseline Reference"
+        },
+        {
+          "sourceName": "Health Policy Watch",
+          "articleTitle": "\u2018A Unique Moment\u2019: New Regional Air Pollution Plans Aim to Cut Health Burden Across Latin America",
+          "publicationDate": "2026-04-17",
+          "publicationTime": "Fri, 17 Apr 2026 07:00:00 GMT",
+          "sourceTrustScore": 78,
+          "url": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQNjRSaGRFUHJabDZUc1huM1M5cmVvVmRDT3V5WDBqeGlLQUhXVGxBX2ZxbXRkclJQS05ab0R3N0hnTVIzbk5YdlVBZFNaUWVDMlhtZ3RPdlAwWFVnX1ZoN3ViMEpEMHY4Y0tiLUt2RGFTSWFpRzExSktsZVZZUFAzUUdYa2EzeGFWLXB6dlBNbThWeWVsaWU2UWRCdGFaRHpOQUJJZEdGWmNiYkU3SDExSUhhMGJJczA5XzRkUkZiREhCeVlIX3c?oc=5",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "agreementScore": 21,
+          "description": "\u2018A Unique Moment\u2019: New Regional Air Pollution Plans Aim to Cut Health Burden Across Latin America Health Policy Watch",
+          "isTrustedSource": false,
+          "stance": "neutral",
+          "evidenceCalculation": "Neutral Context (78/100 Trust, 21% Moderate Match) -> Baseline Reference"
+        }
+      ]
+    }
+  ],
+  "ragGroundedVerdict": {
+    "verdict": "VERIFIED",
+    "finalTrustScore": 92,
+    "riskLevel": "LOW",
+    "summaryReason": "Corroborated across 6 independent sources (International Energy Agency (IEA), Wikipedia) with zero contradicting evidence.",
+    "explanation": [
+      "Corroborated across 6 independent sources (International Energy Agency (IEA), Wikipedia) with zero contradicting evidence.",
+      "Sources searched: Wikipedia (Official REST API) (9 results), Google News RSS Wire Search (15 results), Institutional Archives (UN/WHO/CDC) (4 results), Canonical Wire Archives (2 results).",
+      "Evidence retrieved: 6 supporting, 0 contradicting.",
+      "Grounded Verdict: VERIFIED."
+    ],
+    "groundedReasoning": {
+      "synthesis": "Grounded Retrieval Synthesis: Claim-by-claim cross-referencing successfully grounded this submission in published reporting from International Energy Agency (IEA), Wikipedia (6 corroborating citation(s)). Retrieved evidence exhibits high semantic relevance and credibility without contradicting wire flags.",
+      "whyAppearsTrue": [
+        "Corroborated by International Energy Agency (IEA): Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+        "Corroborated by International Energy Agency (IEA): Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+        "Corroborated by International Energy Agency (IEA): Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency"
+      ],
+      "whyAppearsFalse": [
+        "No contradicting wire flags or negative fact checks were discovered in public registries."
+      ],
+      "evidenceFound": [
+        "International Energy Agency (IEA) (2025-10-07): \"Global renewable capacity is set to grow strongly, driven by solar PV - IEA\" \u2014 Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+        "International Energy Agency (IEA) (2022-07-07): \"Executive summary - Solar PV Global Supply Chains - IEA\" \u2014 Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+        "International Energy Agency (IEA) (2026-04-20): \"Technology: Solar PV and wind - Global Energy Review 2026 - IEA\" \u2014 Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency"
+      ],
+      "evidenceMissing": [
+        "No additional corroborating documentation missing."
+      ]
+    },
+    "evidenceAudit": {
+      "sourcesSearched": [
+        "Wikipedia (Official REST API) (9 results)",
+        "Google News RSS Wire Search (15 results)",
+        "Institutional Archives (UN/WHO/CDC) (4 results)",
+        "Canonical Wire Archives (2 results)"
+      ],
+      "resultsFound": {
+        "supporting": 6,
+        "contradicting": 0,
+        "total": 6
+      },
+      "reason": "Successfully grounded in 2 independent publisher(s)."
+    }
+  },
+  "evidence": {
+    "supporting": [
+      {
+        "source": "International Energy Agency (IEA)",
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "Global renewable capacity is set to grow strongly, driven by solar PV - IEA",
+        "publicationDate": "2025-10-07",
+        "sourceTrustScore": 98,
+        "url": "https://news.google.com/rss/articles/CBMimAFBVV95cUxOUzFQNDNiaHdxWEQyZjFOX184djY3a1ZRb3VuUXdXNU1tVHFmZHZrRS1TRXZMUE5zZjRvSnItRnQxa1ZUaVZSRVlRRnlfazlLNG1Sbl9iWGc3dWpNTDBpbGUyRElkNkdIOEhnR1I5S3BXOEY5dFdZLUNrem1kbWFpdHhNTzR3T1M1Y0tBZ0hWeTZmbEdoSlNRZA?oc=5",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "support",
+        "snippet": "Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+        "trust": 98,
+        "relevance": 65
+      },
+      {
+        "source": "International Energy Agency (IEA)",
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "Executive summary - Solar PV Global Supply Chains - IEA",
+        "publicationDate": "2022-07-07",
+        "sourceTrustScore": 98,
+        "url": "https://news.google.com/rss/articles/CBMigAFBVV95cUxQTFVva0xrVUZNOXlHLUp2Z2o5aU5xRWR3VkVPQWh4dzM5aXNYTUtkcVg3clJqQnZ4YmpRTTB0NTkyME05QlhZeVhIYnFsQURJbElFSWlnbTBxU3NTd1k4Ul83b2VVUjdEOUg2ZHlqeF9HaVh0a0MzMUVjbU1uQlQ1Zg?oc=5",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "support",
+        "snippet": "Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+        "trust": 98,
+        "relevance": 62
+      },
+      {
+        "source": "International Energy Agency (IEA)",
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "Technology: Solar PV and wind - Global Energy Review 2026 - IEA",
+        "publicationDate": "2026-04-20",
+        "sourceTrustScore": 98,
+        "url": "https://news.google.com/rss/articles/CBMiigFBVV95cUxOV1hQcWRreURkWFJyNmJEOVlzNXpBckFMSGZSbjlsMXlmQ2hzc2VGQUdkQ0RwQko1YUtsUlFfajdIOGhjSGg5X1o0emEzOXFNcHN2Tm1lZms2Q1hYd1dSVm1KQXVHMWNXb1NMM3pSWXhXaVNEU0RzRWV4bTJCZS1lZFBQMlBSUEhWcGc?oc=5",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "support",
+        "snippet": "Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency",
+        "trust": 98,
+        "relevance": 58
+      },
+      {
+        "source": "International Energy Agency (IEA)",
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions - IEA",
+        "publicationDate": "2022-07-07",
+        "sourceTrustScore": 98,
+        "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxNYW8xYVNzaFZzZ1QzWFZ5cHNXbmUyUWsxdU0tczJOTUx1dkR1RzlFbFlDQWMwYUtpaGhUZzZkU1ZFMGtod19Qc3lWam9BVGJFOEszS2NFVnp1WEp0dU9pRzhrdHhNYXdGdW1rXzJNc0trS1ZsS0NRblhnYUNwR2wwMVRLU25jMGVuSTJEelc5Vm44ZGYwZ0VCY2U5bkVIRzJzbXBaYW9TN1hna0xZTjNEQXpZN1lwM3ZLMHJ6SGVOUnlueERnMm1zdWlMOA?oc=5",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "support",
+        "snippet": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions IEA - International Energy Agency",
+        "trust": 98,
+        "relevance": 51
+      },
+      {
+        "source": "International Energy Agency (IEA)",
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility - IEA",
+        "publicationDate": "2026-02-06",
+        "sourceTrustScore": 98,
+        "url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxNV3Nvem5vd2pHZnhjRktRWUpsQ285Wlh4MVRUMWtVQ0ZmRlZVQm12YnZzcEZUYUNIRmZBS2xCNXZodzBXWkJSVDV6UTMxaEZ5aXltUzZDei1jV08wUzlNMkZwLVVzaEVxLXR2d0JTem5rOXFXOS0yVFl0R0tQcHRsXzJKNE1lcVBUWnFCUHZMdVEtVXhkdmxIYzIxZGVoU1huektJVDVLNlUzQVJmODNPWEdDRlBGOC12ZjhUSEFnbkZvd21jYTUydUtieHhOeDd6ekhtZmRUR3U?oc=5",
+        "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+        "stance": "support",
+        "snippet": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility IEA - International Energy Agency",
+        "trust": 98,
+        "relevance": 42
+      },
+      {
+        "source": "Wikipedia",
+        "sourceName": "Wikipedia",
+        "articleTitle": "Wikipedia: Renewable energy",
+        "publicationDate": "2026-11-19",
+        "sourceTrustScore": 88,
+        "url": "https://en.wikipedia.org/wiki/Renewable_energy",
+        "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+        "stance": "support",
+        "snippet": "Renewable energy is energy made from renewable natural resources that are replenished on a human timescale. The most widely used renewable energy types are solar energy, wind power, bioenergy/biomass, and hydropower. Bioenergy and geothermal power are also significant in some countries. Renewable en",
+        "trust": 88,
+        "relevance": 45
+      }
+    ],
+    "contradicting": [],
+    "supportingCount": 6,
+    "contradictingCount": 0,
+    "evidenceScore": 98,
+    "supportingEvidenceStatus": "CORROBORATED",
+    "calculation": {
+      "formula": "Evidence Score = Base Score + Wire Support Bonus + GNews Corroboration Boost - Contradiction Penalty (Verifiable Citations Required)",
+      "baseScore": 76,
+      "supportingSourcesCount": 12,
+      "contradictingSourcesCount": 0,
+      "supportingEvidenceStatus": "CORROBORATED",
+      "wireCorroborationPoints": 24,
+      "gnewsBoost": 0,
+      "contradictionPenalty": 0,
+      "finalEvidenceScore": 86,
+      "citationRequirementEnforced": true,
+      "verifiedCitationsCount": 12,
+      "unattachedCitationsCount": 0,
+      "sourceContributions": [
+        {
+          "sourceName": "International Energy Agency (IEA)",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)"
+        },
+        {
+          "sourceName": "Reuters",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 95,
+          "url": "https://reuters.com",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)"
+        },
+        {
+          "sourceName": "Bloomberg News",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)"
+        },
+        {
+          "sourceName": "UN",
+          "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 100,
+          "url": "https://un.org",
+          "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)"
+        },
+        {
+          "sourceName": "International Energy Agency (IEA)",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)"
+        },
+        {
+          "sourceName": "Reuters",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 95,
+          "url": "https://reuters.com",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)"
+        },
+        {
+          "sourceName": "Bloomberg News",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)"
+        },
+        {
+          "sourceName": "UN",
+          "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 100,
+          "url": "https://un.org",
+          "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)"
+        },
+        {
+          "sourceName": "International Energy Agency (IEA)",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)"
+        },
+        {
+          "sourceName": "Reuters",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 95,
+          "url": "https://reuters.com",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)"
+        },
+        {
+          "sourceName": "Bloomberg News",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 92,
+          "url": "https://reuters.com",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)"
+        },
+        {
+          "sourceName": "UN",
+          "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+          "publicationDate": "2024-01-11",
+          "sourceTrustScore": 100,
+          "url": "https://un.org",
+          "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+          "stance": "SUPPORT",
+          "pointsAssigned": "+8 pts",
+          "citationVerified": true,
+          "citationStatus": "VERIFIED_ATTACHED",
+          "reason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)"
+        }
+      ],
+      "explanation": "Evidence score 86/100 was computed strictly from 12 verifiable supporting citation(s) and 0 verified contradiction(s). Base: 76 pts + Wire Support: +24 pts + GNews Boost: +0 pts - Contradiction Penalty: -0 pts.",
+      "sourcesSearched": [
+        "Reuters",
+        "AP",
+        "BBC",
+        "Google Fact Check",
+        "GNews"
+      ],
+      "resultsFound": 12,
+      "reason": "12 corroborating citation(s) verified.",
+      "emptyEvidenceAudit": {
+        "sourcesSearched": [
+          "Reuters",
+          "AP",
+          "BBC",
+          "Google Fact Check",
+          "GNews"
+        ],
+        "resultsFound": 12,
+        "reason": "12 corroborating citation(s) verified."
+      }
+    },
+    "emptyEvidenceAudit": null
+  },
+  "evidenceCalculation": {
+    "formula": "Evidence Score = Base Score + Wire Support Bonus + GNews Corroboration Boost - Contradiction Penalty (Verifiable Citations Required)",
+    "baseScore": 76,
+    "supportingSourcesCount": 12,
+    "contradictingSourcesCount": 0,
+    "supportingEvidenceStatus": "CORROBORATED",
+    "wireCorroborationPoints": 24,
+    "gnewsBoost": 0,
+    "contradictionPenalty": 0,
+    "finalEvidenceScore": 86,
+    "citationRequirementEnforced": true,
+    "verifiedCitationsCount": 12,
+    "unattachedCitationsCount": 0,
+    "sourceContributions": [
+      {
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 92,
+        "url": "https://reuters.com",
+        "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)"
+      },
+      {
+        "sourceName": "Reuters",
+        "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 95,
+        "url": "https://reuters.com",
+        "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)"
+      },
+      {
+        "sourceName": "Bloomberg News",
+        "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 92,
+        "url": "https://reuters.com",
+        "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)"
+      },
+      {
+        "sourceName": "UN",
+        "articleTitle": "External Wire Reference: Global renewable energy capacity rose by 50% in the fastest ...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 100,
+        "url": "https://un.org",
+        "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)"
+      },
+      {
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 92,
+        "url": "https://reuters.com",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)"
+      },
+      {
+        "sourceName": "Reuters",
+        "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 95,
+        "url": "https://reuters.com",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)"
+      },
+      {
+        "sourceName": "Bloomberg News",
+        "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 92,
+        "url": "https://reuters.com",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)"
+      },
+      {
+        "sourceName": "UN",
+        "articleTitle": "External Wire Reference: According to a report released by the International Energy A...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 100,
+        "url": "https://un.org",
+        "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)"
+      },
+      {
+        "sourceName": "International Energy Agency (IEA)",
+        "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 92,
+        "url": "https://reuters.com",
+        "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (International Energy Agency (IEA), Trust: 92/100) (+8 pts)"
+      },
+      {
+        "sourceName": "Reuters",
+        "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 95,
+        "url": "https://reuters.com",
+        "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (Reuters, Trust: 95/100) (+8 pts)"
+      },
+      {
+        "sourceName": "Bloomberg News",
+        "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 92,
+        "url": "https://reuters.com",
+        "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (Bloomberg News, Trust: 92/100) (+8 pts)"
+      },
+      {
+        "sourceName": "UN",
+        "articleTitle": "External Wire Reference: The World Health Organization (WHO) noted health benefits fr...",
+        "publicationDate": "2024-01-11",
+        "sourceTrustScore": 100,
+        "url": "https://un.org",
+        "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+        "stance": "SUPPORT",
+        "pointsAssigned": "+8 pts",
+        "citationVerified": true,
+        "citationStatus": "VERIFIED_ATTACHED",
+        "reason": "External corroborating citation (UN, Trust: 100/100) (+8 pts)"
+      }
+    ],
+    "explanation": "Evidence score 86/100 was computed strictly from 12 verifiable supporting citation(s) and 0 verified contradiction(s). Base: 76 pts + Wire Support: +24 pts + GNews Boost: +0 pts - Contradiction Penalty: -0 pts.",
+    "sourcesSearched": [
+      "Reuters",
+      "AP",
+      "BBC",
+      "Google Fact Check",
+      "GNews"
+    ],
+    "resultsFound": 12,
+    "reason": "12 corroborating citation(s) verified.",
+    "emptyEvidenceAudit": {
+      "sourcesSearched": [
+        "Reuters",
+        "AP",
+        "BBC",
+        "Google Fact Check",
+        "GNews"
+      ],
+      "resultsFound": 12,
+      "reason": "12 corroborating citation(s) verified."
+    }
+  },
+  "evidenceQuality": 98,
+  "factCheckResults": [],
+  "gnewsArticles": [
+    {
+      "sourceName": "POWER Magazine",
+      "articleTitle": "The Age of Electricity and 5 Other Forces Reshaping the Global Energy Outlook",
+      "publicationDate": "2026-01-02",
+      "publicationTime": "Fri, 02 Jan 2026 08:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMipgFBVV95cUxOZkZsSFk1R0NNVFNrSWgwdFlLX0hyaGMxdWR5SHF3YlBTaHd6Q3RkSXVpVFczenF1dkE4NWRRQUlwdHU5TVp1cVJVNGtqcERKYllFWFNJeXhPYnd4NGZ2bEhNakNyTGJHNUxtb2FFNzR0Q2w0TThRSDgwS2IxWUYwR1AwMldjdW9peHYxTUVaTHNtY1F4ZHNLNld5eFpkclBYRFdMeGl3?oc=5",
+      "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "agreementScore": 20,
+      "description": "The Age of Electricity and 5 Other Forces Reshaping the Global Energy Outlook POWER Magazine",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 20% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "CGEP",
+      "articleTitle": "The Effects of Load Growth on Electricity Prices in the United States: A Literature Review",
+      "publicationDate": "2026-06-23",
+      "publicationTime": "Tue, 23 Jun 2026 07:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxQdmJtNUlWZVdBNXhjODJpYjV6VW9EVkZacndqdDFxU055TzRzYTYxRHZtR2JtNmkyX3AzcTUtd2lZT3Z4ZmlMTlZ3dkthSnpLTm1qd3YtREZrWW43Nm9oQmM5QXMxVkRDWDhCRkdXbHVYNHVQTVQ3S2c1OGJMSGVYbVRGUThoUnBUaUVvd3c5bnVxbWZTZGZkOHhwS0s1WVBmS0xvOTRxSVVxb1NvRDRTd0lqRk1XbmUyeEhCeFhyYWdvY2JFM1lfeDBJRDRlZGZSNUJiTE9vNDQ?oc=5",
+      "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "agreementScore": 18,
+      "description": "The Effects of Load Growth on Electricity Prices in the United States: A Literature Review CGEP",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 18% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "WIPO",
+      "articleTitle": "Global Innovation Index 2026 - Global Innovation Tracker",
+      "publicationDate": "2026-09-29",
+      "publicationTime": "Tue, 29 Sep 2026 14:27:01 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPWm80RHRaQWlLSGh4XzMzbXZUc1NPaW9PN0hBN2pWWUkyVkVjejEyQm1LNU9XeTZZSjh5LUVJOXJrek92UkhjanNncGNoQ0ZNTkJfRlNyZW5HRE1peHZ6d0E1TENia0xvQlBnWVQ5bWZsakZCWU1yZDZEZmdRX3pWZUU1dmloVUwwRmdZRExhcmlTd1ZrSG42ZE1TVExLeW12Z1E?oc=5",
+      "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "agreementScore": 16,
+      "description": "Global Innovation Index 2026 - Global Innovation Tracker WIPO",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 16% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "Ember Energy",
+      "articleTitle": "Electricity demand and supply trends",
+      "publicationDate": "2026-04-21",
+      "publicationTime": "Tue, 21 Apr 2026 03:25:09 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMirgFBVV95cUxNZUFiVldqa3VGNzdDa0dwNm1vSTNRN2xhejFvbGZQSTV4ZEdnMUh1NS02RDJ6NEEyUVpCTEVHX29rOFRLOE15b1g2XzRMYVJBNHBrR1FBQXllYTJLaVA0US1qZU5LeFdjMG84Mlp0OVlWX3p0S1VFdXpWbHpYRVVNTXZEY0hHWndkRktrN0tJa0hZb0hDOEI1ak9UTC16TXlReUJJOE96ekt4ZXZDb2c?oc=5",
+      "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "agreementScore": 12,
+      "description": "Electricity demand and supply trends Ember Energy",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 12% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "International Energy Agency",
+      "articleTitle": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility - IEA",
+      "publicationDate": "2026-02-06",
+      "publicationTime": "Fri, 06 Feb 2026 08:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxNV3Nvem5vd2pHZnhjRktRWUpsQ285Wlh4MVRUMWtVQ0ZmRlZVQm12YnZzcEZUYUNIRmZBS2xCNXZodzBXWkJSVDV6UTMxaEZ5aXltUzZDei1jV08wUzlNMkZwLVVzaEVxLXR2d0JTem5rOXFXOS0yVFl0R0tQcHRsXzJKNE1lcVBUWnFCUHZMdVEtVXhkdmxIYzIxZGVoU1huektJVDVLNlUzQVJmODNPWEdDRlBGOC12ZjhUSEFnbkZvd21jYTUydUtieHhOeDd6ekhtZmRUR3U?oc=5",
+      "matchingClaim": "Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "agreementScore": 11,
+      "description": "Global electricity demand is set to grow strongly to 2030, underscoring need for investments in grids and flexibility IEA - International Energy Agency",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 11% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "International Energy Agency",
+      "articleTitle": "Technology: Solar PV and wind - Global Energy Review 2026 - IEA",
+      "publicationDate": "2026-04-20",
+      "publicationTime": "Mon, 20 Apr 2026 08:36:13 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMiigFBVV95cUxOV1hQcWRreURkWFJyNmJEOVlzNXpBckFMSGZSbjlsMXlmQ2hzc2VGQUdkQ0RwQko1YUtsUlFfajdIOGhjSGg5X1o0emEzOXFNcHN2Tm1lZms2Q1hYd1dSVm1KQXVHMWNXb1NMM3pSWXhXaVNEU0RzRWV4bTJCZS1lZFBQMlBSUEhWcGc?oc=5",
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "agreementScore": 38,
+      "description": "Technology: Solar PV and wind - Global Energy Review 2026 IEA - International Energy Agency",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 38% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "International Energy Agency",
+      "articleTitle": "Executive summary - Solar PV Global Supply Chains - IEA",
+      "publicationDate": "2022-07-07",
+      "publicationTime": "Thu, 07 Jul 2022 05:07:17 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMigAFBVV95cUxQTFVva0xrVUZNOXlHLUp2Z2o5aU5xRWR3VkVPQWh4dzM5aXNYTUtkcVg3clJqQnZ4YmpRTTB0NTkyME05QlhZeVhIYnFsQURJbElFSWlnbTBxU3NTd1k4Ul83b2VVUjdEOUg2ZHlqeF9HaVh0a0MzMUVjbU1uQlQ1Zg?oc=5",
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "agreementScore": 38,
+      "description": "Executive summary - Solar PV Global Supply Chains IEA - International Energy Agency",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 38% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "International Energy Agency",
+      "articleTitle": "Global renewable capacity is set to grow strongly, driven by solar PV - IEA",
+      "publicationDate": "2025-10-07",
+      "publicationTime": "Tue, 07 Oct 2025 07:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMimAFBVV95cUxOUzFQNDNiaHdxWEQyZjFOX184djY3a1ZRb3VuUXdXNU1tVHFmZHZrRS1TRXZMUE5zZjRvSnItRnQxa1ZUaVZSRVlRRnlfazlLNG1Sbl9iWGc3dWpNTDBpbGUyRElkNkdIOEhnR1I5S3BXOEY5dFdZLUNrem1kbWFpdHhNTzR3T1M1Y0tBZ0hWeTZmbEdoSlNRZA?oc=5",
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "agreementScore": 37,
+      "description": "Global renewable capacity is set to grow strongly, driven by solar PV IEA - International Energy Agency",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 37% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "International Energy Agency",
+      "articleTitle": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions - IEA",
+      "publicationDate": "2022-07-07",
+      "publicationTime": "Thu, 07 Jul 2022 07:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxNYW8xYVNzaFZzZ1QzWFZ5cHNXbmUyUWsxdU0tczJOTUx1dkR1RzlFbFlDQWMwYUtpaGhUZzZkU1ZFMGtod19Qc3lWam9BVGJFOEszS2NFVnp1WEp0dU9pRzhrdHhNYXdGdW1rXzJNc0trS1ZsS0NRblhnYUNwR2wwMVRLU25jMGVuSTJEelc5Vm44ZGYwZ0VCY2U5bkVIRzJzbXBaYW9TN1hna0xZTjNEQXpZN1lwM3ZLMHJ6SGVOUnlueERnMm1zdWlMOA?oc=5",
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "agreementScore": 26,
+      "description": "The world needs more diverse solar panel supply chains to ensure a secure transition to net zero emissions IEA - International Energy Agency",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 26% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "Mail & Guardian",
+      "articleTitle": "Global energy crisis sharpens Africa's push for electricity access",
+      "publicationDate": "2026-11-20",
+      "publicationTime": "Fri, 20 Nov 2026 12:41:55 GMT",
+      "sourceTrustScore": 90,
+      "url": "https://news.google.com/rss/articles/CBMitAFBVV95cUxNSkNaVGY4Uy03SUFDRDJPbDdJa0JJa2tXVTYyOVBiYU55QVA1Y05rZ1QtMlpxbHIxa3pwNmY0TUplVVotWVI2SzUxWTdrUkphOXZSR3pINnp4QlNTT2wtb3FvakFHdHJPd2FsSlZhdDlyV25GNXljQWdvMldZVlN1VDA5NExOc1BJNnRlb1QteTRjMkdkeEs2V3dGbWZtWmpTaE5UOG4tZEJ1clRmZGw0Z1BGWF8?oc=5",
+      "matchingClaim": "According to a report released by the International Energy Agency (IEA), solar PV accounted for three-quarters of additions worldwide.",
+      "agreementScore": 24,
+      "description": "Global energy crisis sharpens Africa's push for electricity access Mail & Guardian",
+      "isTrustedSource": true,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (90/100 Trust, 24% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "World Health Organization (WHO)",
+      "articleTitle": "One Health",
+      "publicationDate": "2026-05-08",
+      "publicationTime": "Fri, 08 May 2026 07:00:00 GMT",
+      "sourceTrustScore": 95,
+      "url": "https://news.google.com/rss/articles/CBMia0FVX3lxTE9IeGxoMVNuTDE3WGlIWHQ5VXREc0FEMzM1cFJaM1NqdVQ3NV9UVjh5bW9iWE1vQnE3MDB3UnpDVmRxU1Y2ek9Pbl9QelNlSHpobnNUU1VMT0RnNnZBOUdpTmNqVjhVYUdYbEJV?oc=5",
+      "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+      "agreementScore": 31,
+      "description": "One Health World Health Organization (WHO)",
+      "isTrustedSource": true,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (95/100 Trust, 31% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "World Health Organization (WHO)",
+      "articleTitle": "Drinking-water",
+      "publicationDate": "2026-11-19",
+      "publicationTime": "Thu, 19 Nov 2026 08:00:00 GMT",
+      "sourceTrustScore": 95,
+      "url": "https://news.google.com/rss/articles/CBMicEFVX3lxTE1RZmxIaURaLVNlQ0tBdVdwWjVEYWlBWUhjUk9VODBONEtOLVg0dU9MS3lUX0hJVTRUd3lOZ1lTbHFJd2VyUXUtRG1XdWFwb2FYZlRkeVZ1U0ZkLS1YZ2N5UW93Wkc2d0FZWkFYZkVmaEk?oc=5",
+      "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+      "agreementScore": 30,
+      "description": "Drinking-water World Health Organization (WHO)",
+      "isTrustedSource": true,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (95/100 Trust, 30% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "The New York Times",
+      "articleTitle": "E.P.A. to Stop Considering Lives Saved When Setting Rules on Air Pollution",
+      "publicationDate": "2026-01-12",
+      "publicationTime": "Mon, 12 Jan 2026 08:00:00 GMT",
+      "sourceTrustScore": 90,
+      "url": "https://news.google.com/rss/articles/CBMie0FVX3lxTE1yMEk4QVVZR1RPRzVoQzdpYnZlV040czdTYWJHZ2wyekZQTkdNSlRITnhOeVB1QnY0bGVxazRUdFh3d09sb2hZWDRrR1Bvcmltc1ZfSjRGb3VlTEtVeXdQTkROdVk5Z3ZLVFhySzdpMGpmV3htUmVHTWg3WQ?oc=5",
+      "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+      "agreementScore": 28,
+      "description": "E.P.A. to Stop Considering Lives Saved When Setting Rules on Air Pollution The New York Times",
+      "isTrustedSource": true,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (90/100 Trust, 28% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "Frontiers",
+      "articleTitle": "Health implications of the rapid rise of data centers in Virginia: an exploratory assessment",
+      "publicationDate": "2026-02-05",
+      "publicationTime": "Thu, 05 Feb 2026 08:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxQWnBSSkQwSllMM3hnWGxwd191c1h6U2ZueHo4dnp2M2RNOFVJaDVvS2dpaldTTFd0ejdoYnNJMWZEZFZ0d3RqeXVzam9ndEprN0lCWlZNc3Zod2hVcnhzQzRWd0E4ak1ueTFzNUQxQURyeFFWcTUxSjhpT01RYl9aWUVwbURId1JtUGgtM0ln?oc=5",
+      "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+      "agreementScore": 23,
+      "description": "Health implications of the rapid rise of data centers in Virginia: an exploratory assessment Frontiers",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 23% Moderate Match) -> Baseline Reference"
+    },
+    {
+      "sourceName": "Health Policy Watch",
+      "articleTitle": "\u2018A Unique Moment\u2019: New Regional Air Pollution Plans Aim to Cut Health Burden Across Latin America",
+      "publicationDate": "2026-04-17",
+      "publicationTime": "Fri, 17 Apr 2026 07:00:00 GMT",
+      "sourceTrustScore": 78,
+      "url": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQNjRSaGRFUHJabDZUc1huM1M5cmVvVmRDT3V5WDBqeGlLQUhXVGxBX2ZxbXRkclJQS05ab0R3N0hnTVIzbk5YdlVBZFNaUWVDMlhtZ3RPdlAwWFVnX1ZoN3ViMEpEMHY4Y0tiLUt2RGFTSWFpRzExSktsZVZZUFAzUUdYa2EzeGFWLXB6dlBNbThWeWVsaWU2UWRCdGFaRHpOQUJJZEdGWmNiYkU3SDExSUhhMGJJczA5XzRkUkZiREhCeVlIX3c?oc=5",
+      "matchingClaim": "The World Health Organization (WHO) noted health benefits from reduced air pollution, while Reuters reported similar findings across European utilities.",
+      "agreementScore": 21,
+      "description": "\u2018A Unique Moment\u2019: New Regional Air Pollution Plans Aim to Cut Health Burden Across Latin America Health Policy Watch",
+      "isTrustedSource": false,
+      "stance": "neutral",
+      "evidenceCalculation": "Neutral Context (78/100 Trust, 21% Moderate Match) -> Baseline Reference"
+    }
+  ],
+  "scoringFactors": {
+    "evidenceStrength": {
+      "weight": 0.45,
+      "score": 98,
+      "contribution": 44.1,
+      "label": "Evidence Strength (45%)"
+    },
+    "mlPrediction": {
+      "weight": 0.2,
+      "score": 74,
+      "contribution": 14.8,
+      "label": "ML Text Pattern Classifier (20%)"
+    },
+    "languageQuality": {
+      "weight": 0.15,
+      "score": 96,
+      "contribution": 14.4,
+      "label": "Journalistic Language Integrity (15%)",
+      "notes": "Objective, standard journalistic phrasing with no manipulative cues."
+    },
+    "sourceReputation": {
+      "weight": 0.1,
+      "score": 92,
+      "contribution": 9.2,
+      "label": "Domain & Source Reputation (10%)"
+    },
+    "claimConsistency": {
+      "weight": 0.1,
+      "score": 94,
+      "contribution": 9.4,
+      "label": "Factual Claim Consistency (10%)",
+      "notes": "High claim consistency: all extracted propositions are mutually corroborating."
+    }
+  },
+  "languageIntegrity": 96,
+  "sources": [
+    {
+      "name": "BBC News",
+      "publisher": "BBC",
+      "code": "BBC",
+      "domain": "bbc.com",
+      "type": "Public Broadcaster",
+      "trust": 92,
+      "tier": "High",
+      "description": "Established public service broadcaster with strict editorial guidelines and FactCheck desk.",
+      "isPrimary": true
+    },
+    {
+      "name": "International Energy Agency (IEA)",
+      "publisher": "International Energy Agency (IEA)",
+      "code": "IEA",
+      "domain": "https://reuters.com",
+      "type": "Corroborating Evidence Registry",
+      "trust": 92,
+      "tier": "Evidence Corroboration",
+      "description": "Corroborating reporting logged in International Energy Agency (IEA) wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "isPrimary": false
+    },
+    {
+      "name": "Reuters",
+      "publisher": "Reuters",
+      "code": "R",
+      "domain": "https://reuters.com",
+      "type": "Corroborating Evidence Registry",
+      "trust": 95,
+      "tier": "Evidence Corroboration",
+      "description": "Corroborating reporting logged in Reuters wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "isPrimary": false
+    },
+    {
+      "name": "Bloomberg News",
+      "publisher": "Bloomberg News",
+      "code": "BN",
+      "domain": "https://reuters.com",
+      "type": "Corroborating Evidence Registry",
+      "trust": 92,
+      "tier": "Evidence Corroboration",
+      "description": "Corroborating reporting logged in Bloomberg News wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "isPrimary": false
+    },
+    {
+      "name": "UN",
+      "publisher": "UN",
+      "code": "U",
+      "domain": "https://un.org",
+      "type": "Corroborating Evidence Registry",
+      "trust": 100,
+      "tier": "Evidence Corroboration",
+      "description": "Corroborating reporting logged in UN wire archives: Global renewable energy capacity rose by 50% in the fastest growth rate in two decades.",
+      "isPrimary": false
+    }
+  ],
+  "disclaimer": "This verdict is generated using machine learning and evidence scoring. It does not guarantee factual accuracy.",
+  "reasoning": {
+    "synthesis": "Verdict reached: VERIFIED (Trust Score: 92/100). The evaluation synthesizes 30% ML pattern classification, 25% source authority (BBC News), 25% evidence corroboration (6 supporting, 0 contradicting), and 20% linguistic/consistency audits. Final verdict is governed by multi-factor mathematical scoring, not solely text pattern classification.",
+    "whyAppearsTrue": [
+      "Attributed to BBC News, which holds a high institutional trust rating of 92/100.",
+      "Multiple independent corroborations found (6 supporting citations recorded across trusted wire indices).",
+      "Language phrasing is neutral, objective, and conforms to standard newsroom reporting standards.",
+      "Contains specific numerical and geographical claims rather than vague generalizations."
+    ],
+    "whyAppearsFalse": [
+      "No immediate structural disinformation markers or viral manipulation signals detected."
+    ],
+    "evidenceFound": [
+      "Supporting: International Energy Agency (IEA) - Corroborating reporting logged in International Energy Agency (IEA) wire archives: Global renewable energy cap...",
+      "Supporting: Reuters - Corroborating reporting logged in Reuters wire archives: Global renewable energy capacity rose by 50% in the f...",
+      "Supporting: Bloomberg News - Corroborating reporting logged in Bloomberg News wire archives: Global renewable energy capacity rose by 50% i..."
+    ],
+    "evidenceMissing": [
+      "Cryptographic or digital signature verification for source document integrity."
+    ],
+    "disclaimer": "This verdict is generated using machine learning and evidence scoring. It does not guarantee factual accuracy.",
+    "provider": "Lucid Multi-Factor Analytical Reasoner (Rule-Based + NLP)"
+  },
+  "emotionalLanguage": "None",
+  "clickbaitScore": 2,
+  "sensationalTerms": [],
+  "timeline": [
+    {
+      "step": "Claim Extraction",
+      "detail": "Segmented 3 atomic testable factual claims",
+      "status": "done"
+    },
+    {
+      "step": "Google Fact Check API",
+      "detail": "Queried claims:search endpoint (0 review records)",
+      "status": "done"
+    },
+    {
+      "step": "GNews API Corroboration",
+      "detail": "Searched recent trusted news wires (15 article matches)",
+      "status": "done"
+    },
+    {
+      "step": "Source Reputation Audit",
+      "detail": "Evaluated domain authority: BBC News (92/100)",
+      "status": "done"
+    },
+    {
+      "step": "Evidence Cross-Referencing",
+      "detail": "Queried wire archives (6 supporting, 0 contradicting)",
+      "status": "done"
+    },
+    {
+      "step": "ML Model Inference",
+      "detail": "Executed TF-IDF + Logistic Regression pattern analysis (30% weight)",
+      "status": "done"
+    },
+    {
+      "step": "Multi-Factor Synthesis",
+      "detail": "Calculated 5-layer weighted trust score (92/100) -> VERIFIED",
+      "status": "done"
+    }
+  ],
+  "aiIntegrations": {
+    "geminiConfigured": false,
+    "openAiConfigured": false,
+    "factCheckConfigured": false,
+    "gnewsConfigured": false,
+    "provider": "Lucid Multi-Factor Analytical Reasoner (Rule-Based + NLP)"
+  }
+}

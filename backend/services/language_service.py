@@ -118,8 +118,18 @@ class LanguageService:
             }
 
         clean = re.sub(r'https?://\S+', '', text).strip()
-        if len(clean) < 4:
-            clean = text.strip()
+        # Requirement 5: Do not run language detection on texts under about 20 characters
+        if len(clean) < 20:
+            return {
+                "code": "en",
+                "languageCode": "en",
+                "language": "English",
+                "detectedLanguage": "English",
+                "confidence": 1.0,
+                "isEnglish": True,
+                "isForeignLanguage": False,
+                "direction": "ltr"
+            }
 
         code = "en"
         confidence = 0.85

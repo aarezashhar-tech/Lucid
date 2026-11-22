@@ -114,7 +114,7 @@ class EvidenceRanker:
         fc_rating = str(evidence_item.get("factCheckRating", "")).lower().strip()
 
         # 0. Pre-calculated stance from specialized verification modules (e.g. Wikipedia biographical checks)
-        if evidence_item.get("stance") in ("support", "contradict", "neutral"):
+        if evidence_item.get("retrievalChannel") in ("Wikipedia REST API", "Wikidata API") and evidence_item.get("stance") in ("support", "contradict"):
             return (evidence_item["stance"], 98)
 
         # 1. Fact Check API explicit rating check
@@ -199,10 +199,17 @@ class EvidenceRanker:
             if "is not round" in claim_lower and "oblate spheroid" not in claim_lower and ("round" in combined or "sphere" in combined):
                 return ("contradict", 90)
 
-        # 4. Strict NLP Stance: SUPPORTS vs NEUTRAL
-        # A claim must NEVER be verified or supported merely because related articles exist!
-        # Semantic similarity indicates relevance, NOT affirmative endorsement.
-        if sim_score >= 0.55:
+        # 4. Strict NLP Stance: SUPPORTS vs RELATED vs NEUTRAL
+        # Requirement 2: A headline counts as "Supported" only if it matches the specific claim (same entities, numbers, or event).
+        # Topic similarity alone must be shown as "Related", not "Supported".
+        if sim_score >= 0.40:
+            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
+            if not is_specific_match:
+                if ("conflicting percentage" in match_reason.lower() or "conflicting year" in match_reason.lower()) and sim_score >= 0.50:
+                    return ("contradict", 90)
+                conf = int(min(90, max(50, sim_score * 100)))
+                return ("related", conf)
+
             # Check for affirmative reporting verbs confirming the core proposition
             affirmative_report_markers = [
                 "confirmed", "study finds", "findings show", "data shows",
@@ -217,10 +224,10 @@ class EvidenceRanker:
                 "official", "milestone", "capacity", "generation", "share",
                 "power", "energy", "annual", "quarter", "decade", "year"
             ]
-            has_affirmative = (sim_score >= 0.60) or any(m in combined for m in affirmative_report_markers)
+            has_affirmative = (sim_score >= 0.50) or any(m in combined for m in affirmative_report_markers)
 
             # If Wikipedia summary matches the entity and proposition
-            if "wikipedia" in combined and sim_score >= 0.65:
+            if "wikipedia" in combined and sim_score >= 0.55:
                 has_affirmative = True
 
             # If the claim asserts causality ('causes', 'caused', 'linked to') or viral myth,
@@ -233,25 +240,110 @@ class EvidenceRanker:
                 conf = int(min(98, max(65, sim_score * 100 + 10)))
                 return ("support", conf)
             else:
-                return ("neutral", 55)
+                return ("related", 55)
 
         elif sim_score >= 0.25:
             return ("neutral", 50)
         else:
             return ("neutral", 30)
 
+    def _check_specific_claim_match(self, claim_text: str, combined_text: str) -> Tuple[bool, str]:
+        """
+        Validates whether candidate evidence matches the SPECIFIC claim (entities, numbers, location, event)
+        rather than just broad topic similarity.
+        """
+        claim_lower = claim_text.lower()
+        comb_lower = combined_text.lower()
+
+        # 1. Geographic / Region alignment
+        REGIONS = [
+            "latin america", "south america", "north america", "europe", "european",
+            "asia", "asian", "middle east", "africa", "african", "india", "indian",
+            "china", "chinese", "uk", "britain", "british", "us", "usa", "america", "american",
+            "russia", "russian", "japan", "japanese", "germany", "german", "france", "french"
+        ]
+        claim_regions = {r for r in REGIONS if re.search(rf'\b{re.escape(r)}\b', claim_lower)}
+        comb_regions = {r for r in REGIONS if re.search(rf'\b{re.escape(r)}\b', comb_lower)}
+
+        if claim_regions and comb_regions:
+            def base_reg(r):
+                for pair in [("european", "europe"), ("latin america", "south america"), ("asian", "asia"), ("african", "africa"), ("american", "us"), ("british", "uk")]:
+                    if r in pair: return pair[0]
+                return r
+            base_claim = {base_reg(r) for r in claim_regions}
+            base_comb = {base_reg(r) for r in comb_regions}
+            if not (base_claim & base_comb):
+                return False, "Conflicting geographic regions (claim vs evidence)."
+
+        # 2. Acronyms & Named Agencies (e.g. WHO, Reuters, IEA, NASA, UN, CDC, FDA)
+        claim_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', claim_text))
+        stopwords_caps = {"THE", "AND", "FOR", "NOT", "YES", "NEW", "ALL", "TOP", "HAS", "HAD", "TWO"}
+        claim_acronyms -= stopwords_caps
+        if claim_acronyms:
+            comb_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', combined_text))
+            comb_acronyms -= stopwords_caps
+            acronym_matched = False
+            for acr in claim_acronyms:
+                if acr in comb_acronyms or acr.lower() in comb_lower:
+                    acronym_matched = True
+                    break
+            if not acronym_matched:
+                spelled_out = {
+                    "WHO": "world health organization",
+                    "IEA": "international energy agency",
+                    "UN": "united nations",
+                    "CDC": "centers for disease control",
+                    "FDA": "food and drug administration",
+                    "NASA": "national aeronautics"
+                }
+                for acr in claim_acronyms:
+                    if acr in spelled_out and spelled_out[acr] in comb_lower:
+                        acronym_matched = True
+                        break
+            if not acronym_matched and len(claim_acronyms) >= 1:
+                return False, "Candidate does not corroborate specific agency/entity named in claim."
+
+        # 3. Numeric / Percentage metrics check
+        claim_pcts = set(re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)', claim_text, re.I))
+        comb_pcts = set(re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)', combined_text, re.I))
+        if claim_pcts and comb_pcts and not (claim_pcts & comb_pcts):
+            return False, "Candidate cites conflicting percentage metric."
+
+        claim_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', claim_text))
+        comb_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', combined_text))
+        if claim_years and comb_years and not (claim_years & comb_years):
+            return False, "Candidate cites conflicting year or date metric."
+
+        # 4. Core entity / content noun overlap
+        stop_words = {
+            "this", "that", "these", "those", "have", "been", "were", "with", "from",
+            "about", "after", "before", "reported", "noted", "stated", "according", "similar",
+            "findings", "across", "other", "their", "which", "could", "would", "should"
+        }
+        claim_words = {w for w in re.findall(r'\b[a-zA-Z]{4,}\b', claim_lower) if w not in stop_words}
+        comb_words = {w for w in re.findall(r'\b[a-zA-Z]{4,}\b', comb_lower) if w not in stop_words}
+        overlap = claim_words & comb_words
+
+        if len(claim_words) >= 4 and len(overlap) < 2:
+            return False, "Insufficient entity/event overlap between headline and claim."
+
+        return True, "Matches specific claim."
+
     def rank_evidence_for_claim(self, claim_text: str, candidate_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Ranks all candidate sources for a claim using embeddings, credibility, and recency.
-        Returns categorized supporting, contradicting, and neutral items.
+        Returns categorized supporting, contradicting, related, and neutral items.
         """
         if not candidate_items:
             return {
                 "supporting": [],
                 "contradicting": [],
+                "related": [],
                 "neutral": [],
                 "supportingCount": 0,
-                "contradictingCount": 0
+                "contradictingCount": 0,
+                "relatedCount": 0,
+                "neutralCount": 0
             }
 
         evaluated: List[Dict[str, Any]] = []
@@ -267,8 +359,8 @@ class EvidenceRanker:
             # 2. Stance classification
             stance, stance_conf = self.classify_stance(claim_text, item, sim)
 
-            # 3. Trust score
-            trust = item.get("sourceTrustScore", 80)
+            # 3. Trust score (neutral 50 baseline for unlisted sources)
+            trust = item.get("sourceTrustScore", 50)
 
             # 4. Recency score
             recency = self._calculate_recency_score(item.get("publicationDate", ""))
@@ -294,19 +386,23 @@ class EvidenceRanker:
 
         # Sort each stance bucket by composite score descending
         supporting = [it for it in evaluated if it["stance"] == "support" and it["relevanceScore"] >= 30]
-        contradicting = [it for it in evaluated if it["stance"] == "contradict" and (it["relevanceScore"] >= 20 or "Contradicted by" in it.get("evidenceSnippet", ""))]
+        contradicting = [it for it in evaluated if it["stance"] == "contradict" and (it["relevanceScore"] >= 20 or "Contradicted by" in it.get("evidenceSnippet", "") or "[Derived check]" in it.get("evidenceSnippet", ""))]
+        related = [it for it in evaluated if it["stance"] == "related"]
         neutral = [it for it in evaluated if it["stance"] == "neutral"]
 
         supporting.sort(key=lambda x: (x["compositeRankScore"], x["relevanceScore"]), reverse=True)
         contradicting.sort(key=lambda x: (x["compositeRankScore"], x["relevanceScore"]), reverse=True)
+        related.sort(key=lambda x: x["compositeRankScore"], reverse=True)
         neutral.sort(key=lambda x: x["compositeRankScore"], reverse=True)
 
         return {
             "supporting": supporting,
             "contradicting": contradicting,
+            "related": related,
             "neutral": neutral,
             "supportingCount": len(supporting),
             "contradictingCount": len(contradicting),
+            "relatedCount": len(related),
             "neutralCount": len(neutral)
         }
 
@@ -355,10 +451,11 @@ class EvidenceRanker:
             ranked_data = self.rank_evidence_for_claim(claim_text, candidates)
             supp = ranked_data["supporting"]
             contra = ranked_data["contradicting"]
+            related = ranked_data.get("related", [])
 
             # Source links list
             all_links = []
-            for it in supp + contra:
+            for it in supp + contra + related:
                 u = it.get("url")
                 if u and u not in all_links:
                     all_links.append(u)
@@ -379,6 +476,10 @@ class EvidenceRanker:
                 status = "Supported"
                 conf = max(70, min(92, supp[0]["compositeRankScore"]))
                 summary = f"Supported by reporting from {supp[0]['publisher']}."
+            elif related:
+                status = "Unverified"
+                conf = 0
+                summary = f"Topic-related coverage found ({related[0]['publisher']}), but does not specifically verify the claim proposition."
             else:
                 # Missing evidence must NEVER be treated as false!
                 status = "Unverified"
@@ -390,8 +491,10 @@ class EvidenceRanker:
             claim_obj["confidence"] = conf
             claim_obj["supportingEvidenceCount"] = len(supp)
             claim_obj["contradictingEvidenceCount"] = len(contra)
+            claim_obj["relatedEvidenceCount"] = len(related)
             claim_obj["supportingSources"] = [s["publisher"] for s in supp[:3]]
             claim_obj["contradictingSources"] = [c["publisher"] for c in contra[:3]]
+            claim_obj["relatedSources"] = [r["publisher"] for r in related[:3]]
             claim_obj["analysisNotes"] = summary
 
             matrix_entry = {
@@ -403,6 +506,7 @@ class EvidenceRanker:
                 "confidence": conf,
                 "supportingEvidence": supp[:4],
                 "contradictingEvidence": contra[:4],
+                "relatedEvidence": related[:4],
                 "sourceLinks": all_links,
                 "evidenceSummary": summary
             }

@@ -216,7 +216,21 @@ class VerificationEngine:
         # STEP -1: Multi-Language Detection & Processing
         # -------------------------------------------------------------
         logger.info("Pipeline Step -1: Multi-Language Detection & Translation Bridge")
-        lang_info = self.language_service.process_content(text)
+        # Requirement 5: Do not run language detection on texts under about 20 characters
+        if len(text.strip()) < 20:
+            lang_info = {
+                "code": "en",
+                "languageCode": "en",
+                "language": "English",
+                "detectedLanguage": "English",
+                "confidence": 1.0,
+                "isEnglish": True,
+                "isForeignLanguage": False,
+                "analysisText": text,
+                "wasTranslated": False
+            }
+        else:
+            lang_info = self.language_service.process_content(text)
         analysis_text = lang_info.get("analysisText", text)
         detected_lang = lang_info.get("language", "English")
         detected_code = lang_info.get("code", "en")
@@ -549,13 +563,16 @@ class VerificationEngine:
         evi_factor_score = verdict_results["scoringFactors"]["evidenceStrength"]["score"]
         if evi_factor_score == "Not scored":
             confidence = 85
+        elif supp_count == 0 and contra_count == 0:
+            # Requirement 4: Low confidence when zero evidence is found
+            confidence = 35
         else:
             confidence = int(round(
                 (float(evi_factor_score) * 0.5) +
                 (float(verdict_results["scoringFactors"]["sourceReputation"]["score"]) * 0.3) +
                 (max(prob_real, prob_fake) * 100 * 0.2)
             ))
-            confidence = max(60, min(98, confidence))
+            confidence = max(50, min(98, confidence))
 
         explanation = [
             summary_reason,
@@ -565,10 +582,15 @@ class VerificationEngine:
         ]
         if fact_check_results:
             explanation.append(f"Google Fact Check API matched {len(fact_check_results)} external fact check review(s).")
-        if ling_signals["sensational_score"] > 25:
+        
+        # Requirement 5: Remove the template line "Objective, attributable journalistic prose detected" unless from real language analysis
+        if ling_signals.get("sensational_score", 0) > 25:
             explanation.append(f"Sensationalist language markers detected ({ling_signals['sensational_score']}%).")
-        else:
-            explanation.append("Objective, attributable journalistic prose detected.")
+        elif len(text.split()) >= 40 and ling_signals.get("sensational_score", 0) <= 15 and ling_signals.get("clickbait_score", 0) <= 15:
+            explanation.append("Linguistic analysis: Attributable, objective journalistic phrasing detected.")
+        
+        if supp_count == 0 and contra_count == 0:
+            explanation.append("Confidence Assessment: Low confidence — no independent evidence found to corroborate or contradict the claims.")
 
         empty_audit_data = {
             "sourcesSearched": sources_searched,

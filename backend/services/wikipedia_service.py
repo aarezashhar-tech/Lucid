@@ -282,9 +282,13 @@ class WikipediaService:
                     if is_death_claim and is_living:
                         event_type = "death"
                         reason = (
-                            f"Contradicted by evidence: Authoritative biographical records and news agencies confirm "
-                            f"{title} is alive and actively serving ({description or 'public figure'}), with no credible reports of death."
+                            f"[Derived check] Official biographical records in Wikipedia and Wikidata confirm "
+                            f"{title} is living (no date of death recorded in Wikidata)."
                         )
+                        snippet_text = (
+                            f"[Derived check] Wikidata: no date of death recorded (living person). "
+                            f"Wikipedia extract: \"{extract[:240]}\""
+                        ) if extract else "[Derived check] Wikidata: living person, no date of death recorded."
                         return {
                             "isContradicted": True,
                             "verdict": "FALSE",
@@ -293,11 +297,11 @@ class WikipediaService:
                             "entity": title,
                             "eventType": event_type,
                             "evidenceItem": {
-                                "articleTitle": f"Wikipedia Biography: {title}",
+                                "articleTitle": f"[Derived check] Wikipedia Biography: {title}",
                                 "publisher": "Wikipedia",
                                 "publicationDate": summary.get("timestamp", "")[:10] or "Current",
                                 "url": summary.get("url", ""),
-                                "evidenceSnippet": reason,
+                                "evidenceSnippet": snippet_text,
                                 "sourceTrustScore": 88,
                                 "sourceCategory": "Encyclopedic Reference",
                                 "retrievalChannel": "Wikipedia REST API",
@@ -308,9 +312,12 @@ class WikipediaService:
                     if is_arrest_claim and is_living and is_officeholder:
                         event_type = "arrest"
                         reason = (
-                            f"Contradicted by evidence: Official governmental and news registries confirm "
-                            f"{title} is actively serving in office ({description}), with no verified reports of arrest or detention."
+                            f"[Derived check] Official registries confirm {title} is actively serving in office ({description})."
                         )
+                        snippet_text = (
+                            f"[Derived check] Wikipedia record: actively in office. "
+                            f"Wikipedia extract: \"{extract[:240]}\""
+                        ) if extract else "[Derived check] Wikipedia: actively serving in office."
                         return {
                             "isContradicted": True,
                             "verdict": "FALSE",
@@ -319,11 +326,11 @@ class WikipediaService:
                             "entity": title,
                             "eventType": event_type,
                             "evidenceItem": {
-                                "articleTitle": f"Wikipedia: {title}",
+                                "articleTitle": f"[Derived check] Wikipedia: {title}",
                                 "publisher": "Wikipedia",
                                 "publicationDate": summary.get("timestamp", "")[:10] or "Current",
                                 "url": summary.get("url", ""),
-                                "evidenceSnippet": reason,
+                                "evidenceSnippet": snippet_text,
                                 "sourceTrustScore": 88,
                                 "sourceCategory": "Encyclopedic Reference",
                                 "retrievalChannel": "Wikipedia REST API",
@@ -334,8 +341,12 @@ class WikipediaService:
                     if is_resignation_claim and is_living and is_officeholder:
                         event_type = "resignation"
                         reason = (
-                            f"Contradicted by evidence: Official records confirm {title} remains in active office ({description}), with no verified report of resignation."
+                            f"[Derived check] Official records confirm {title} remains in active office ({description})."
                         )
+                        snippet_text = (
+                            f"[Derived check] Wikipedia record: actively in office. "
+                            f"Wikipedia extract: \"{extract[:240]}\""
+                        ) if extract else "[Derived check] Wikipedia: actively serving in office."
                         return {
                             "isContradicted": True,
                             "verdict": "FALSE",
@@ -344,11 +355,11 @@ class WikipediaService:
                             "entity": title,
                             "eventType": event_type,
                             "evidenceItem": {
-                                "articleTitle": f"Wikipedia: {title}",
+                                "articleTitle": f"[Derived check] Wikipedia: {title}",
                                 "publisher": "Wikipedia",
                                 "publicationDate": summary.get("timestamp", "")[:10] or "Current",
                                 "url": summary.get("url", ""),
-                                "evidenceSnippet": reason,
+                                "evidenceSnippet": snippet_text,
                                 "sourceTrustScore": 88,
                                 "sourceCategory": "Encyclopedic Reference",
                                 "retrievalChannel": "Wikipedia REST API",
@@ -361,21 +372,23 @@ class WikipediaService:
         # -------------------------------------------------------------
         if "moon" in claim_lower and "cheese" in claim_lower:
             summary = self.get_page_summary("Moon")
-            extract = summary.get("extract", "") if summary else "The Moon is a rocky planetary-mass object composed of silicate rock and metallic minerals."
+            extract = summary.get("extract", "") if summary else "The Moon is Earth's only natural satellite. It is a rocky body that formed..."
             url = summary.get("url", "https://en.wikipedia.org/wiki/Moon") if summary else "https://en.wikipedia.org/wiki/Moon"
+            reason = "[Derived check] Contradicted by scientific consensus: Astronomical records and lunar rock composition confirm the Moon is composed of rock and minerals."
+            snippet_text = f"[Derived check] Scientific consensus contradicts cheese claim. Wikipedia extract: \"{extract[:240]}\""
             return {
                 "isContradicted": True,
                 "verdict": "FALSE",
                 "trustScore": 10,
-                "reason": "Contradicted by scientific consensus: Astronomical analysis and lunar rock samples confirm the Moon is composed of silicate rock and metallic minerals, not dairy or cheese.",
+                "reason": reason,
                 "entity": "Moon",
                 "eventType": "scientific_myth",
                 "evidenceItem": {
-                    "articleTitle": "Wikipedia: Moon",
+                    "articleTitle": "[Derived check] Wikipedia: Moon",
                     "publisher": "Wikipedia",
                     "publicationDate": "Current",
                     "url": url,
-                    "evidenceSnippet": "Contradicted by scientific consensus: Astronomical analysis and lunar rock samples confirm the Moon is composed of silicate rock and metallic minerals, not dairy or cheese.",
+                    "evidenceSnippet": snippet_text,
                     "sourceTrustScore": 88,
                     "sourceCategory": "Encyclopedic Reference",
                     "retrievalChannel": "Wikipedia REST API",

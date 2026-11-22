@@ -320,15 +320,16 @@ class MultiFactorScoringEngine:
 
         elif supporting_evidence_count == 0 and contradicting_evidence_count == 0:
             verdict = "UNVERIFIED"
-            final_trust_score = max(45, min(55, final_trust_score))  # Neutral unverified score ~50
+            # Requirement 4: Zero evidence must not give half marks. Cap the final score at 50 and label low confidence.
+            final_trust_score = min(50, final_trust_score)
             risk_level = "MEDIUM"
-            summary_reason = "No reliable supporting or contradicting citations attached. Unverified pending independent evidence."
+            summary_reason = "No reliable supporting or contradicting citations attached. Low confidence — unverified pending independent evidence."
 
         elif evidence_score < evidence_threshold and supporting_evidence_count < 2:
             verdict = "UNVERIFIED"
-            final_trust_score = max(45, min(55, final_trust_score))
+            final_trust_score = min(50, final_trust_score)
             risk_level = "MEDIUM"
-            summary_reason = "Insufficient independent evidence citations. Unverified pending further corroboration."
+            summary_reason = "Insufficient independent evidence citations. Low confidence — unverified pending further corroboration."
 
         elif supporting_evidence_count >= 2 and contradicting_evidence_count == 0:
             verdict = "VERIFIED"
