@@ -14,6 +14,7 @@ load_dotenv()
 
 from utils.image_ocr import extract_text_from_image
 from utils.pdf_parser import extract_text_from_pdf
+from utils.url_extractor import fetch_and_extract_article, validate_url_security
 from services.ai_service import get_verification_engine
 from services.ai_reasoning import TRANSPARENCY_WARNING
 
@@ -97,7 +98,7 @@ def health():
             "layer1": "Source Reputation Engine",
             "layer2": "Claim Extraction Engine",
             "layer3": "Evidence Verification",
-            "layer4": "Multi-Factor Scoring (30% ML, 25% Source, 25% Evidence, 10% Consistency, 10% Language)",
+            "layer4": "Multi-Factor Scoring (25% ML, 10% Source, 40% Evidence, 10% Consistency, 15% Language)",
             "layer5": "Modern 6-Tier Verdict Generation",
             "layer6": "Investigation Dashboard Support (Overview, Claims, Evidence, Sources, Reasoning)",
             "layer7": "Transparency Warning Disclaimers",
@@ -111,9 +112,61 @@ def health():
             "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
             "openAiConfigured": bool(os.getenv("OPENAI_API_KEY")),
             "factCheckConfigured": bool(os.getenv("FACTCHECK_API_KEY")),
-            "gnewsConfigured": bool(os.getenv("GNEWS_API_KEY"))
+            "gnewsConfigured": bool(os.getenv("GNEWS_API_KEY")),
+            "wikipediaConfigured": True
         }
     })
+
+def run_shared_verification_pipeline(
+    text: str,
+    source_hint: str = "",
+    url: str = "",
+    title: str = "",
+    input_type: str = "text",
+    is_image: bool = False,
+    file_type: str = "",
+    image_publisher = None
+):
+    """
+    Shared Unified Pipeline for both pasted text and URL inputs (Task B).
+    Ensures identical claim extraction, evidence retrieval, and scoring.
+    Logs extracted text length and each score component to the server logs.
+    """
+    engine = get_verification_engine()
+    app.logger.info(
+        f"[SharedPipeline] Processing {input_type.upper()} input | Extracted Text Length: {len(text)} chars | Title: '{title[:60]}'"
+    )
+    print(
+        f"[SharedPipeline] Processing {input_type.upper()} input | Extracted Text Length: {len(text)} chars | Title: '{title[:60]}'"
+    )
+
+    result = engine.analyze(
+        text=text,
+        source_hint=source_hint,
+        url_or_domain=url,
+        article_title=title,
+        is_image=is_image,
+        file_type=file_type,
+        image_publisher=image_publisher
+    )
+
+    factors = result.get("scoringFactors", {})
+    ml_contrib = factors.get("mlPrediction", {}).get("contribution", 0)
+    src_contrib = factors.get("sourceReputation", {}).get("contribution", 0)
+    evi_contrib = factors.get("evidenceStrength", {}).get("contribution", 0)
+    con_contrib = factors.get("claimConsistency", {}).get("contribution", 0)
+    lan_contrib = factors.get("languageQuality", {}).get("contribution", 0)
+
+    app.logger.info(
+        f"[SharedPipeline Scoring] {input_type.upper()} -> Text Length: {len(text)} chars | Trust Score: {result.get('trustScore')}/100 | Verdict: {result.get('verdict')} | "
+        f"Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
+    )
+    print(
+        f"[SharedPipeline Scoring] {input_type.upper()} -> Text Length: {len(text)} chars | Trust Score: {result.get('trustScore')}/100 | Verdict: {result.get('verdict')} | "
+        f"Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
+    )
+
+    return result
 
 @app.route('/api/analyze', methods=['POST'])
 @app.route('/api/analyze/', methods=['POST'])
@@ -143,8 +196,32 @@ def analyze():
                 "explanation": ["Empty text input received."]
             }), 400
 
-        engine = get_verification_engine()
-        result = engine.analyze(text=text, source_hint=source_hint, url_or_domain=url_input)
+        # If input text is actually a web URL, fetch and extract article content
+        is_url_input = bool(re.match(r'^https?://', text, re.I)) or ('.' in text and ' ' not in text and not text.endswith('.') and len(text.split('\n')) == 1)
+        if is_url_input:
+            extraction = fetch_and_extract_article(text)
+            if not extraction.get("success"):
+                return jsonify({
+                    "error": extraction.get("error", "Could not read this page. Paste the article text instead.")
+                }), 400
+            result = run_shared_verification_pipeline(
+                text=extraction["text"],
+                source_hint=extraction["domain"],
+                url=extraction["url"],
+                title=extraction["title"],
+                input_type="url"
+            )
+            result["extractedText"] = extraction["text"]
+            result["sourceDomain"] = extraction["domain"]
+            result["articleTitle"] = extraction["title"] or result.get("articleTitle", "")
+            return jsonify(result), 200
+
+        result = run_shared_verification_pipeline(
+            text=text,
+            source_hint=source_hint,
+            url=url_input,
+            input_type="text"
+        )
         return jsonify(result), 200
 
     except Exception as e:
@@ -359,96 +436,48 @@ def perform_ocr():
 @app.route('/api/analyze-url/', methods=['POST'])
 def analyze_url():
     """
-    Scrapes article text from a given news URL, extracts domain and source reputation,
-    and runs multi-factor verification pipeline. Gracefully falls back to direct text
-    analysis if a query or statement is provided instead of a valid web URL.
+    Scrapes article text from a given news URL, extracts title and main text,
+    and runs the unified verification pipeline (Task A & Task B).
+    If the page cannot be fetched or has insufficient content, returns
+    HTTP 400 with: 'Could not read this page. Paste the article text instead.'
+    Strictly enforces 10s timeout, browser User-Agent, and SSRF prevention.
     """
     data = request.get_json(force=True, silent=True) or {}
     raw_input = data.get("url", "").strip()
 
     if not raw_input:
-        return jsonify({"error": "Missing URL or text parameter"}), 400
+        return jsonify({"error": "Missing URL parameter"}), 400
 
     # Auto-detect whether input is actually a URL or raw text/claim
-    is_url = bool(re.match(r'^(https?://)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(/\S*)?$', raw_input)) and ' ' not in raw_input
+    is_url = bool(re.match(r'^https?://', raw_input, re.I)) or ('.' in raw_input and ' ' not in raw_input and len(raw_input.split('\n')) == 1)
+
     if not is_url:
-        engine = get_verification_engine()
-        result = engine.analyze(raw_input)
+        result = run_shared_verification_pipeline(
+            text=raw_input,
+            input_type="text"
+        )
         result["extractedText"] = raw_input
         result["articleTitle"] = result.get("articleTitle") or raw_input[:100]
         return jsonify(result), 200
 
-    url = raw_input
-    if not re.match(r'^https?://', url):
-        url = 'https://' + url
+    extraction = fetch_and_extract_article(raw_input)
+    if not extraction.get("success"):
+        return jsonify({
+            "error": extraction.get("error", "Could not read this page. Paste the article text instead.")
+        }), 400
 
-    try:
-        domain = urlparse(url).netloc
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 LucidVerifier/2.0'
-        }
-        resp = requests.get(url, headers=headers, timeout=12)
-        resp.raise_for_status()
+    result = run_shared_verification_pipeline(
+        text=extraction["text"],
+        source_hint=extraction["domain"],
+        url=extraction["url"],
+        title=extraction["title"],
+        input_type="url"
+    )
+    result["extractedText"] = extraction["text"]
+    result["sourceDomain"] = extraction["domain"]
+    result["articleTitle"] = extraction["title"] or result.get("articleTitle", "")
 
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        
-        # Extract title (og:title, twitter:title, h1, or title tag)
-        title = ""
-        og_title = soup.find('meta', property='og:title') or soup.find('meta', attrs={'name': 'og:title'}) or soup.find('meta', attrs={'name': 'twitter:title'})
-        if og_title and og_title.get('content'):
-            title = og_title['content'].strip()
-        elif soup.find('h1'):
-            title = soup.find('h1').get_text(strip=True)
-        elif soup.title and soup.title.string:
-            title = soup.title.string.strip()
-
-        # Remove non-content elements before extracting body (navigation, ads, captions, bylines)
-        for tag in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'form', 'figure', 'figcaption', 'time']):
-            tag.decompose()
-
-        # Remove known UI widgets, byline elements, share buttons, topic tags, and ad slots
-        for selector in [
-            '.byline', '.author', '[data-component="byline-block"]',
-            '.share-tools', '.social-share', '.article-share',
-            '.tags', '.topics', '[data-testid="topics-list"]',
-            '.related-topics', '.related-content', '.related-articles',
-            '.advertisement', '.ad-slot', '.sponsored-content'
-        ]:
-            for el in soup.select(selector):
-                el.decompose()
-
-        # Extract article body
-        article_el = soup.find('article') or soup.find('main') or soup.body
-        paragraphs = []
-        if article_el:
-            for p in article_el.find_all('p'):
-                text = p.get_text(strip=True)
-                text_lower = text.lower()
-                if len(text) > 25 and not any(bp in text_lower for bp in [
-                    'cookie', 'subscribe', 'sign up', 'all rights reserved', 'terms of service',
-                    'add as preferred', 'image caption', 'photo caption', 'share this story'
-                ]):
-                    paragraphs.append(text)
-        
-        full_content = (title + "\n\n" + "\n".join(paragraphs[:25])).strip()
-        if not full_content:
-            full_content = title or f"Article content from {domain}"
-
-        engine = get_verification_engine()
-        result = engine.analyze(full_content, source_hint=domain, url_or_domain=url, article_title=title)
-        result["extractedText"] = full_content
-        result["sourceDomain"] = domain
-        result["articleTitle"] = title or result.get("articleTitle", "")
-
-        return jsonify(result), 200
-
-    except Exception as e:
-        # Graceful fallback: Analyze the input as text so verification never crashes
-        engine = get_verification_engine()
-        result = engine.analyze(raw_input)
-        result["extractedText"] = raw_input
-        result["articleTitle"] = result.get("articleTitle") or raw_input[:100]
-        return jsonify(result), 200
+    return jsonify(result), 200
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

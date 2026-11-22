@@ -111,19 +111,31 @@ class GroundedReasoningEngine:
             )
         elif contra_count >= 1 and distinct_supp_count == 0:
             # FALSE: Contradicted by established sources with zero corroborating evidence
-            # (e.g. 5G causes COVID-19, Pope endorsed Trump, Earth is flat)
+            # (e.g. 5G causes COVID-19, Pope endorsed Trump, Earth is flat, living person died)
             verdict = "FALSE"
             trust_score = 10
             risk_level = "CRITICAL"
             c_names = ", ".join(list(contradicting_pubs)[:2]) or "accredited investigative sources"
-            summary_reason = f"Conclusively disproven. Contradicted by authoritative scientific, institutional, or news wire reporting ({c_names})."
+            specific_reason = ""
+            for item in top_contradicting:
+                snip = item.get("evidenceSnippet", "")
+                if "Contradicted by evidence:" in snip or "Contradicted by scientific consensus:" in snip:
+                    specific_reason = snip
+                    break
+            summary_reason = specific_reason or f"Conclusively disproven. Contradicted by authoritative scientific, institutional, or news wire reporting ({c_names})."
         elif has_ifcn_false or (contra_count >= 2 and distinct_supp_count <= 1):
             # FALSE: Fact-check providers rated False or overwhelming contradiction
             verdict = "FALSE"
             trust_score = 12
             risk_level = "CRITICAL"
             c_names = ", ".join(list(contradicting_pubs)[:2]) or "fact-checking investigations"
-            summary_reason = f"Contradicted by established fact-checking and news wire investigations ({c_names})."
+            specific_reason = ""
+            for item in top_contradicting:
+                snip = item.get("evidenceSnippet", "")
+                if "Contradicted by evidence:" in snip or "Contradicted by scientific consensus:" in snip:
+                    specific_reason = snip
+                    break
+            summary_reason = specific_reason or f"Contradicted by established fact-checking and news wire investigations ({c_names})."
         elif contra_count >= 1 and distinct_supp_count > 1:
             # Conflicting evidence
             verdict = "DISPUTED"

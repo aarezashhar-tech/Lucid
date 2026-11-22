@@ -23,6 +23,7 @@ from typing import List, Dict, Any
 from services.source_reputation import SOURCE_DATABASE
 from services.factcheck_service import query_google_factcheck
 from services.gnews_service import search_gnews, categorize_gnews_articles
+from services.wikipedia_service import get_wikipedia_service
 
 logger = logging.getLogger("lucid.verifier")
 if not logger.handlers:
@@ -277,8 +278,11 @@ class EvidenceVerificationEngine:
     1. Google Fact Check Tools API
     2. GNews API & News Wire searches
     3. Primary wire archives (Reuters, AP, BBC, Al Jazeera, WHO)
-    4. Source Reputation context
+    4. Wikipedia & Wikidata official REST APIs
+    5. Source Reputation context
     """
+    def __init__(self):
+        self.wikipedia_service = get_wikipedia_service()
 
     def verify_single_claim(
         self,
@@ -306,6 +310,33 @@ class EvidenceVerificationEngine:
         status = "Unverified"
         notes = "Pending external corroboration."
         fact_check_matches: List[Dict[str, Any]] = []
+
+        # -------------------------------------------------------------
+        # 0. Wikipedia Biographical & Encyclopedic Entity Verification (Task C & D)
+        # Checks claims about living persons (death, arrest, resignation) and scientific facts
+        # -------------------------------------------------------------
+        bio_check = self.wikipedia_service.check_biographical_or_encyclopedic_claim(claim_text)
+        if bio_check and bio_check.get("isContradicted"):
+            ev = bio_check.get("evidenceItem")
+            if ev:
+                contradicting_sources.append("Wikipedia")
+                snippets.append({
+                    "source": "Wikipedia",
+                    "sourceName": "Wikipedia",
+                    "articleTitle": ev.get("articleTitle", "Wikipedia Reference"),
+                    "publicationDate": ev.get("publicationDate", "Current"),
+                    "sourceTrustScore": 88,
+                    "url": ev.get("url", "https://en.wikipedia.org"),
+                    "matchingClaim": claim_text,
+                    "stance": "contradict",
+                    "snippet": ev.get("evidenceSnippet", bio_check.get("reason", "")),
+                    "trust": 88,
+                    "pointsAssigned": "-25 pts",
+                    "calculationReason": bio_check.get("reason", "Contradicted by encyclopedic record (-25 pts)")
+                })
+                status = "Contradicted"
+                confidence = 98
+                notes = bio_check.get("reason", "Contradicted by evidence.")
 
         # -------------------------------------------------------------
         # 1. Evaluate Google Fact Check API results for this claim
@@ -419,8 +450,21 @@ class EvidenceVerificationEngine:
                 status = "Contradicted"
                 confidence = max(confidence, 94)
                 notes = f"Contradicted by reporting and fact-check audits from {src}."
+            # If the claim is about death, arrest, or resignation, ensure wire actually reports the event
+            is_death_claim = bool(re.search(r'\b(died|dead|killed|passed away|assassinated|death of)\b', claim_lower))
+            is_arrest_claim = bool(re.search(r'\b(arrested|in jail|imprisoned|detained|taken into custody|arrest of)\b', claim_lower))
+            is_resignation_claim = bool(re.search(r'\b(resigned|stepped down|quit|ousted|resignation of)\b', claim_lower))
+
+            combined_wire = f"{title} {gn.get('description', '')}".lower()
+            if is_death_claim and not any(k in combined_wire for k in ["died", "dead", "passed away", "killed", "fatal", "death"]):
+                continue
+            if is_arrest_claim and not any(k in combined_wire for k in ["arrested", "custody", "jailed", "imprisoned", "detained"]):
+                continue
+            if is_resignation_claim and not any(k in combined_wire for k in ["resigned", "resignation", "stepped down"]):
+                continue
+
             # Supporting evidence must meet semantic agreement threshold and have no debunk signal
-            elif agree >= 60 and not debunk_match and (sim >= 0.20 or is_trusted):
+            if agree >= 60 and not debunk_match and (sim >= 0.20 or is_trusted):
                 supporting_sources.append(src)
                 pts = int(round((trust / 100.0) * 10))
                 snippets.append({

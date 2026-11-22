@@ -20,6 +20,7 @@ from services.article_classifier import get_article_classifier
 from services.rag_retriever import get_rag_retriever
 from services.evidence_ranker import get_evidence_ranker
 from services.grounded_reasoner import get_grounded_reasoner
+from services.wikipedia_service import get_wikipedia_service
 
 logger = logging.getLogger("lucid.ai_service")
 if not logger.handlers:
@@ -49,6 +50,7 @@ class VerificationEngine:
         self.rag_retriever = get_rag_retriever()
         self.evidence_ranker = get_evidence_ranker()
         self.grounded_reasoner = get_grounded_reasoner()
+        self.wikipedia_service = get_wikipedia_service()
 
     def _load_artifacts(self):
         if os.path.exists(self.model_path) and os.path.exists(self.vec_path):
@@ -304,7 +306,14 @@ class VerificationEngine:
         top_supporting = _dedup_evidence(raw_supp)
         top_contradicting = _dedup_evidence(raw_contra)
         top_supporting.sort(key=lambda x: (x.get("compositeRankScore", 0), x.get("relevanceScore", 0)), reverse=True)
-        top_contradicting.sort(key=lambda x: (x.get("compositeRankScore", 0), x.get("relevanceScore", 0)), reverse=True)
+        top_contradicting.sort(
+            key=lambda x: (
+                1 if ("Contradicted by evidence:" in x.get("evidenceSnippet", "") or "Contradicted by scientific consensus:" in x.get("evidenceSnippet", "")) else 0,
+                x.get("compositeRankScore", 0),
+                x.get("relevanceScore", 0)
+            ),
+            reverse=True
+        )
 
         sources_searched = self.rag_retriever.get_sources_searched_list()
 
@@ -468,7 +477,20 @@ class VerificationEngine:
             risk_level = "CRITICAL"
 
         scoring_factors = verdict_results["scoringFactors"]
-        logger.info(f"Final Trust Score: {final_trust_score}/100 -> Verdict: {final_verdict}")
+        ml_contrib = scoring_factors.get("mlPrediction", {}).get("contribution", 0)
+        src_contrib = scoring_factors.get("sourceReputation", {}).get("contribution", 0)
+        evi_contrib = scoring_factors.get("evidenceStrength", {}).get("contribution", 0)
+        con_contrib = scoring_factors.get("claimConsistency", {}).get("contribution", 0)
+        lan_contrib = scoring_factors.get("languageQuality", {}).get("contribution", 0)
+
+        logger.info(
+            f"[Lucid Pipeline] Text Length: {len(text)} chars | Final Trust Score: {final_trust_score}/100 | Verdict: {final_verdict} | "
+            f"Score Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
+        )
+        print(
+            f"[Lucid Pipeline] Text Length: {len(text)} chars | Final Trust Score: {final_trust_score}/100 | Verdict: {final_verdict} | "
+            f"Score Components: [ML(25%): {ml_contrib}, Source(10%): {src_contrib}, Evidence(40%): {evi_contrib}, Consistency(10%): {con_contrib}, Language(15%): {lan_contrib}]"
+        )
 
         # -------------------------------------------------------------
         # STEP 7: AI Reasoning & Deliberation
