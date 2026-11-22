@@ -130,7 +130,13 @@ class EvidenceRanker:
         # Catches: conspiracy theory, debunked, false, misleading, no evidence, baseless, etc.
         has_contradiction = any(re.search(pat, combined, re.I) for pat in CONTRADICTION_PATTERNS)
         if has_contradiction:
-            return ("contradict", 98)
+            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
+            if is_specific_match and sim_score >= 0.35:
+                return ("contradict", 98)
+            elif sim_score >= 0.50:
+                return ("contradict", 90)
+            else:
+                return ("neutral", 40)
 
         # 3. Biographical Claims Check: Death, Arrest, Resignation of People (Task C)
         is_death_claim = bool(re.search(r'\b(died|dead|killed|passed away|assassinated|death of)\b', claim_lower))
@@ -156,42 +162,16 @@ class EvidenceRanker:
             if is_resignation_claim and not any(term in combined for term in ["tendered resignation", "submitted resignation", "stepped down as"]):
                 return ("neutral", 40)
 
-        # 3b. Scientific Consensus & Critical Falsehood Verification
-        # A) Flat Earth / denial of spherical earth
-        if any(term in claim_lower for term in ["earth is flat", "flat earth", "earth is a disk", "earth is a plane"]):
-            if any(term in combined for term in ["round", "sphere", "spherical", "oblate spheroid", "orbit", "gravity", "earth isn’t flat", "not flat", "evidence"]):
-                return ("contradict", 98)
-            return ("neutral", 40)
+        # 3b. Role & Corporate Leadership attribution check
+        roles = ["founder", "co-founder", "ceo", "chief executive", "president", "prime minister"]
+        has_role_claim = any(r in claim_lower for r in roles)
+        if has_role_claim:
+            if any(term in combined for term in ["founded by", "founded in", "chief executive of", "ceo of", "president and ceo"]):
+                is_match, reason = self._check_specific_claim_match(claim_text, combined)
+                if not is_match and sim_score >= 0.35:
+                    return ("contradict", 95)
 
-        # B) Moon made of cheese
-        if "moon" in claim_lower and "cheese" in claim_lower:
-            return ("contradict", 98)
-
-        # C) Encyclopedic True Facts (e.g. Paris capital of France)
-        if "capital" in claim_lower and "france" in claim_lower and "paris" in claim_lower:
-            if "capital" in combined and "france" in combined:
-                return ("support", 96)
-
-        # D) 5G COVID-19 conspiracy theory
-        if "5g" in claim_lower and any(term in claim_lower for term in ["covid", "coronavirus", "pandemic", "virus"]):
-            if any(term in combined for term in ["spread", "cause", "tower", "cell", "link", "attack", "claim", "fear"]):
-                return ("contradict", 98)
-            return ("neutral", 40)
-
-        # E) Pope Francis Trump endorsement hoax
-        if ("pope" in claim_lower or "francis" in claim_lower) and "trump" in claim_lower:
-            return ("contradict", 98)
-
-        # F) Solar System planetary order
-        if any(term in claim_lower for term in ["sun's closest planet is mars", "closest planet to the sun is mars", "closest planet is mars"]):
-            return ("contradict", 98)
-
-        # G) Milky Way location
-        if any(term in claim_lower for term in ["earth is not inside the milky way", "not in the milky way", "outside the milky way"]):
-            if any(term in combined for term in ["milky way", "galaxy", "solar system", "orion"]):
-                return ("contradict", 98)
-
-        # H) Directional Negation Polarity Check:
+        # 3c. Directional Negation Polarity Check:
         has_negation = bool(re.search(r'\b(is\s+not|isn\'?t|not\s+inside|not\s+in|never|no|none)\b', claim_lower))
         if has_negation:
             if "not inside" in claim_lower and ("inside" in combined or "located in" in combined or "orbits in" in combined or "part of" in combined):
@@ -205,8 +185,8 @@ class EvidenceRanker:
         if sim_score >= 0.40:
             is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
             if not is_specific_match:
-                if ("conflicting percentage" in match_reason.lower() or "conflicting year" in match_reason.lower()) and sim_score >= 0.50:
-                    return ("contradict", 90)
+                if "conflicting organization" in match_reason.lower() and sim_score >= 0.35:
+                    return ("contradict", 95)
                 conf = int(min(90, max(50, sim_score * 100)))
                 return ("related", conf)
 
@@ -306,13 +286,31 @@ class EvidenceRanker:
         # 3. Numeric / Percentage metrics check
         claim_pcts = set(re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)', claim_text, re.I))
         comb_pcts = set(re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)', combined_text, re.I))
-        if claim_pcts and comb_pcts and not (claim_pcts & comb_pcts):
-            return False, "Candidate cites conflicting percentage metric."
+        if claim_pcts and not (claim_pcts & comb_pcts):
+            if comb_pcts:
+                return False, "Candidate cites conflicting percentage metric."
+            else:
+                return False, "Candidate does not corroborate specific percentage metric in claim."
 
         claim_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', claim_text))
         comb_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', combined_text))
         if claim_years and comb_years and not (claim_years & comb_years):
             return False, "Candidate cites conflicting year or date metric."
+
+        # Conflicting Organization for Leadership Roles (e.g. 'Alphabet CEO' vs 'Nvidia CEO')
+        ROLES_REGEX = r'(?:([A-Z][a-zA-Z0-9]+)\s+(?:CEO|founder|president|prime minister))|(?:(?:CEO|founder|president|prime minister)\s+of\s+([A-Z][a-zA-Z0-9]+))'
+        claim_role_orgs = {x[0] or x[1] for x in re.findall(ROLES_REGEX, claim_text, re.I)}
+        comb_role_orgs = {x[0] or x[1] for x in re.findall(ROLES_REGEX, combined_text, re.I)}
+        NON_ORGS = {
+            "THE", "A", "AN", "THIS", "THAT", "ITS", "THEIR", "HIS", "HER", "OUR", "MY", "YOUR",
+            "AND", "OR", "BUT", "AS", "IS", "WAS", "WERE", "BEEN", "BY", "FOR", "IN", "ON", "AT",
+            "TO", "OF", "WITH", "FROM", "FORMER", "CURRENT", "ACTING", "INTERIM", "DEPUTY",
+            "CO", "VICE", "EXECUTIVE", "SENIOR", "CHIEF", "NEW", "LONGTIME", "HONORARY"
+        }
+        claim_role_orgs = {o.upper() for o in claim_role_orgs if o and o.upper() not in NON_ORGS}
+        comb_role_orgs = {o.upper() for o in comb_role_orgs if o and o.upper() not in NON_ORGS}
+        if claim_role_orgs and comb_role_orgs and not (claim_role_orgs & comb_role_orgs):
+            return False, f"Conflicting organization for claimed leadership role ({', '.join(comb_role_orgs)} vs {', '.join(claim_role_orgs)})."
 
         # 4. Core entity / content noun overlap
         stop_words = {
@@ -324,8 +322,60 @@ class EvidenceRanker:
         comb_words = {w for w in re.findall(r'\b[a-zA-Z]{4,}\b', comb_lower) if w not in stop_words}
         overlap = claim_words & comb_words
 
-        if len(claim_words) >= 4 and len(overlap) < 2:
+        overlap_ratio = len(overlap) / max(len(claim_words), 1)
+        if len(claim_words) >= 4 and (len(overlap) < 2 or (len(overlap) == 2 and overlap_ratio < 0.25)):
             return False, "Insufficient entity/event overlap between headline and claim."
+
+        # Check for multiple distinct named entities in relational claims (e.g. 'Pope Francis endorsed Trump')
+        stopwords_pe = {
+            "The", "A", "An", "In", "On", "At", "To", "For", "With", "By", "From", "About",
+            "After", "Before", "During", "Under", "Global", "Recent", "New", "First",
+            "According", "Addressing", "Several", "Many", "Some", "Local", "Former", "Current",
+            "Major", "Leading", "Following", "Amid", "Despite", "Meanwhile", "Earlier", "Later"
+        }
+        ROLE_STOPWORDS = {
+            "chief executive officer", "chief executive", "executive officer", "ceo",
+            "founder", "co-founder", "president", "prime minister", "managing director",
+            "vice president", "chairman", "director general", "spokesperson", "minister", "secretary"
+        }
+        KNOWN_ACRONYMS = {
+            "reserve bank of india": "rbi",
+            "reserve bank": "rbi",
+            "world health organization": "who",
+            "international energy agency": "iea",
+            "united nations": "un",
+            "european central bank": "ecb",
+            "centers for disease control": "cdc",
+            "food and drug administration": "fda",
+            "monetary policy committee": "mpc"
+        }
+        raw_ents = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', claim_text)
+        ent_phrases = []
+        for e in raw_ents:
+            clean_e = re.sub(r'^(The|A|An)\s+', '', e).strip()
+            if clean_e and clean_e not in stopwords_pe and clean_e.lower() not in ROLE_STOPWORDS:
+                ent_phrases.append(clean_e)
+
+        def entity_in_evidence(entity_str: str) -> bool:
+            e_lower = entity_str.lower()
+            if any(w.lower() in comb_lower for w in entity_str.split()):
+                return True
+            acr = KNOWN_ACRONYMS.get(e_lower, "")
+            if acr and re.search(rf'\b{acr}\b', comb_lower):
+                return True
+            return False
+
+        # In relational claims (e.g. endorsements, meetings, appointments between multiple people/parties),
+        # all named participants must be present in the candidate evidence.
+        is_relational = bool(re.search(r'\b(endorsed|endorses|endorsing|endorsement|sued|suing|met with|married|accused|appointed|nominated)\b', claim_lower))
+        if is_relational and len(ent_phrases) >= 2:
+            missing_ents = [e for e in ent_phrases if not entity_in_evidence(e)]
+            if missing_ents:
+                return False, f"Evidence does not mention participant entity '{missing_ents[0]}' from claim."
+        elif ent_phrases:
+            # For non-relational claims, at least one key named entity (or its acronym) must match
+            if not any(entity_in_evidence(e) for e in ent_phrases):
+                return False, f"Evidence does not mention entity '{ent_phrases[0]}' from claim."
 
         return True, "Matches specific claim."
 

@@ -60,6 +60,8 @@ VERB_PATTERN = re.compile(
     r'evacuated|rescued|arrested|detained|charged|sentenced|convicted|sued|released|freed|fled|displaced|'
     r'said|told|spoke|commented|wrote|posted|tweeted|broadcast|published|noted|argued|'
     r'began|started|ended|concluded|halted|stopped|delayed|continued|occurred|happened|sparked|'
+    r'continue|continues|continuing|serve|serves|served|serving|remain|remains|remained|remaining|'
+    r'hold|holds|held|holding|act|acts|acted|acting|become|becomes|became|becoming|lead|leads|led|leading|'
     r'cause|causes|caused|causing|control|controls|controlled|controlling|'
     r'contain|contains|contained|containing|affect|affects|affected|affecting|'
     r'alter|alters|altered|infect|infects|infected|transmit|transmits|transmitted|'
@@ -438,7 +440,7 @@ class ClaimExtractionEngine:
                 if self.is_valid_factual_claim(cand_single):
                     cand_to_test = cand_single
 
-            if self.is_valid_factual_claim(cand_to_test):
+            if self.is_valid_factual_claim(cand_to_test) or (len(cand_to_test.split()) >= 3 and not any(re.search(pat, cand_to_test, re.IGNORECASE) for pat in UI_NOISE_PATTERNS)):
                 norm_cand = normalize_claim_text(cand_to_test)
                 signals = self.extract_entities_and_signals(norm_cand)
                 claims.append({

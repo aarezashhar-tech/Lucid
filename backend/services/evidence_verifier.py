@@ -601,31 +601,14 @@ class EvidenceVerificationEngine:
         # -------------------------------------------------------------
         # 4. Incorporate Source Reputation Context
         # -------------------------------------------------------------
-        if is_trusted_publisher and src_trust >= 80 and status != "Contradicted":
+        # Note: An article's primary publisher cannot fabricate external corroboration
+        # for an otherwise Unverified claim. Only attach primary publisher attribution
+        # if the claim has external corroborating evidence (status == "Supported").
+        if is_trusted_publisher and src_trust >= 80 and status == "Supported":
             # Primary publisher MUST be topic relevant to be added as supporting citation
             if is_evidence_topic_relevant(claim_text, src_name, claim_text, full_article_text):
                 if src_name and src_name not in supporting_sources:
                     supporting_sources.insert(0, src_name)
-
-                if status == "Unverified":
-                    status = "Supported"
-                    confidence = min(94, max(82, src_trust + 2))
-                    notes = f"Attributed by verified publisher ({src_name}) with wire consistency."
-                    snippets.append({
-                        "source": src_name,
-                        "sourceName": src_name,
-                        "articleTitle": f"Official Wire Coverage: {claim_text[:60]}...",
-                        "publicationDate": "2026-11-13",
-                        "sourceTrustScore": src_trust,
-                        "url": f"https://{source_context.get('domain', 'news.org')}",
-                        "matchingClaim": claim_text,
-                        "stance": "support",
-                        "snippet": f"Documented dispatch from {src_name}: {claim_text}",
-                        "trust": src_trust,
-                        "pointsAssigned": "+6 pts",
-                        "calculationReason": f"Attributed by verified publisher ({src_name}, Trust: {src_trust}/100) (+6 pts)",
-                        "isPrimary": True
-                    })
 
         # -------------------------------------------------------------
         # Strict Relevance Filtering & Fallback Assignment

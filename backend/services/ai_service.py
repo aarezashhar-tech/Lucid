@@ -280,7 +280,7 @@ class VerificationEngine:
             is_op = claim_obj.get("isOpinion", False) or claim_obj.get("claimType") == "Opinion / Perspective Assertion"
             if c_text and not is_op:
                 wire_list = gnews_map.get(c_text, [])
-                candidates = self.rag_retriever.retrieve_evidence_for_claim(c_text, max_items=8, wire_articles=wire_list)
+                candidates = self.rag_retriever.retrieve_evidence_for_claim(c_text, max_items=14, wire_articles=wire_list)
                 retrieval_map[c_text] = candidates
                 all_rag_candidates.extend(candidates)
             else:
@@ -465,7 +465,9 @@ class VerificationEngine:
             contradicting_evidence_count=contra_count,
             fact_check_results=fact_check_results,
             article_type=article_type,
-            source_quality_assessment=source_quality_assessment
+            source_quality_assessment=source_quality_assessment,
+            source_tier=source_data.get("tier", ""),
+            source_category=source_data.get("category", "")
         )
 
         final_verdict = verdict_results["verdict"]
@@ -474,7 +476,8 @@ class VerificationEngine:
         summary_reason = verdict_results["summaryReason"]
 
         # Ensure conclusively false / contradicted claims receive standard FALSE verdict and low score (Task C)
-        if final_verdict == "KNOWN FALSE" or (contra_count >= 1 and supp_count == 0):
+        # Never override Satire or Opinion verdicts
+        if final_verdict not in ("Satire", "Opinion - not fact-checked") and (final_verdict == "KNOWN FALSE" or (contra_count >= 1 and supp_count == 0)):
             final_verdict = "FALSE"
             if isinstance(final_trust_score, (int, float)):
                 final_trust_score = min(final_trust_score, 12)

@@ -198,6 +198,58 @@ DOMAIN_OWNERSHIP_MAP: Dict[str, Dict[str, Any]] = {
         "tier": "High",
         "category": "National Newspaper of Record",
         "description": "Major American daily newspaper."
+    },
+
+    # Known Satire & Parody Outlets
+    "theonion.com": {
+        "publisher": "The Onion",
+        "name": "The Onion",
+        "domain": "theonion.com",
+        "trust": 10,
+        "tier": "Satire",
+        "category": "Satirical Publication",
+        "description": "Known satirical comedy publication creating fictional parody content.",
+        "isTrusted": False
+    },
+    "babylonbee.com": {
+        "publisher": "The Babylon Bee",
+        "name": "The Babylon Bee",
+        "domain": "babylonbee.com",
+        "trust": 10,
+        "tier": "Satire",
+        "category": "Satirical Publication",
+        "description": "Known satirical comedy outlet creating fictional parody commentary.",
+        "isTrusted": False
+    },
+    "clickhole.com": {
+        "publisher": "ClickHole",
+        "name": "ClickHole",
+        "domain": "clickhole.com",
+        "trust": 10,
+        "tier": "Satire",
+        "category": "Satirical Publication",
+        "description": "Known satirical media outlet parodying viral web culture.",
+        "isTrusted": False
+    },
+    "thebeaverton.com": {
+        "publisher": "The Beaverton",
+        "name": "The Beaverton",
+        "domain": "thebeaverton.com",
+        "trust": 10,
+        "tier": "Satire",
+        "category": "Satirical Publication",
+        "description": "Known Canadian satirical news publication.",
+        "isTrusted": False
+    },
+    "newsthump.com": {
+        "publisher": "NewsThump",
+        "name": "NewsThump",
+        "domain": "newsthump.com",
+        "trust": 10,
+        "tier": "Satire",
+        "category": "Satirical Publication",
+        "description": "Known British satirical comedy news site.",
+        "isTrusted": False
     }
 }
 

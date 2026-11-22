@@ -198,11 +198,20 @@ class RAGRetrievalEngine:
 
     def _fetch_rss_wire_evidence(self, query: str, max_items: int = 6) -> List[Dict[str, Any]]:
         """Queries Google News RSS wire archives for recent published coverage."""
-        clean_q = re.sub(r'[^\w\s-]', '', query).strip()
+        clean_q = re.sub(r'[^\w\s.-]', '', query).strip('. ')
         if not clean_q or len(clean_q) < 4:
             return []
 
-        url = f"{GOOGLE_NEWS_RSS_URL}?q={urllib.parse.quote(clean_q[:120])}&hl=en-US&gl=US&ceid=US:en"
+        # Trim subordinate clauses or cut cleanly at word boundary (avoid mid-word cuts)
+        m = re.search(r'^(.*?)\s+(?:following|according to|amid|after|as|during)\b', clean_q, re.I)
+        if m and len(m.group(1)) >= 25:
+            search_text = m.group(1)
+        elif len(clean_q) > 90:
+            search_text = clean_q[:90].rsplit(' ', 1)[0]
+        else:
+            search_text = clean_q
+
+        url = f"{GOOGLE_NEWS_RSS_URL}?q={urllib.parse.quote(search_text)}&hl=en-US&gl=US&ceid=US:en"
         results: List[Dict[str, Any]] = []
 
         try:

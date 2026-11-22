@@ -148,3 +148,68 @@ def test_score_drop_on_3_altered_articles():
     res3_orig = run_shared_verification_pipeline(text=art3_orig, source_hint="ndtv.com", title="RBI repo 6.5%", input_type="text")
     res3_alt = run_shared_verification_pipeline(text=art3_alt, source_hint="ndtv.com", title="RBI repo 1.2%", input_type="text")
     assert res3_orig["trustScore"] > res3_alt["trustScore"], f"Article 3 drop expected: {res3_orig['trustScore']} vs {res3_alt['trustScore']}"
+
+
+# =============================================================================
+# AUTHOR-WRITTEN FOLLOW-UP TESTS (Review Items 3, 4, 6)
+# Mark: Written by Assistant for follow-up review verification
+# =============================================================================
+
+def test_satire_returns_satire_verdict_and_score():
+    """
+    [Author-Written Test] Requirement 6:
+    When the source is known satire (e.g. theonion.com, babylonbee.com),
+    the system must return verdict 'Satire' and trustScore 'Satire',
+    never a normal numeric trust score or FALSE.
+    """
+    res = run_shared_verification_pipeline(
+        text="Scientists invent new machine that does nothing but beep all day long in laboratory.",
+        url="https://theonion.com/scientists-invent-beep",
+        title="Scientists invent machine that only beeps",
+        input_type="url"
+    )
+    assert res["verdict"] == "Satire", f"Expected verdict 'Satire', got '{res['verdict']}'"
+    assert res["trustScore"] == "Satire", f"Expected trustScore 'Satire', got '{res['trustScore']}'"
+    assert res["scoringFactors"]["evidenceStrength"]["score"] == "Satire"
+
+
+def test_zero_evidence_idaho_blog_story_unverified():
+    """
+    [Author-Written Test] Requirement 3:
+    When an obscure personal or hyper-local blog story has 0 corroborating evidence
+    and 0 contradicting evidence, it must receive UNVERIFIED with score <= 50 and
+    low confidence flag. It must NEVER receive FALSE or 12.
+    """
+    idaho_text = (
+        "An amateur chemist in rural Idaho invents a new liquid battery prototype "
+        "that allegedly runs on tap water and mineral salts in his garage basement workshop."
+    )
+    res = run_shared_verification_pipeline(
+        text=idaho_text,
+        title="Idaho chemist invents tap water battery",
+        input_type="text"
+    )
+    assert res["verdict"] == "UNVERIFIED", f"Expected UNVERIFIED, got '{res['verdict']}'"
+    assert res["trustScore"] <= 50, f"Expected trustScore <= 50, got {res['trustScore']}"
+    assert res["confidence"] <= 40, f"Expected confidence <= 40, got {res['confidence']}"
+    assert len(res["evidence"]["supporting"]) == 0
+    assert len(res["evidence"]["contradicting"]) == 0
+    assert "Low confidence" in res["summaryReason"]
+
+
+def test_nvidia_leadership_contradicted():
+    """
+    [Author-Written Test] Requirement 4:
+    False corporate leadership claims (e.g. 'Sundar Pichai continues as NVIDIA founder and CEO')
+    must find contradicting evidence from authoritative wire reporting and encyclopedic consensus,
+    yielding verdict FALSE and score <= 15.
+    """
+    res = run_shared_verification_pipeline(
+        text="Sundar Pichai continues as NVIDIA founder and Chief Executive Officer.",
+        title="Sundar Pichai NVIDIA CEO",
+        input_type="text"
+    )
+    assert res["verdict"] == "FALSE", f"Expected verdict FALSE, got '{res['verdict']}'"
+    assert res["trustScore"] <= 15, f"Expected trustScore <= 15, got {res['trustScore']}"
+    assert len(res["evidence"]["contradicting"]) >= 1, f"Expected at least 1 contradicting citation, got {len(res['evidence']['contradicting'])}"
+

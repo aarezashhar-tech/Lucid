@@ -38,7 +38,7 @@ OPINION_FIRST_PERSON_PATTERNS = [
 ]
 
 OPINION_RHETORICAL_PATTERNS = [
-    r'\b(?:should|ought to|must not|disgraceful|shameful|unacceptable|hypocrisy|triumph|tragic mistake|flawed reasoning|fundamentally wrong|undeniably|morally|arguably|inexcusable)\b',
+    r'\b(?:disgraceful|shameful|unacceptable|hypocrisy|triumph|tragic mistake|flawed reasoning|fundamentally wrong|undeniably|morally|inexcusable)\b',
     r'\b(?:absurd|outrageous|disastrous decision|folly|shortsighted|we deserve better)\b'
 ]
 
@@ -72,7 +72,8 @@ NEWS_WIREDATELINE_PATTERNS = [
 
 NEWS_EVENT_PATTERNS = [
     r'\b(?:breaking|just in|announced today|reported on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|press release|statement issued|official confirmed|according to officials|police said|ministry stated|authorities reported)\b',
-    r'\b(?:death toll|casualty|fatalities|emergency meeting|signed an agreement|voted to approve|declared a state of emergency|official data showed)\b'
+    r'\b(?:death toll|casualty|fatalities|emergency meeting|signed an agreement|voted to approve|declared a state of emergency|official data showed)\b',
+    r'\b(?:said|told the|told reporters|warned|expressed|addressed the|addressing the|speech|appealed|announced|confirmed|reported|stated|minister said|pm said|court held|spokesperson)\b'
 ]
 
 
@@ -141,9 +142,12 @@ class ArticleClassifier:
                 indicators["Opinion Piece"].append(f"Title / Header contains opinion genre tag ('{pat}').")
                 break
 
-        fp_matches = [pat for pat in OPINION_FIRST_PERSON_PATTERNS if re.search(pat, lower_content)]
+        # Strip quoted statements so attributed quotes in journalism ("I think...", "In our view...")
+        # do not misclassify factual reporting of quotes as author op-ed
+        unquoted_content = re.sub(r'"[^"]*"|“[^”]*”|‘[^’]*’', '', lower_content)
+        fp_matches = [pat for pat in OPINION_FIRST_PERSON_PATTERNS if re.search(pat, unquoted_content)]
         if fp_matches:
-            weight = min(45, len(fp_matches) * 20 + 15)
+            weight = min(45, len(fp_matches) * 20 if len(fp_matches) >= 2 else 10)
             scores["Opinion Piece"] += weight
             indicators["Opinion Piece"].append(f"First-person argumentative perspective detected ({len(fp_matches)} indicator(s)).")
 
@@ -206,9 +210,10 @@ class ArticleClassifier:
 
         news_event_matches = [pat for pat in NEWS_EVENT_PATTERNS if re.search(pat, lower_content)]
         if news_event_matches:
-            weight = min(40, len(news_event_matches) * 15)
+            total_occurrences = sum(len(re.findall(pat, lower_content)) for pat in NEWS_EVENT_PATTERNS)
+            weight = min(50, max(30, total_occurrences * 15))
             scores["News Report"] += weight
-            indicators["News Report"].append(f"Immediate event reporting and official statements ({len(news_event_matches)} indicator(s)).")
+            indicators["News Report"].append(f"Immediate event reporting and official statements ({total_occurrences} indicator(s)).")
 
         # Baseline news report points if nothing else strongly matched
         scores["News Report"] += 10

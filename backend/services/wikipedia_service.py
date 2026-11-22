@@ -221,10 +221,16 @@ class WikipediaService:
             if candidate:
                 return candidate
 
-        # Capitalized noun phrase heuristic (e.g. 'Narendra Modi', 'King Charles')
-        cap_tokens = re.findall(r'\b[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*\b', text)
+        # Capitalized noun phrase heuristic (e.g. 'Narendra Modi', 'King Charles', 'Sundar Pichai')
+        ROLE_STOPWORDS = {
+            "chief executive officer", "chief executive", "executive officer", "ceo",
+            "founder", "co-founder", "president", "prime minister", "managing director",
+            "vice president", "chairman", "director general", "spokesperson",
+            "the", "a", "an", "this", "that", "breaking", "urgent"
+        }
+        cap_tokens = [t.strip() for t in re.findall(r'\b[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*\b', text) if t.lower() not in ROLE_STOPWORDS]
         if cap_tokens:
-            # Pick the longest capitalized phrase
+            # Pick the longest valid capitalized phrase
             longest = max(cap_tokens, key=len)
             if len(longest.split()) >= 1 and longest.lower() not in ('the', 'a', 'this', 'that', 'breaking', 'urgent'):
                 return longest
@@ -366,6 +372,73 @@ class WikipediaService:
                                 "stance": "contradict"
                             }
                         }
+
+        # -------------------------------------------------------------
+        # 1b. Check for Corporate & Leadership Contradictions
+        # (e.g. 'X is CEO of Y', 'X founded Y')
+        # -------------------------------------------------------------
+        has_leadership = bool(re.search(r'\b(founder|co-founder|founded|ceo|chief executive|president of|prime minister of)\b', claim_lower))
+        if has_leadership:
+            ROLE_STOPWORDS = {
+                "chief executive officer", "chief executive", "executive officer", "ceo",
+                "founder", "co-founder", "president", "prime minister", "managing director",
+                "vice president", "chairman", "director general", "spokesperson",
+                "the", "a", "an", "this", "that", "breaking", "urgent"
+            }
+            raw_entities = [t.strip() for t in re.findall(r'\b[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*\b', claim_text) if len(t) > 1]
+            entities = []
+            for t in raw_entities:
+                cleaned = re.sub(r'\b(?:chief executive officer|chief executive|executive officer|ceo|founder|co-founder|president|prime minister)\b', '', t, flags=re.I).strip()
+                if cleaned and cleaned.lower() not in ROLE_STOPWORDS and len(cleaned) > 2:
+                    if cleaned not in entities:
+                        entities.append(cleaned)
+            if len(entities) >= 2:
+                ent_summaries = {}
+                for ent in entities:
+                    titles = self.search_wikipedia(ent, limit=1)
+                    if titles:
+                        s = self.get_page_summary(titles[0])
+                        if s:
+                            ent_summaries[ent] = s
+                for ent, s in ent_summaries.items():
+                    extract = s.get("extract", "")
+                    extract_lower = extract.lower()
+                    for other_ent, other_s in ent_summaries.items():
+                        if ent == other_ent:
+                            continue
+                        if any(w in extract_lower for w in ["founded by", "founded in", "company", "corporation", "chief executive", "subsidiary of"]):
+                            if other_ent.lower() not in extract_lower:
+                                real_founder_match = re.search(r'founded\s+(?:in\s+\d{4}\s+)?by\s+([^,.]+)', extract, re.I)
+                                real_ceo_match = re.search(r'(?:president\s+and\s+)?ceo\s+(?:is\s+|since\s+\d{4}\s+)?([^,.]+)', extract, re.I)
+                                real_names = []
+                                if real_founder_match: real_names.append(real_founder_match.group(1).strip())
+                                if real_ceo_match: real_names.append(real_ceo_match.group(1).strip())
+                                other_extract = other_s.get("extract", "")
+                                other_role_match = re.search(r'ceo\s+of\s+([A-Za-z0-9\s]+?)(?:\s+since|\.|\,)', other_extract, re.I)
+                                if real_names or other_role_match:
+                                    org_name = ent if real_names else other_ent
+                                    person_name = other_ent if real_names else ent
+                                    reason = f"[Derived check] Encyclopedic contradiction: {org_name} was founded/led by {', '.join(real_names) if real_names else 'other leadership'}, while {person_name} is {other_role_match.group(0).strip() if other_role_match else 'affiliated with another organization'}."
+                                    snippet_text = f"[Derived check] Wikipedia: {org_name} extract: \"{extract[:150]}...\". {person_name} extract: \"{other_extract[:120]}...\""
+                                    return {
+                                        "isContradicted": True,
+                                        "verdict": "FALSE",
+                                        "trustScore": 10,
+                                        "reason": reason,
+                                        "entity": ent,
+                                        "eventType": "leadership_contradiction",
+                                        "evidenceItem": {
+                                            "articleTitle": f"[Derived check] Wikipedia: {ent} vs {other_ent}",
+                                            "publisher": "Wikipedia",
+                                            "publicationDate": "Current",
+                                            "url": s.get("url", ""),
+                                            "evidenceSnippet": snippet_text,
+                                            "sourceTrustScore": 88,
+                                            "sourceCategory": "Encyclopedic Reference",
+                                            "retrievalChannel": "Wikipedia REST API",
+                                            "stance": "contradict"
+                                        }
+                                    }
 
         # -------------------------------------------------------------
         # 2. Check for Scientific Contradictions: Moon made of cheese, Earth is flat

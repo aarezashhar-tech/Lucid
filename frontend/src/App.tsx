@@ -2564,7 +2564,9 @@ function ReportScreen({
             <div className="flex items-center gap-3">
               <div
                 className={`w-12 h-12 rounded-full flex items-center justify-center shadow-xs ${
-                  verdict === "Opinion - not fact-checked"
+                  verdict === "Satire"
+                    ? "bg-purple-600 text-white"
+                    : verdict === "Opinion - not fact-checked"
                     ? "bg-primary/20 text-primary"
                     : verdict === "VERIFIED" || verdict === "LIKELY TRUE"
                     ? "bg-tertiary text-on-tertiary"
@@ -2575,7 +2577,9 @@ function ReportScreen({
               >
                 <MatIcon
                   name={
-                    verdict === "Opinion - not fact-checked"
+                    verdict === "Satire"
+                      ? "theater_comedy"
+                      : verdict === "Opinion - not fact-checked"
                       ? "rate_review"
                       : verdict === "VERIFIED" || verdict === "LIKELY TRUE"
                       ? "verified"
@@ -2599,9 +2603,13 @@ function ReportScreen({
               <small className="font-label-xs text-label-xs text-outline uppercase tracking-wider block font-bold">
                 Trust Score
               </small>
-              {typeof result.trustScore === "string" || result.trustScore === "Not scored" ? (
-                <span className="inline-block px-3 py-1 mt-1 rounded-full text-sm font-semibold bg-surface-container-high text-on-surface-variant">
-                  Not scored
+              {typeof result.trustScore === "string" || isNaN(Number(result.trustScore)) ? (
+                <span className={`inline-block px-3 py-1 mt-1 rounded-full text-sm font-semibold ${
+                  result.trustScore === "Satire"
+                    ? "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300"
+                    : "bg-surface-container-high text-on-surface-variant"
+                }`}>
+                  {result.trustScore}
                 </span>
               ) : (
                 <b

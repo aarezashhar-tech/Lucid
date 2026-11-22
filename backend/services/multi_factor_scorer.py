@@ -101,7 +101,9 @@ class MultiFactorScoringEngine:
         contradiction_threshold: int = 2,
         evidence_threshold: float = 60.0,
         article_type: str = "News Report",
-        source_quality_assessment: Dict[str, Any] = None
+        source_quality_assessment: Dict[str, Any] = None,
+        source_tier: str = "",
+        source_category: str = ""
     ) -> Dict[str, Any]:
         """
         Computes the final 5-factor weighted score and maps to the 6-tier verdict.
@@ -129,6 +131,62 @@ class MultiFactorScoringEngine:
         evi_s = max(0, min(100, float(evidence_score)))
         con_s = max(0, min(100, float(consistency_score)))
         lan_s = max(0, min(100, float(language_score)))
+
+        # -----------------------------------------------------------------
+        # 0. SATIRICAL CONTENT (Requirement 6)
+        # When domain or source is known satire, return "Satire" instead of a normal trust score.
+        # -----------------------------------------------------------------
+        is_satire = (
+            source_tier == "Satire"
+            or source_category == "Satirical Publication"
+            or article_type == "Satire"
+            or (source_quality_assessment and (
+                source_quality_assessment.get("tier") == "Satire"
+                or "Satire" in str(source_quality_assessment.get("sourceAuthority", ""))
+                or "Satire" in str(source_quality_assessment.get("category", ""))
+            ))
+        )
+        if is_satire:
+            return {
+                "finalTrustScore": "Satire",
+                "verdict": "Satire",
+                "riskLevel": "LOW",
+                "summaryReason": "Satirical content — published by a known satire or parody publication and not intended as factual news.",
+                "scoringFactors": {
+                    "evidenceStrength": {
+                        "weight": 0.45,
+                        "score": "Satire",
+                        "contribution": 0.0,
+                        "label": "Evidence Strength (45%) — Satirical publication"
+                    },
+                    "mlPrediction": {
+                        "weight": 0.20,
+                        "score": "Satire",
+                        "contribution": 0.0,
+                        "label": "ML Pattern Classifier (20%) — Satirical publication"
+                    },
+                    "languageQuality": {
+                        "weight": 0.15,
+                        "score": int(round(lan_s)),
+                        "contribution": 0.0,
+                        "label": "Language Tone & Humor (15%)",
+                        "notes": language_notes
+                    },
+                    "sourceReputation": {
+                        "weight": 0.10,
+                        "score": int(round(src_s)),
+                        "contribution": 0.0,
+                        "label": "Domain & Source Authority (10%)"
+                    },
+                    "claimConsistency": {
+                        "weight": 0.10,
+                        "score": int(round(con_s)),
+                        "contribution": 0.0,
+                        "label": "Viewpoint Consistency (10%)",
+                        "notes": consistency_notes
+                    }
+                }
+            }
 
         # -----------------------------------------------------------------
         # 1. OPINION / COMMENTARY PIECES (Problem 3)
