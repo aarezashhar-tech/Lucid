@@ -422,10 +422,6 @@ def search_gnews(claim_text: str, max_articles: int = 5) -> List[Dict[str, Any]]
             item["stance"] = "support"
             pts = int(round((trust / 100.0) * 12))
             item["evidenceCalculation"] = f"Supporting Source ({trust}/100 Trust, {agree}% Match) -> Adds +{pts} pts to Evidence Score"
-        elif agree < 30 and item.get("isTrustedSource"):
-            item["stance"] = "contradict"
-            pts = int(round((trust / 100.0) * 16))
-            item["evidenceCalculation"] = f"Contradicting Source ({trust}/100 Trust, {agree}% Low Agreement) -> Subtracts -{pts} pts from Evidence Score"
         else:
             item["stance"] = "neutral"
             item["evidenceCalculation"] = f"Neutral Context ({trust}/100 Trust, {agree}% Moderate Match) -> Baseline Reference"
@@ -496,8 +492,6 @@ def categorize_gnews_articles(
             contradicting.append(article)
         elif (stance == "support" or score >= support_threshold) and not has_debunk:
             supporting.append(article)
-        elif (score < contradict_threshold and article.get("isTrustedSource")):
-            contradicting.append(article)
         else:
             neutral.append(article)
 

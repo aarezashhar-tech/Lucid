@@ -131,13 +131,13 @@ class MultiFactorScoringEngine:
         lan_s = max(0, min(100, float(language_score)))
 
         # Weighted calculation
-        # 30% ML, 25% Source, 25% Evidence, 10% Consistency, 10% Language
+        # 25% ML, 10% Source, 40% Evidence, 10% Consistency, 15% Language
         final_trust_score = round(
-            (0.30 * ml_s) +
-            (0.25 * src_s) +
-            (0.25 * evi_s) +
+            (0.25 * ml_s) +
+            (0.10 * src_s) +
+            (0.40 * evi_s) +
             (0.10 * con_s) +
-            (0.10 * lan_s)
+            (0.15 * lan_s)
         )
         final_trust_score = max(5, min(98, int(final_trust_score)))
 
@@ -304,21 +304,21 @@ class MultiFactorScoringEngine:
             "summaryReason": summary_reason,
             "scoringFactors": {
                 "mlPrediction": {
-                    "weight": 0.30,
+                    "weight": 0.25,
                     "score": int(round(ml_s)),
-                    "contribution": round(0.30 * ml_s, 1),
+                    "contribution": round(0.25 * ml_s, 1),
                     "label": "ML Text Pattern Classifier"
                 },
                 "sourceReputation": {
-                    "weight": 0.25,
+                    "weight": 0.10,
                     "score": int(round(src_s)),
-                    "contribution": round(0.25 * src_s, 1),
-                    "label": "Domain & Source Authority"
+                    "contribution": round(0.10 * src_s, 1),
+                    "label": "Domain & Source Authority (Max 10-15%)"
                 },
                 "evidenceStrength": {
-                    "weight": 0.25,
+                    "weight": 0.40,
                     "score": int(round(evi_s)),
-                    "contribution": round(0.25 * evi_s, 1),
+                    "contribution": round(0.40 * evi_s, 1),
                     "label": "Corroborated Evidence Network"
                 },
                 "claimConsistency": {
@@ -329,9 +329,9 @@ class MultiFactorScoringEngine:
                     "notes": consistency_notes
                 },
                 "languageQuality": {
-                    "weight": 0.10,
+                    "weight": 0.15,
                     "score": int(round(lan_s)),
-                    "contribution": round(0.10 * lan_s, 1),
+                    "contribution": round(0.15 * lan_s, 1),
                     "label": "Journalistic Language Integrity",
                     "notes": language_notes
                 }

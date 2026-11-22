@@ -33,6 +33,7 @@ from typing import List, Dict, Any, Optional
 
 import requests
 import services.factcheck_service as factcheck_service
+from services.wikipedia_service import get_wikipedia_service
 
 logger = logging.getLogger("lucid.rag_retriever")
 if not logger.handlers:
@@ -69,12 +70,16 @@ CORE_SOURCES_SEARCHED = [
     "AFP",
     "Google Fact Check API",
     "IFCN Fact Check sources",
+    "Wikipedia (Official REST API)",
     "Official government websites",
     "UN, WHO & recognised institutions"
 ]
 
 # Baseline publisher trust registry
 PUBLISHER_TRUST_REGISTRY = {
+    # Encyclopedic Reference
+    "wikipedia": {"score": 88, "publisher": "Wikipedia", "category": "Encyclopedic Reference"},
+
     # Wire & Global Agencies (Tier 1)
     "reuters": {"score": 96, "publisher": "Reuters", "category": "Wire Service"},
     "ap news": {"score": 95, "publisher": "AP News", "category": "Wire Service"},
@@ -119,6 +124,7 @@ class RAGRetrievalEngine:
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LucidRAG/2.0"
         })
+        self.wikipedia_service = get_wikipedia_service()
 
     def _match_publisher_metadata(self, pub_name: str, url: str = "") -> Dict[str, Any]:
         """Resolves source string to normalized publisher name, trust score, and category."""
@@ -482,6 +488,13 @@ class RAGRetrievalEngine:
                 if key and key not in seen_urls:
                     seen_urls.add(key)
                     all_candidates.append(item)
+
+        # 0. Wikipedia Official API lookup (supporting/contradicting encyclopedic reference)
+        try:
+            wiki_items = self.wikipedia_service.get_wikipedia_evidence_for_claim(claim_text)
+            add_candidates(wiki_items)
+        except Exception as e:
+            logger.debug(f"Wikipedia retrieval error: {e}")
 
         # 1. Fact-check API query
         factchecks = self._fetch_factcheck_evidence(claim_text)
