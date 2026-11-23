@@ -33,7 +33,7 @@ from typing import List, Dict, Any, Optional
 
 import requests
 import services.factcheck_service as factcheck_service
-from services.wikipedia_service import get_wikipedia_service
+from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
 
 logger = logging.getLogger("lucid.rag_retriever")
 if not logger.handlers:
@@ -594,6 +594,14 @@ class RAGRetrievalEngine:
         # 0. Wikipedia Official API lookup (supporting/contradicting encyclopedic reference)
         try:
             wiki_items = self.wikipedia_service.get_wikipedia_evidence_for_claim(claim_text)
+            if claim_refers_to_relative_or_associate(claim_text):
+                filtered_wiki = []
+                for w in wiki_items:
+                    snip = str(w.get("evidenceSnippet", "")).lower()
+                    if w.get("stance") == "contradict" and ("living person" in snip or "no date of death" in snip):
+                        continue
+                    filtered_wiki.append(w)
+                wiki_items = filtered_wiki
             self.session_queried_sources["Wikipedia (Official REST API)"] = self.session_queried_sources.get("Wikipedia (Official REST API)", 0) + len(wiki_items)
             add_candidates(wiki_items)
         except Exception as e:

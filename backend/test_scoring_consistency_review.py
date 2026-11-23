@@ -73,6 +73,21 @@ def test_wikipedia_authentic_snippet_and_derived_label():
     assert "no date of death recorded" in snippet
 
 
+def test_wikidata_relative_death_check_yogi_vs_modi():
+    """
+    "CM Yogi of UP mother died" must NOT trigger a Wikidata living-person contradiction
+    for Yogi Adityanath, while "PM Modi died" still correctly triggers it.
+    """
+    wiki = get_wikipedia_service()
+    res_yogi = wiki.check_biographical_or_encyclopedic_claim("CM Yogi of UP mother died")
+    assert res_yogi is None or not res_yogi.get("isContradicted"), f"Expected no contradiction for Yogi mother, got: {res_yogi}"
+
+    res_modi = wiki.check_biographical_or_encyclopedic_claim("PM Modi died")
+    assert res_modi is not None, "Expected contradiction for PM Modi died"
+    assert res_modi.get("isContradicted") is True
+    assert "no date of death recorded" in res_modi.get("reason", "").lower()
+
+
 def test_zero_evidence_capped_at_50():
     """
     When no corroborating evidence is found, trust score must be capped at <= 50 with low confidence.
@@ -125,11 +140,11 @@ def test_score_drop_on_3_altered_articles():
 
     # Article 2: NVIDIA CEO (Jensen Huang -> Sundar Pichai)
     art2_orig = (
-        "Jensen Huang continues as NVIDIA founder and Chief Executive Officer, leading the company "
+        "Jensen Huang co-founded NVIDIA and served as its Chief Executive Officer, leading the company "
         "in artificial intelligence chip development and data center computing infrastructure."
     )
     art2_alt = (
-        "Sundar Pichai continues as NVIDIA founder and Chief Executive Officer, leading the company "
+        "Sundar Pichai co-founded NVIDIA and served as its Chief Executive Officer, leading the company "
         "in artificial intelligence chip development and data center computing infrastructure."
     )
     res2_orig = run_shared_verification_pipeline(text=art2_orig, title="Jensen Huang NVIDIA", input_type="text")
