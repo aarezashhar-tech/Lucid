@@ -545,7 +545,7 @@ function WelcomeScreen({
 
   return (
     <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-16 animate-fade-in">
-      <div className="w-full max-w-[420px] bg-surface-container-lowest border border-surface-container-high/60 rounded-2xl shadow-xl p-6 sm:p-8 flex flex-col items-center gap-5 text-center transition-all">
+      <div className="w-full max-w-[420px] lucid-card bg-surface-container-lowest border border-surface-container-high/60 rounded-2xl shadow-xl p-6 sm:p-8 flex flex-col items-center gap-5 text-center transition-all">
         {/* Brand Icon */}
         <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mt-1 shadow-xs">
           <LucidBrandLogo size="hero" showText={false} />
@@ -1134,7 +1134,7 @@ function HomeScreen({
       </div>
 
       {/* Main Card */}
-      <div className="w-full bg-surface-container-lowest rounded-2xl shadow-md border border-surface-container-high/40 p-3 sm:p-5 flex flex-col gap-3 transition-all duration-300">
+      <div className="w-full lucid-card bg-surface-container-lowest rounded-2xl shadow-md border border-surface-container-high/40 p-3 sm:p-5 flex flex-col gap-3 transition-all duration-300">
         {/* Input Tabs: URL, Text, Image, PDF (Mobile-Friendly Scrollable Container) */}
         <div className="flex items-center gap-1.5 pb-2 border-b border-surface-container-high/20 overflow-x-auto no-scrollbar scroll-smooth w-full">
           <button
@@ -1207,7 +1207,7 @@ function HomeScreen({
                 <button
                   type="submit"
                   disabled={!query.trim()}
-                  className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-surface-tint active:scale-95 disabled:opacity-40 font-label-md text-label-md transition-all shadow-xs cursor-pointer font-semibold"
+                  className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-surface-tint disabled:opacity-40 font-label-md text-label-md transition-all shadow-xs cursor-pointer font-semibold"
                 >
                   <MatIcon name="search" size={18} />
                   <span>Verify</span>
@@ -1253,7 +1253,7 @@ function HomeScreen({
               <button
                 type="submit"
                 disabled={(!query.trim() && !selectedFile) || isExtractingOcr}
-                className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-surface-tint active:scale-95 disabled:opacity-40 font-label-md text-label-md transition-all shadow-xs shrink-0 cursor-pointer font-semibold"
+                className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-surface-tint disabled:opacity-40 font-label-md text-label-md transition-all shadow-xs shrink-0 cursor-pointer font-semibold"
               >
                 <MatIcon name={isExtractingOcr ? "sync" : "search"} size={18} className={isExtractingOcr ? "animate-spin" : ""} />
                 <span>{isExtractingOcr ? "Extracting OCR..." : "Verify"}</span>
@@ -1292,7 +1292,7 @@ function HomeScreen({
 
       {/* Recent Investigations (Collapsible Dropdown - Hidden by default) */}
       <div className="w-full mt-8">
-        <div className="bg-surface-container-lowest rounded-xl shadow-xs border border-surface-container-high/40 overflow-hidden">
+        <div className="lucid-card bg-surface-container-lowest rounded-xl shadow-xs border border-surface-container-high/40 overflow-hidden">
           <button
             onClick={() => setIsHistoryOpen((prev) => !prev)}
             className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-surface-container-low transition-colors cursor-pointer select-none"
@@ -1330,7 +1330,7 @@ function HomeScreen({
                     <div
                       key={item.id}
                       onClick={() => onSelectHistory(item)}
-                      className="py-2.5 flex items-center justify-between hover:bg-surface-container-low px-2 rounded-lg cursor-pointer transition-colors"
+                      className="lucid-card-sub py-2.5 flex items-center justify-between hover:bg-surface-container-low px-2 rounded-lg cursor-pointer transition-colors"
                     >
                       <div className="flex flex-col max-w-lg">
                         <span className="font-label-md text-label-md font-medium text-on-surface truncate">
@@ -1401,7 +1401,7 @@ function OcrPreviewScreen({
         </p>
       </div>
 
-      <div className="w-full bg-surface-container-lowest rounded-xl shadow-md border border-surface-container-high/40 p-5 sm:p-6 flex flex-col gap-5 transition-all">
+      <div className="w-full lucid-card bg-surface-container-lowest rounded-xl shadow-md border border-surface-container-high/40 p-5 sm:p-6 flex flex-col gap-5 transition-all">
         {/* Header bar with confidence & quick copy */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-surface-container-high/30">
           <div className="flex items-center gap-2">
@@ -1490,7 +1490,7 @@ function OcrPreviewScreen({
             onClick={() => onContinue(text)}
             type="button"
             disabled={!text.trim()}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-surface-tint active:scale-95 disabled:opacity-40 font-label-md text-label-md font-semibold transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-surface-tint disabled:opacity-40 font-label-md text-label-md font-semibold transition-all shadow-xs cursor-pointer"
           >
             <span>Continue Verification</span>
             <MatIcon name="arrow_forward" size={16} />
@@ -1553,7 +1553,7 @@ function LoadingScreen({
       </div>
 
       {/* Simple Stepper */}
-      <div className="w-full bg-surface-container-lowest rounded-xl p-5 border border-surface-container-high/40 shadow-xs text-left mb-6 space-y-3">
+      <div className="w-full lucid-card bg-surface-container-lowest rounded-xl p-5 border border-surface-container-high/40 shadow-xs text-left mb-6 space-y-3">
         {steps.map((st) => {
           const isDone = st.num < activeStep || progress === 100;
           const isCurrent = st.num === activeStep && progress < 100;
@@ -1790,7 +1790,7 @@ function ReportScreen({
 
       {/* MULTI-LANGUAGE TRANSLATION NOTIFICATION */}
       {result.wasTranslated && result.detectedLanguage && result.detectedLanguage !== "English" && (
-        <div className="mb-6 p-4 rounded-xl bg-primary-fixed/20 border border-primary/20 flex items-start gap-3">
+        <div className="mb-6 p-4 rounded-xl lucid-card-sub bg-primary-fixed/20 border border-primary/20 flex items-start gap-3">
           <span className="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 mt-0.5">
             <MatIcon name="g_translate" size={18} />
           </span>
@@ -1816,7 +1816,7 @@ function ReportScreen({
       <div className="space-y-6">
         {/* 1. OCR EXTRACTED TEXT (For Image Submissions) */}
         {(result.ocrPreview || result.fileName?.match(/\.(png|jpe?g)$/i)) && (
-          <section className="bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+          <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
             <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -1881,7 +1881,7 @@ function ReportScreen({
         )}
 
         {/* 2. OVERVIEW (1-2 simple sentences in plain English, at-a-glance insight) */}
-        <section className="bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-3">
+        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-3">
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -1895,7 +1895,7 @@ function ReportScreen({
               At a Glance
             </span>
           </div>
-          <div className="p-4 rounded-lg bg-surface-container-low border border-surface-container-high/30">
+          <div className="lucid-card-sub p-4 rounded-lg bg-surface-container-low border border-surface-container-high/30">
             <p className="font-body-lg text-body-lg font-medium text-on-surface leading-relaxed">
               {quickSummaryText}
             </p>
@@ -1903,7 +1903,7 @@ function ReportScreen({
         </section>
 
         {/* 3. ARTICLE SUMMARY */}
-        <section className="bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -1929,7 +1929,7 @@ function ReportScreen({
         </section>
 
         {/* 4. KEY TAKEAWAYS */}
-        <section className="bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -1949,7 +1949,7 @@ function ReportScreen({
               ? summary.keyTakeaways
               : ["Article content summarized across verification pipelines."]
             ).map((point, idx) => (
-              <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low">
+              <div key={idx} className="lucid-card-sub flex items-start gap-3 p-3 rounded-lg bg-surface-container-low">
                 <div className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 mt-0.5">
                   <MatIcon name="check" size={14} />
                 </div>
@@ -1960,7 +1960,7 @@ function ReportScreen({
         </section>
 
         {/* 5. CLAIM-BY-CLAIM EVIDENCE MATRIX (RAG Architecture) */}
-        <section className="bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -1984,7 +1984,7 @@ function ReportScreen({
                 return (
                   <div
                     key={idx}
-                    className="p-4 rounded-xl bg-surface-container-low flex flex-col gap-3 border border-surface-container-high/40"
+                    className="lucid-card-sub p-4 rounded-xl bg-surface-container-low flex flex-col gap-3 border border-surface-container-high/40"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -2046,7 +2046,7 @@ function ReportScreen({
                               {row.supportingEvidence.map((ev, sIdx) => (
                                 <div
                                   key={sIdx}
-                                  className="p-2.5 rounded-lg bg-surface-container-lowest border border-tertiary/20 text-xs space-y-1 overflow-hidden"
+                                  className="lucid-card-sub p-2.5 rounded-lg bg-surface-container-lowest border border-tertiary/20 text-xs space-y-1 overflow-hidden"
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="font-bold text-on-surface flex items-center gap-1.5 min-w-0">
@@ -2091,7 +2091,7 @@ function ReportScreen({
                               {row.contradictingEvidence.map((ev, cIdx) => (
                                 <div
                                   key={cIdx}
-                                  className="p-2.5 rounded-lg bg-surface-container-lowest border border-error/20 text-xs space-y-1 overflow-hidden"
+                                  className="lucid-card-sub p-2.5 rounded-lg bg-surface-container-lowest border border-error/20 text-xs space-y-1 overflow-hidden"
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="font-bold text-on-surface flex items-center gap-1.5 min-w-0">
@@ -2150,7 +2150,7 @@ function ReportScreen({
                 return (
                   <div
                     key={idx}
-                    className="p-4 rounded-lg bg-surface-container-low flex flex-col gap-1.5 border border-surface-container-high/30"
+                    className="lucid-card-sub p-4 rounded-lg bg-surface-container-low flex flex-col gap-1.5 border border-surface-container-high/30"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-label-xs font-bold text-outline">CLAIM 0{idx + 1}</span>
@@ -2191,7 +2191,7 @@ function ReportScreen({
         </section>
 
         {/* 6. EVIDENCE & MULTI-SOURCE RETRIEVAL */}
-        <section className="bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -2207,7 +2207,7 @@ function ReportScreen({
           </div>
 
           {/* Primary Source Meta */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg bg-surface-container-low border border-surface-container-high/30">
+          <div className="lucid-card-sub grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg bg-surface-container-low border border-surface-container-high/30">
             <div>
               <small className="font-label-xs text-label-xs text-outline uppercase tracking-wider block font-bold">
                 Identified Primary Publisher
@@ -2242,7 +2242,7 @@ function ReportScreen({
           </div>
 
           {/* Source Transparency Block (Requested Format) */}
-          <div className="p-4 rounded-lg bg-surface-container-low border border-surface-container-high/40 text-left space-y-3">
+          <div className="lucid-card-sub p-4 rounded-lg bg-surface-container-low border border-surface-container-high/40 text-left space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0"></span>
@@ -2303,7 +2303,7 @@ function ReportScreen({
                 {result.topSupportingSources.map((src, i) => (
                   <div
                     key={i}
-                    className="p-3.5 rounded-xl bg-surface-container-low border border-tertiary/20 flex flex-col justify-between gap-2 shadow-2xs overflow-hidden"
+                    className="lucid-card-sub p-3.5 rounded-xl bg-surface-container-low border border-tertiary/20 flex flex-col justify-between gap-2 shadow-2xs overflow-hidden"
                   >
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
@@ -2359,7 +2359,7 @@ function ReportScreen({
                 {result.topContradictingSources.map((src, i) => (
                   <div
                     key={i}
-                    className="p-3.5 rounded-xl bg-surface-container-low border border-error/20 flex flex-col justify-between gap-2 shadow-2xs overflow-hidden"
+                    className="lucid-card-sub p-3.5 rounded-xl bg-surface-container-low border border-error/20 flex flex-col justify-between gap-2 shadow-2xs overflow-hidden"
                   >
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
@@ -2452,7 +2452,7 @@ function ReportScreen({
         </section>
 
         {/* 7. GROUNDED VERDICT & REASONING */}
-        <section className="bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -2475,7 +2475,7 @@ function ReportScreen({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg bg-surface-container-low border border-surface-container-high/30">
+          <div className="lucid-card-sub flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg bg-surface-container-low border border-surface-container-high/30">
             <div className="flex items-center gap-3">
               <div
                 className={`w-12 h-12 rounded-full flex items-center justify-center shadow-xs ${
@@ -2554,7 +2554,7 @@ function ReportScreen({
           )}
 
           {/* Grounded Reasoning Panel */}
-          <div className="p-4 rounded-lg bg-surface-container-low space-y-3">
+          <div className="lucid-card-sub p-4 rounded-lg bg-surface-container-low space-y-3">
             <span className="font-label-xs text-label-xs uppercase tracking-wider text-outline font-semibold block">
               Grounded Evidence Reasoning
             </span>
@@ -2600,7 +2600,7 @@ function ReportScreen({
         </section>
 
         {/* SECTION 6: Multi-Factor Scoring Breakdown */}
-        <section className="bg-surface-container rounded-xl p-4 sm:p-6 border border-surface-container-high/60 space-y-4">
+        <section className="lucid-card bg-surface-container rounded-xl p-4 sm:p-6 border border-surface-container-high/60 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-container-high/40 pb-3">
             <div className="flex items-center gap-2">
               <MatIcon name="analytics" size={20} className="text-primary" />
@@ -2624,7 +2624,7 @@ function ReportScreen({
               if (!factor) return null;
               const isNotScored = factor.score === "Not scored" || typeof factor.score === "string";
               return (
-                <div key={key} className="p-3.5 rounded-lg bg-surface-container-low border border-surface-container-high/30 flex flex-col justify-between">
+                <div key={key} className="lucid-card-sub p-3.5 rounded-lg bg-surface-container-low border border-surface-container-high/30 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between gap-1 mb-1.5">
                       <div className="flex items-center gap-1.5 text-on-surface font-semibold text-xs">
