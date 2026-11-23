@@ -18,6 +18,7 @@ from typing import List, Dict, Any, Tuple
 
 from services.semantic_embeddings import get_semantic_engine
 from services.gemini_stance_classifier import get_gemini_stance_classifier
+from services.wikipedia_service import claim_refers_to_relative_or_associate
 
 logger = logging.getLogger("lucid.ranker")
 if not logger.handlers:
@@ -143,6 +144,8 @@ class EvidenceRanker:
 
         # 0. Pre-calculated stance from specialized verification modules (e.g. Wikipedia biographical checks)
         if evidence_item.get("retrievalChannel") in ("Wikipedia REST API", "Wikidata API") and evidence_item.get("stance") in ("support", "contradict"):
+            if evidence_item.get("stance") == "contradict" and ("living person" in str(evidence_item.get("evidenceSnippet", "")).lower() or "no date of death" in str(evidence_item.get("evidenceSnippet", "")).lower()) and claim_refers_to_relative_or_associate(claim_text):
+                return ("neutral", 40)
             return (evidence_item["stance"], 98)
 
         # 1. Fact Check API explicit rating check
@@ -170,23 +173,28 @@ class EvidenceRanker:
         is_resignation_claim = bool(re.search(r'\b(resigned|stepped down|quit|ousted|resignation of)\b', claim_lower))
 
         if is_death_claim or is_arrest_claim or is_resignation_claim:
-            # If the candidate evidence explicitly states the person is living, active, serving, or debunked
-            if any(term in combined for term in [
-                "confirmed living person", "alive and actively", "serves as", "serving as",
-                "death hoax", "false rumor", "false claim that", "is alive", "continues to serve",
-                "attended", "speaks at", "addressed the", "met with", "in office since"
-            ]):
-                return ("contradict", 98)
-            # If it does not explicitly verify the event, it must NEVER be considered supporting
-            if is_death_claim and not any(term in combined for term in [
-                "died at age", "passed away at", "dead at age", "assassinated on", "fatal heart attack",
-                "death was announced", "announced the death", "killed in action"
-            ]):
-                return ("neutral", 40)
-            if is_arrest_claim and not any(term in combined for term in ["arrested by", "taken into custody", "indicted on", "arrest warrant"]):
-                return ("neutral", 40)
-            if is_resignation_claim and not any(term in combined for term in ["tendered resignation", "submitted resignation", "stepped down as"]):
-                return ("neutral", 40)
+            if claim_refers_to_relative_or_associate(claim_text):
+                # When claim refers to a relative or associate, public officeholder activity terms (e.g. 'serves as',
+                # 'speaks at', 'attended') apply to the public figure, NOT the relative. Do not treat as contradict.
+                pass
+            else:
+                # If the candidate evidence explicitly states the person is living, active, serving, or debunked
+                if any(term in combined for term in [
+                    "confirmed living person", "alive and actively", "serves as", "serving as",
+                    "death hoax", "false rumor", "false claim that", "is alive", "continues to serve",
+                    "attended", "speaks at", "addressed the", "met with", "in office since"
+                ]):
+                    return ("contradict", 98)
+                # If it does not explicitly verify the event, it must NEVER be considered supporting
+                if is_death_claim and not any(term in combined for term in [
+                    "died at age", "passed away at", "dead at age", "assassinated on", "fatal heart attack",
+                    "death was announced", "announced the death", "killed in action"
+                ]):
+                    return ("neutral", 40)
+                if is_arrest_claim and not any(term in combined for term in ["arrested by", "taken into custody", "indicted on", "arrest warrant"]):
+                    return ("neutral", 40)
+                if is_resignation_claim and not any(term in combined for term in ["tendered resignation", "submitted resignation", "stepped down as"]):
+                    return ("neutral", 40)
 
         # 3b. Role & Corporate Leadership attribution check
         roles = ["founder", "co-founder", "ceo", "chief executive", "president", "prime minister"]
@@ -453,9 +461,14 @@ class EvidenceRanker:
             wiki_channel = item.get("retrievalChannel") in ("Wikipedia REST API", "Wikidata API")
 
             if wiki_channel and item.get("stance") in ("support", "contradict"):
-                stance = item["stance"]
-                stance_conf = 98
-                stance_reason = item.get("evidenceSnippet", "")
+                if item.get("stance") == "contradict" and ("living person" in str(item.get("evidenceSnippet", "")).lower() or "no date of death" in str(item.get("evidenceSnippet", "")).lower()) and claim_refers_to_relative_or_associate(claim_text):
+                    stance = "neutral"
+                    stance_conf = 40
+                    stance_reason = "Living-person check skipped: claim refers to relative or associate."
+                else:
+                    stance = item["stance"]
+                    stance_conf = 98
+                    stance_reason = item.get("evidenceSnippet", "")
             elif fc_rating and any(neg in fc_rating for neg in NEGATIVE_RATINGS):
                 stance = "contradict"
                 stance_conf = 98

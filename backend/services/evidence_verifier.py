@@ -23,7 +23,7 @@ from typing import List, Dict, Any
 from services.source_reputation import SOURCE_DATABASE
 from services.factcheck_service import query_google_factcheck
 from services.gnews_service import search_gnews, categorize_gnews_articles
-from services.wikipedia_service import get_wikipedia_service
+from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
 
 logger = logging.getLogger("lucid.verifier")
 if not logger.handlers:
@@ -317,26 +317,30 @@ class EvidenceVerificationEngine:
         # -------------------------------------------------------------
         bio_check = self.wikipedia_service.check_biographical_or_encyclopedic_claim(claim_text)
         if bio_check and bio_check.get("isContradicted"):
-            ev = bio_check.get("evidenceItem")
-            if ev:
-                contradicting_sources.append("Wikipedia")
-                snippets.append({
-                    "source": "Wikipedia",
-                    "sourceName": "Wikipedia",
-                    "articleTitle": ev.get("articleTitle", "Wikipedia Reference"),
-                    "publicationDate": ev.get("publicationDate", "Current"),
-                    "sourceTrustScore": 88,
-                    "url": ev.get("url", "https://en.wikipedia.org"),
-                    "matchingClaim": claim_text,
-                    "stance": "contradict",
-                    "snippet": ev.get("evidenceSnippet", bio_check.get("reason", "")),
-                    "trust": 88,
-                    "pointsAssigned": "-25 pts",
-                    "calculationReason": bio_check.get("reason", "Contradicted by encyclopedic record (-25 pts)")
-                })
-                status = "Contradicted"
-                confidence = 98
-                notes = bio_check.get("reason", "Contradicted by evidence.")
+            # Ensure living person contradiction is never emitted if claim refers to a relative or associate
+            if ("living person" in str(bio_check.get("reason", "")).lower() or "no date of death" in str(bio_check.get("reason", "")).lower()) and claim_refers_to_relative_or_associate(claim_text):
+                logger.info(f"Skipping bio_check contradiction in evidence_verifier: claim '{claim_text}' refers to relative or associate.")
+            else:
+                ev = bio_check.get("evidenceItem")
+                if ev:
+                    contradicting_sources.append("Wikipedia")
+                    snippets.append({
+                        "source": "Wikipedia",
+                        "sourceName": "Wikipedia",
+                        "articleTitle": ev.get("articleTitle", "Wikipedia Reference"),
+                        "publicationDate": ev.get("publicationDate", "Current"),
+                        "sourceTrustScore": 88,
+                        "url": ev.get("url", "https://en.wikipedia.org"),
+                        "matchingClaim": claim_text,
+                        "stance": "contradict",
+                        "snippet": ev.get("evidenceSnippet", bio_check.get("reason", "")),
+                        "trust": 88,
+                        "pointsAssigned": "-25 pts",
+                        "calculationReason": bio_check.get("reason", "Contradicted by encyclopedic record (-25 pts)")
+                    })
+                    status = "Contradicted"
+                    confidence = 98
+                    notes = bio_check.get("reason", "Contradicted by evidence.")
 
         # -------------------------------------------------------------
         # 1. Evaluate Google Fact Check API results for this claim

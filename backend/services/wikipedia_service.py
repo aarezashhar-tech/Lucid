@@ -36,6 +36,49 @@ CACHE_TTL_SECONDS = 600  # 10 minutes cache
 API_TIMEOUT = 4  # 4 seconds timeout
 WIKIDATA_TIMEOUT = 2  # 2 seconds max for Wikidata
 
+# Relative / associate keywords to prevent misfiring living-person checks on public figures
+RELATIVE_ASSOCIATE_REGEX = re.compile(
+    r'\b('
+    r'mother|mom|mum|mama|stepmother|'
+    r'father|dad|papa|stepfather|'
+    r'parent|parents|'
+    r'wife|wives|husband|spouse|partner|'
+    r'son|daughter|child|children|kid|kids|stepson|stepdaughter|'
+    r'brother|sister|sibling|siblings|stepbrother|stepsister|'
+    r'uncle|aunt|cousin|cousins|nephew|niece|'
+    r'grandmother|grandfather|grandma|grandpa|grandparent|grandparents|'
+    r'grandson|granddaughter|grandchild|grandchildren|'
+    r'friend|friends|aide|aides|assistant|assistants|advisor|advisors|adviser|advisers|'
+    r'relative|relatives|kin|family|associate|associates|'
+    r'mother-in-law|father-in-law|son-in-law|daughter-in-law|brother-in-law|sister-in-law|in-law|in-laws'
+    r')(?:s|\'s)?\b',
+    re.IGNORECASE
+)
+
+
+def claim_refers_to_relative_or_associate(claim_text: str, entity_name: Optional[str] = None) -> bool:
+    """
+    Checks if a claim refers to a relative or associate of a person
+    (e.g., 'mother', 'father', 'wife', 'husband', 'son', 'daughter', 'brother', 'sister',
+    'uncle', 'aunt', 'friend', 'aide', 'relative', or possessive forms like "'s mother" / "of ... mother").
+
+    If entity_name is provided (e.g. "Mother Teresa"), verifies that the relative term is not
+    merely an intrinsic part of the entity's own canonical name.
+    """
+    if not claim_text:
+        return False
+
+    matches = RELATIVE_ASSOCIATE_REGEX.findall(claim_text)
+    if not matches:
+        return False
+
+    if entity_name:
+        entity_tokens = set(re.findall(r'\b[a-zA-Z]+\b', entity_name.lower()))
+        has_external_rel = any(m.lower() not in entity_tokens for m in matches)
+        return has_external_rel
+
+    return True
+
 
 class WikipediaCache:
     """Thread-safe in-memory cache with time-to-live expiration."""
@@ -284,6 +327,15 @@ class WikipediaService:
                     is_officeholder = bool(
                         re.search(r'\b(prime minister|president|minister|governor|monarch|king|queen|chancellor|secretary|chief executive|ceo|serving as|since \d{4})\b', description + " " + extract, re.I)
                     )
+
+                    # CRITICAL FIX: If claim refers to a relative or associate (e.g., mother, father, wife, son, aide),
+                    # do NOT emit a living-person contradiction for a public figure who is not that relative.
+                    if claim_refers_to_relative_or_associate(claim_text, title):
+                        logger.info(
+                            f"Skipping living-person contradiction for entity '{title}': "
+                            f"claim '{claim_text}' refers to a relative or associate."
+                        )
+                        continue
 
                     if is_death_claim and is_living:
                         event_type = "death"
