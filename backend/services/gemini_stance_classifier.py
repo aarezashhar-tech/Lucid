@@ -1,0 +1,219 @@
+"""
+Gemini Evidence Stance Classifier Service
+Uses Google GenAI SDK (gemini-2.5-flash with resilient fallback) strictly as a stance classifier
+that compares a single claim against retrieved evidence snippets (title + snippet + date).
+
+Structured Output Schema:
+- stance: "support" | "contradict" | "neutral"
+- confidence: int (0 - 100)
+- reason: 1-sentence explanation
+
+Handles:
+- Subject/object inversions (e.g., "A defeated B" vs "B defeated A")
+- Wrong locations, capitals, years, and dates
+- Comparative and superlative swaps ("smallest" vs "largest")
+- Debunked myths and viral hoaxes
+- Keyword overlap trap: Never marks "support" simply because words match
+- Graceful fallback: Falls back to heuristic stance ranker if API key is missing,
+  rate-limited, offline, or errors out.
+"""
+
+import os
+import json
+import logging
+from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
+
+# Ensure environment variables are loaded
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
+
+logger = logging.getLogger("lucid.gemini_stance")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] [GeminiStance] %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+# Try importing google.genai
+try:
+    from google import genai
+    from google.genai import types
+    from google.genai.errors import APIError, ClientError
+    GENAI_AVAILABLE = True
+except ImportError:
+    GENAI_AVAILABLE = False
+    logger.warning("google-genai package not found. Stance classifier will use heuristic fallback.")
+
+
+class GeminiStanceClassifier:
+    """
+    Evidence stance classifier powered by Google Gemini (gemini-2.5-flash).
+    Batches candidate snippets for a single claim into a single prompt for speed and consistency.
+    """
+
+    def __init__(self):
+        self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        self.client = None
+        self.preferred_model = os.getenv("GEMINI_STANCE_MODEL", "gemini-2.5-flash")
+        self.active_model = self.preferred_model
+        self._disabled = False
+
+        if GENAI_AVAILABLE and self.api_key:
+            try:
+                self.client = genai.Client(api_key=self.api_key)
+                logger.info(f"Initialized Gemini Client for stance classification (Target Model: {self.preferred_model}).")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Gemini Client: {e}. Falling back to heuristic ranker.")
+                self.client = None
+        else:
+            if not self.api_key:
+                logger.info("GEMINI_API_KEY not configured. Stance classifier will use heuristic fallback.")
+
+    def is_available(self) -> bool:
+        """Returns True if Gemini client is initialized and not permanently disabled."""
+        return bool(self.client and self.api_key and not self._disabled)
+
+    def classify_candidates_for_claim(
+        self,
+        claim_text: str,
+        candidate_items: List[Dict[str, Any]],
+        max_candidates: int = 15
+    ) -> Optional[Dict[int, Dict[str, Any]]]:
+        """
+        Classifies the stance of all candidate evidence items for a single claim in a single batched call.
+
+        Returns:
+            Dict[int, Dict[str, Any]] mapping item index (0..N-1) to:
+            {
+                "stance": "support" | "contradict" | "neutral",
+                "confidence": int (0-100),
+                "reason": str (1 sentence)
+            }
+            OR None if Gemini is unavailable or errors out (triggers heuristic fallback).
+        """
+        if not self.is_available() or not candidate_items or not claim_text.strip():
+            return None
+
+        # Format candidates into a clean, compact payload for Gemini
+        items_payload = []
+        for idx, item in enumerate(candidate_items[:max_candidates]):
+            title = (item.get("articleTitle") or "").strip()
+            snippet = (item.get("evidenceSnippet") or item.get("description") or "").strip()
+            # Truncate snippet to 350 chars to keep token count low and latency fast
+            snippet = snippet[:350]
+            date_str = (item.get("publicationDate") or item.get("publicationTime") or "").strip()[:10]
+            publisher = (item.get("publisher") or item.get("sourceName") or "").strip()
+
+            item_dict = {
+                "id": idx,
+                "publisher": publisher,
+                "date": date_str,
+                "title": title,
+                "snippet": snippet
+            }
+            fc_rating = (item.get("factCheckRating") or "").strip()
+            if fc_rating:
+                item_dict["factCheckRating"] = fc_rating
+            items_payload.append(item_dict)
+
+        if not items_payload:
+            return None
+
+        prompt = (
+            "You are an expert fact-checking evidence stance classifier.\n"
+            "Compare the single claim below against each retrieved evidence snippet.\n"
+            "Determine whether each evidence snippet supports, contradicts, or is neutral towards the claim.\n\n"
+            f'Claim: "{claim_text}"\n\n'
+            "Retrieved Evidence Snippets:\n"
+            f"{json.dumps(items_payload, indent=2)}\n\n"
+            "CRITICAL CLASSIFICATION RULES:\n"
+            "1. SUBJECT/OBJECT INVERSION: If the claim says 'A defeated B' but the evidence says 'B defeated A' (or vice-versa), the stance is CONTRADICT.\n"
+            "2. CONFLICTING LOCATIONS, CAPITALS, YEARS & METRICS: If the claim asserts an incorrect capital city, location, year, date, number, or officeholder that directly CONFLICTS with the evidence (e.g. 'Sydney is the capital of Australia' vs evidence showing Canberra is capital; or 'cut rates by 5%' vs evidence showing 'raised rates by 25 bps'), the stance is CONTRADICT. However, mere omission of non-conflicting background context or headquarters cities (e.g., 'in Washington' for the Federal Reserve) does not contradict or negate support.\n"
+            "3. COMPARATIVE & SUPERLATIVE SWAPS: If the claim asserts 'smallest' and evidence says 'largest' (or vice-versa), the stance is CONTRADICT.\n"
+            "4. DEBUNKED MYTHS & FACT-CHECK RATINGS: If the evidence debunks, refutes, or clarifies a known falsehood or myth (e.g. vaccines cause autism, microchips in drinking water), OR if the snippet has an IFCN Fact Check Rating such as 'False' or 'Pants on Fire', the stance is CONTRADICT.\n"
+            "5. NO KEYWORD OVERLAP SUPPORT: Never mark 'support' just because words match or the article is about the same general topic/entities. If the evidence is merely on the same general topic without confirming the specific assertion (e.g. an article about Latin American air pollution when the claim is about WHO/European utilities), mark 'neutral'.\n"
+            "6. SUPPORT REQUIREMENT: Mark 'support' if the evidence affirmatively confirms the core factual action, event, or metric of the claim.\n\n"
+            "Output must be a JSON array of objects with keys:\n"
+            "- id: integer matching the snippet id\n"
+            "- stance: exactly one of 'support', 'contradict', or 'neutral'\n"
+            "- confidence: integer from 0 to 100\n"
+            "- reason: exactly 1 clear sentence explaining why the evidence supports, contradicts, or is neutral towards the claim."
+        )
+
+        # Try active model, then fallback models if 404 (model retired) or temporary error
+        models_to_try = [self.active_model]
+        for fallback in ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]:
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
+
+        for model_name in models_to_try:
+            try:
+                config = types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.0
+                )
+                response = self.client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=config
+                )
+
+                if model_name != self.active_model:
+                    logger.info(f"Updated active Gemini stance model from {self.active_model} to {model_name}.")
+                    self.active_model = model_name
+
+                raw_text = response.text.strip()
+                parsed = json.loads(raw_text)
+
+                if isinstance(parsed, dict) and "items" in parsed:
+                    parsed = parsed["items"]
+                elif isinstance(parsed, dict) and "results" in parsed:
+                    parsed = parsed["results"]
+
+                if not isinstance(parsed, list):
+                    logger.warning(f"Unexpected response structure from Gemini: {raw_text[:200]}")
+                    return None
+
+                results: Dict[int, Dict[str, Any]] = {}
+                for obj in parsed:
+                    item_id = obj.get("id")
+                    stance = str(obj.get("stance", "neutral")).lower().strip()
+                    if stance not in ("support", "contradict", "neutral"):
+                        stance = "neutral"
+                    conf = int(obj.get("confidence", 80))
+                    conf = max(0, min(100, conf))
+                    reason = str(obj.get("reason", "")).strip()
+
+                    if isinstance(item_id, int):
+                        results[item_id] = {
+                            "stance": stance,
+                            "confidence": conf,
+                            "reason": reason
+                        }
+
+                logger.info(f"Gemini stance classification succeeded for claim '{claim_text[:45]}...' across {len(results)} items (Model: {model_name}).")
+                return results
+
+            except ClientError as ce:
+                err_str = str(ce)
+                logger.warning(f"Gemini model '{model_name}' returned ClientError ({err_str[:120]}). Trying next fallback model...")
+                continue
+            except Exception as e:
+                err_str = str(e)
+                logger.warning(f"Gemini stance classification error with model '{model_name}': ({err_str[:120]}). Trying next fallback model...")
+                continue
+
+        return None
+
+
+# Global singleton instance
+_gemini_stance_classifier_instance: Optional[GeminiStanceClassifier] = None
+
+
+def get_gemini_stance_classifier() -> GeminiStanceClassifier:
+    """Returns the singleton instance of GeminiStanceClassifier."""
+    global _gemini_stance_classifier_instance
+    if _gemini_stance_classifier_instance is None:
+        _gemini_stance_classifier_instance = GeminiStanceClassifier()
+    return _gemini_stance_classifier_instance
