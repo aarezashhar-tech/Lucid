@@ -2,7 +2,6 @@ import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
-  OAuthProvider,
   signInWithPopup,
   signOut as fbSignOut,
   Auth,
@@ -41,11 +40,6 @@ export const auth = authInstance;
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
-
-// Microsoft OAuth Provider using Microsoft Entra / Microsoft Account
-export const microsoftProvider = new OAuthProvider("microsoft.com");
-microsoftProvider.setCustomParameters({ prompt: "select_account" });
-microsoftProvider.addScope("User.Read");
 
 export interface AuthSuccessUser {
   name: string;
@@ -95,45 +89,6 @@ export async function signInWithGoogle(): Promise<AuthResult> {
       };
     }
     return { error: err.message || "Failed to sign in with Google." };
-  }
-}
-
-/**
- * Initiates Microsoft OAuth Popup via Firebase Auth
- */
-export async function signInWithMicrosoft(): Promise<AuthResult> {
-  if (!isFirebaseConfigured || !auth) {
-    return {
-      error:
-        "OAuth is not configured. Please set the VITE_FIREBASE_* environment variables in Vercel or .env.",
-    };
-  }
-
-  try {
-    const result = await signInWithPopup(auth, microsoftProvider);
-    const fbUser = result.user;
-    return {
-      user: {
-        name: fbUser.displayName || fbUser.email?.split("@")[0] || "Microsoft User",
-        email: fbUser.email || "",
-        isGuest: false,
-        avatar: fbUser.photoURL || undefined,
-      },
-    };
-  } catch (err: any) {
-    if (err.code === "auth/popup-closed-by-user") {
-      return { error: "Microsoft sign-in popup was closed before completing." };
-    }
-    if (err.code === "auth/popup-blocked") {
-      return { error: "Sign-in popup was blocked by browser. Please allow popups for this site." };
-    }
-    if (err.code === "auth/unauthorized-domain") {
-      return {
-        error:
-          "This domain is not authorized in Firebase Console. Add your Vercel or local URL to Firebase Auth > Settings > Authorized Domains.",
-      };
-    }
-    return { error: err.message || "Failed to sign in with Microsoft." };
   }
 }
 

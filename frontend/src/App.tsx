@@ -1,7 +1,6 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import {
   signInWithGoogle,
-  signInWithMicrosoft,
   signOutFirebase,
   isFirebaseConfigured,
 } from "./firebase";
@@ -519,7 +518,7 @@ function WelcomeScreen({
 }) {
   const [email, setEmail] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isAuthenticating, setIsAuthenticating] = useState<"google" | "microsoft" | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState<"google" | null>(null);
 
   const handleGoogleLogin = async () => {
     setAuthError(null);
@@ -539,29 +538,6 @@ function WelcomeScreen({
       }
     } catch (err: any) {
       setAuthError(err?.message || "Google sign-in failed.");
-    } finally {
-      setIsAuthenticating(null);
-    }
-  };
-
-  const handleMicrosoftLogin = async () => {
-    setAuthError(null);
-    if (!isFirebaseConfigured) {
-      setAuthError(
-        "OAuth is not configured yet. Please configure the Firebase environment variables (VITE_FIREBASE_*) in Vercel or your local .env file."
-      );
-      return;
-    }
-    setIsAuthenticating("microsoft");
-    try {
-      const res = await signInWithMicrosoft();
-      if (res.user) {
-        onLogin(res.user);
-      } else if (res.error) {
-        setAuthError(res.error);
-      }
-    } catch (err: any) {
-      setAuthError(err?.message || "Microsoft sign-in failed.");
     } finally {
       setIsAuthenticating(null);
     }
@@ -612,25 +588,6 @@ function WelcomeScreen({
               </svg>
             )}
             <span>{isAuthenticating === "google" ? "Signing in..." : "Continue with Google"}</span>
-          </button>
-
-          <button
-            onClick={handleMicrosoftLogin}
-            disabled={isAuthenticating !== null}
-            className="w-full min-h-[44px] flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-surface-container-high hover:bg-surface-container-low transition-all font-label-md text-label-md text-on-surface font-medium cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            type="button"
-          >
-            {isAuthenticating === "microsoft" ? (
-              <MatIcon name="progress_activity" size={18} className="animate-spin text-primary" />
-            ) : (
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 23 23">
-                <path fill="#f35325" d="M1 1h10v10H1z" />
-                <path fill="#81bc06" d="M12 1h10v10H12z" />
-                <path fill="#05a6f0" d="M1 12h10v10H1z" />
-                <path fill="#ffba08" d="M12 12h10v10H12z" />
-              </svg>
-            )}
-            <span>{isAuthenticating === "microsoft" ? "Signing in..." : "Continue with Microsoft"}</span>
           </button>
         </div>
 
@@ -704,7 +661,7 @@ function AuthModal({
 }) {
   const [email, setEmail] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isAuthenticating, setIsAuthenticating] = useState<"google" | "microsoft" | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState<"google" | null>(null);
 
   if (!isOpen) return null;
 
@@ -726,29 +683,6 @@ function AuthModal({
       }
     } catch (err: any) {
       setAuthError(err?.message || "Google sign-in failed.");
-    } finally {
-      setIsAuthenticating(null);
-    }
-  };
-
-  const handleMicrosoftLogin = async () => {
-    setAuthError(null);
-    if (!isFirebaseConfigured) {
-      setAuthError(
-        "OAuth is not configured yet. Please configure the Firebase environment variables (VITE_FIREBASE_*) in Vercel or your local .env file."
-      );
-      return;
-    }
-    setIsAuthenticating("microsoft");
-    try {
-      const res = await signInWithMicrosoft();
-      if (res.user) {
-        onLogin(res.user);
-      } else if (res.error) {
-        setAuthError(res.error);
-      }
-    } catch (err: any) {
-      setAuthError(err?.message || "Microsoft sign-in failed.");
     } finally {
       setIsAuthenticating(null);
     }
@@ -808,25 +742,6 @@ function AuthModal({
               </svg>
             )}
             <span>{isAuthenticating === "google" ? "Signing in..." : "Continue with Google"}</span>
-          </button>
-
-          <button
-            onClick={handleMicrosoftLogin}
-            disabled={isAuthenticating !== null}
-            className="w-full min-h-[44px] flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-surface-container-high hover:bg-surface-container-low transition-all font-label-md text-label-md text-on-surface font-medium cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            type="button"
-          >
-            {isAuthenticating === "microsoft" ? (
-              <MatIcon name="progress_activity" size={18} className="animate-spin text-primary" />
-            ) : (
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 23 23">
-                <path fill="#f35325" d="M1 1h10v10H1z" />
-                <path fill="#81bc06" d="M12 1h10v10H12z" />
-                <path fill="#05a6f0" d="M1 12h10v10H1z" />
-                <path fill="#ffba08" d="M12 12h10v10H12z" />
-              </svg>
-            )}
-            <span>{isAuthenticating === "microsoft" ? "Signing in..." : "Continue with Microsoft"}</span>
           </button>
         </div>
 

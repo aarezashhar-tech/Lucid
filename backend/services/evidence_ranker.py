@@ -17,6 +17,7 @@ from datetime import datetime, date
 from typing import List, Dict, Any, Tuple
 
 from services.semantic_embeddings import get_semantic_engine
+from services.gemini_stance_classifier import get_gemini_stance_classifier
 
 logger = logging.getLogger("lucid.ranker")
 if not logger.handlers:
@@ -74,6 +75,7 @@ class EvidenceRanker:
 
     def __init__(self):
         self.semantic_engine = get_semantic_engine()
+        self.gemini_classifier = get_gemini_stance_classifier()
 
     def _calculate_recency_score(self, pub_date_str: str) -> int:
         """Computes recency score (0-100) based on publication date."""
@@ -192,7 +194,7 @@ class EvidenceRanker:
         if has_role_claim:
             if any(term in combined for term in ["founded by", "founded in", "chief executive of", "ceo of", "president and ceo"]):
                 is_match, reason = self._check_specific_claim_match(claim_text, combined)
-                if not is_match and sim_score >= 0.35:
+                if not is_match and "conflicting organization" in reason.lower() and sim_score >= 0.35:
                     return ("contradict", 95)
 
         # 3c. Directional Negation Polarity Check:
@@ -202,6 +204,15 @@ class EvidenceRanker:
                 return ("contradict", 95)
             if "is not round" in claim_lower and "oblate spheroid" not in claim_lower and ("round" in combined or "sphere" in combined):
                 return ("contradict", 90)
+
+        # Check if candidate evidence explicitly refutes/negates an affirmative claim:
+        ev_negation_terms = [
+            "refused to endorse", "declined to endorse", "did not endorse", "never endorsed",
+            "denied endorsing", "no endorsement", "false that", "debunked", "hoax",
+            "falsely claimed", "falsely claims", "baseless claim"
+        ]
+        if any(term in combined for term in ev_negation_terms):
+            return ("contradict", 95)
 
         # 4. Strict NLP Stance: SUPPORTS vs RELATED vs NEUTRAL
         # Requirement 2: A headline counts as "Supported" only if it matches the specific claim (same entities, numbers, or event).
@@ -423,9 +434,13 @@ class EvidenceRanker:
                 "neutralCount": 0
             }
 
+        # 1. Ask Gemini stance classifier first (if available and API key present)
+        # Batches candidate items for this single claim to minimize latency
+        gemini_stances = self.gemini_classifier.classify_candidates_for_claim(claim_text, candidate_items, max_candidates=15)
+
         evaluated: List[Dict[str, Any]] = []
 
-        for item in candidate_items:
+        for idx, item in enumerate(candidate_items):
             title = item.get("articleTitle", "")
             snippet = item.get("evidenceSnippet", "")
             doc_text = f"{title}. {snippet}".strip()
@@ -433,8 +448,38 @@ class EvidenceRanker:
             # 1. Semantic embedding similarity
             sim = self.semantic_engine.compute_similarity(claim_text, doc_text)
             
-            # 2. Stance classification
-            stance, stance_conf = self.classify_stance(claim_text, item, sim)
+            # 2. Check authoritative fact-check ratings or Wikipedia derived checks first
+            fc_rating = str(item.get("factCheckRating", "")).lower().strip()
+            wiki_channel = item.get("retrievalChannel") in ("Wikipedia REST API", "Wikidata API")
+
+            if wiki_channel and item.get("stance") in ("support", "contradict"):
+                stance = item["stance"]
+                stance_conf = 98
+                stance_reason = item.get("evidenceSnippet", "")
+            elif fc_rating and any(neg in fc_rating for neg in NEGATIVE_RATINGS):
+                stance = "contradict"
+                stance_conf = 98
+                stance_reason = f"Fact-checked as '{item.get('factCheckRating')}' by {item.get('publisher', 'fact-checker')}."
+            elif fc_rating and any(pos in fc_rating for pos in POSITIVE_RATINGS):
+                stance = "support"
+                stance_conf = 95
+                stance_reason = f"Fact-checked as '{item.get('factCheckRating')}' by {item.get('publisher', 'fact-checker')}."
+            elif gemini_stances is not None and idx in gemini_stances:
+                gemini_result = gemini_stances[idx]
+                g_stance = gemini_result.get("stance", "neutral")
+                stance_conf = gemini_result.get("confidence", 80)
+                stance_reason = gemini_result.get("reason", "")
+                if g_stance in ("support", "contradict"):
+                    stance = g_stance
+                else:  # neutral
+                    # If semantic similarity is high (>= 0.35), categorize as "related" topic coverage
+                    if sim >= 0.35:
+                        stance = "related"
+                    else:
+                        stance = "neutral"
+            else:
+                stance, stance_conf = self.classify_stance(claim_text, item, sim)
+                stance_reason = ""
 
             # 3. Trust score (neutral 50 baseline for unlisted sources)
             trust = item.get("sourceTrustScore", 50)
@@ -444,10 +489,10 @@ class EvidenceRanker:
 
             # Composite ranking score (0 - 100)
             composite_score = int(round(
-                (sim * 100.0) * 0.45 +
-                trust * 0.35 +
+                (sim * 100.0) * 0.40 +
+                trust * 0.30 +
                 recency * 0.10 +
-                stance_conf * 0.10
+                stance_conf * 0.20
             ))
 
             ranked_item = dict(item)
@@ -457,15 +502,24 @@ class EvidenceRanker:
                 "compositeRankScore": composite_score,
                 "stance": stance,
                 "stanceConfidence": stance_conf,
+                "stanceReason": stance_reason,
                 "matchingClaim": claim_text
             })
             evaluated.append(ranked_item)
 
         # Sort each stance bucket by composite score descending
-        supporting = [it for it in evaluated if it["stance"] == "support" and it["relevanceScore"] >= 30]
-        contradicting = [it for it in evaluated if it["stance"] == "contradict" and (it["relevanceScore"] >= 20 or "Contradicted by" in it.get("evidenceSnippet", "") or "[Derived check]" in it.get("evidenceSnippet", ""))]
-        related = [it for it in evaluated if it["stance"] == "related"]
-        neutral = [it for it in evaluated if it["stance"] == "neutral"]
+        if gemini_stances is not None:
+            # Gemini-classified buckets
+            supporting = [it for it in evaluated if it["stance"] == "support"]
+            contradicting = [it for it in evaluated if it["stance"] == "contradict"]
+            related = [it for it in evaluated if it["stance"] == "related"]
+            neutral = [it for it in evaluated if it["stance"] == "neutral"]
+        else:
+            # Heuristic fallback buckets
+            supporting = [it for it in evaluated if it["stance"] == "support" and it["relevanceScore"] >= 30]
+            contradicting = [it for it in evaluated if it["stance"] == "contradict" and (it["relevanceScore"] >= 20 or "Contradicted by" in it.get("evidenceSnippet", "") or "[Derived check]" in it.get("evidenceSnippet", ""))]
+            related = [it for it in evaluated if it["stance"] == "related"]
+            neutral = [it for it in evaluated if it["stance"] == "neutral"]
 
         supporting.sort(key=lambda x: (x["compositeRankScore"], x["relevanceScore"]), reverse=True)
         contradicting.sort(key=lambda x: (x["compositeRankScore"], x["relevanceScore"]), reverse=True)
@@ -539,20 +593,32 @@ class EvidenceRanker:
 
             # Determine claim status based on grounded evidence
             if contra and len(contra) >= 1 and (not supp or contra[0]["compositeRankScore"] > (supp[0]["compositeRankScore"] if supp else 0)):
-                if any(it.get("sourceCategory") == "IFCN Fact Checker" for it in contra):
+                if any(it.get("sourceCategory") == "IFCN Fact Checker" for it in contra) or (len(supp) == 0 and len(contra) >= 1):
                     status = "False"
                 else:
                     status = "Contradicted"
                 conf = max(75, min(98, contra[0]["compositeRankScore"]))
-                summary = f"Claim contradicted by {len(contra)} source(s), including {contra[0]['publisher']}."
+                reason_detail = contra[0].get("stanceReason")
+                if reason_detail:
+                    summary = f"Claim contradicted by {contra[0]['publisher']}: {reason_detail}"
+                else:
+                    summary = f"Claim contradicted by {len(contra)} source(s), including {contra[0]['publisher']}."
             elif len(supp) >= 2:
                 status = "Verified"
                 conf = max(80, min(98, int(round((supp[0]["compositeRankScore"] + supp[1]["compositeRankScore"]) / 2))))
-                summary = f"Corroborated across multiple independent sources: {supp[0]['publisher']} and {supp[1]['publisher']}."
+                reason_detail = supp[0].get("stanceReason")
+                if reason_detail:
+                    summary = f"Corroborated by {supp[0]['publisher']} ({reason_detail}) and independent sources."
+                else:
+                    summary = f"Corroborated across multiple independent sources: {supp[0]['publisher']} and {supp[1]['publisher']}."
             elif len(supp) == 1:
                 status = "Supported"
                 conf = max(70, min(92, supp[0]["compositeRankScore"]))
-                summary = f"Supported by reporting from {supp[0]['publisher']}."
+                reason_detail = supp[0].get("stanceReason")
+                if reason_detail:
+                    summary = f"Supported by {supp[0]['publisher']}: {reason_detail}"
+                else:
+                    summary = f"Supported by reporting from {supp[0]['publisher']}."
             elif related:
                 status = "Unverified"
                 conf = 0

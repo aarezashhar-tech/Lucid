@@ -659,7 +659,13 @@ class RAGRetrievalEngine:
         canon_results = self._fetch_canonical_wire_archives(claim_text)
         if canon_results:
             self.session_queried_sources["Canonical Wire Archives"] = self.session_queried_sources.get("Canonical Wire Archives", 0) + len(canon_results)
-            add_candidates(canon_results)
+            for cr in reversed(canon_results):
+                u = cr.get("url", "").strip().lower()
+                title = cr.get("articleTitle", "").strip().lower()
+                key = u or title
+                if key and key not in seen_urls:
+                    seen_urls.add(key)
+                    all_candidates.insert(0, cr)
 
         logger.info(f"RAG Retrieval for claim '{claim_text[:60]}...': found {len(all_candidates)} raw candidate sources.")
         return all_candidates[:max_items]
