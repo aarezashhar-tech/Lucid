@@ -192,6 +192,45 @@ ISOLATED_TOPIC_WORDS = {
 }
 
 
+def split_compound_claim(sentence: str) -> List[str]:
+    """
+    Requirement 4: Splits compound claims connected by conjunctions ('and', 'while', 'but', etc.)
+    into independent, verifiable sub-claims.
+    Only splits when both parts constitute independent factual propositions.
+    """
+    if not sentence or not isinstance(sentence, str):
+        return [sentence] if sentence else []
+
+    s_clean = sentence.strip()
+    delims = [', and ', ', but ', ', while ', '; ', ' while ', ' whereas ', ' and ', ' but ']
+    for d in delims:
+        if d in s_clean:
+            parts = s_clean.split(d, 1)
+            p1 = parts[0].strip()
+            p2 = parts[1].strip()
+            # Both parts must have at least 3 words to avoid splitting compound nouns or lists
+            if len(p1.split()) >= 3 and len(p2.split()) >= 2:
+                v1 = bool(VERB_PATTERN.search(p1))
+                v2 = bool(VERB_PATTERN.search(p2))
+                if v1 and v2:
+                    words2 = p2.split()
+                    # If p2 starts with a verb or auxiliary, carry over the leading subject of p1
+                    if VERB_PATTERN.match(words2[0]) or words2[0].lower() in ('also', 'then'):
+                        words1 = p1.split()
+                        subj_words = []
+                        for w in words1:
+                            if VERB_PATTERN.match(w):
+                                break
+                            subj_words.append(w)
+                        if subj_words:
+                            subj_prefix = ' '.join(subj_words)
+                            p2 = f'{subj_prefix} {p2}'
+                    if p2 and p2[0].islower():
+                        p2 = p2[0].upper() + p2[1:]
+                    return [p1, p2]
+    return [s_clean]
+
+
 class ClaimExtractionEngine:
     """
     Decomposes articles into verified factual propositions.
@@ -397,12 +436,18 @@ class ClaimExtractionEngine:
         if not cleaned_text.strip():
             cleaned_text = article_text.strip()
 
-        # Step 2: Sentence segmentation with factual claim validation
-        candidate_sentences = self.split_into_sentences(cleaned_text)
+        # Step 2: Sentence segmentation with compound claim splitting (Requirement 4)
+        raw_sentences = self.split_into_sentences(cleaned_text)
+        candidate_sentences = []
+        for s in raw_sentences:
+            sub_splits = split_compound_claim(s)
+            for sub in sub_splits:
+                candidate_sentences.append((sub, len(sub_splits) > 1, s))
+
         claims: List[Dict[str, Any]] = []
         seen_claims = set()
 
-        for idx, sentence in enumerate(candidate_sentences):
+        for idx, (sentence, is_sub, parent_sent) in enumerate(candidate_sentences):
             norm = sentence.lower().strip()
             if norm in seen_claims:
                 continue
@@ -426,6 +471,8 @@ class ClaimExtractionEngine:
                 "numbers": signals["numbersFound"],
                 "isTestableProposition": False if is_opinion else signals["hasFactualMarker"],
                 "status": "Opinion / Subjective" if is_opinion else "Unverified",
+                "isSubClaim": is_sub,
+                "parentClaim": parent_sent if is_sub else None,
                 "supportingSources": [],
                 "contradictingSources": [],
                 "supportingEvidenceCount": 0,
@@ -450,26 +497,30 @@ class ClaimExtractionEngine:
                 if self.is_valid_factual_claim(cand_single):
                     cand_to_test = cand_single
 
-            if self.is_valid_factual_claim(cand_to_test) or (len(cand_to_test.split()) >= 3 and not any(re.search(pat, cand_to_test, re.IGNORECASE) for pat in UI_NOISE_PATTERNS)):
-                norm_cand = normalize_claim_text(cand_to_test)
-                signals = self.extract_entities_and_signals(norm_cand)
-                claims.append({
-                    "id": "claim-1",
-                    "claimNumber": 1,
-                    "claim": norm_cand,
-                    "claimType": default_claim_type,
-                    "genre": article_type,
-                    "entities": signals["entities"],
-                    "numbers": signals["numbersFound"],
-                    "isTestableProposition": True,
-                    "status": "Unverified",
-                    "supportingSources": [],
-                    "contradictingSources": [],
-                    "supportingEvidenceCount": 0,
-                    "contradictingEvidenceCount": 0,
-                    "confidence": 0,
-                    "analysisNotes": ""
-                })
+            sub_candidates = split_compound_claim(cand_to_test)
+            for sub_cand in sub_candidates:
+                if self.is_valid_factual_claim(sub_cand) or (len(sub_cand.split()) >= 3 and not any(re.search(pat, sub_cand, re.IGNORECASE) for pat in UI_NOISE_PATTERNS)):
+                    norm_cand = normalize_claim_text(sub_cand)
+                    signals = self.extract_entities_and_signals(norm_cand)
+                    claims.append({
+                        "id": f"claim-{len(claims) + 1}",
+                        "claimNumber": len(claims) + 1,
+                        "claim": norm_cand,
+                        "claimType": default_claim_type,
+                        "genre": article_type,
+                        "entities": signals["entities"],
+                        "numbers": signals["numbersFound"],
+                        "isTestableProposition": True,
+                        "status": "Unverified",
+                        "isSubClaim": len(sub_candidates) > 1,
+                        "parentClaim": cand_to_test if len(sub_candidates) > 1 else None,
+                        "supportingSources": [],
+                        "contradictingSources": [],
+                        "supportingEvidenceCount": 0,
+                        "contradictingEvidenceCount": 0,
+                        "confidence": 0,
+                        "analysisNotes": ""
+                    })
 
         return claims
 

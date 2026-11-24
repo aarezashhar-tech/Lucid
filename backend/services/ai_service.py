@@ -21,6 +21,7 @@ from services.rag_retriever import get_rag_retriever
 from services.evidence_ranker import get_evidence_ranker
 from services.grounded_reasoner import get_grounded_reasoner
 from services.wikipedia_service import get_wikipedia_service
+from utils.url_extractor import is_real_article_url
 
 logger = logging.getLogger("lucid.ai_service")
 if not logger.handlers:
@@ -397,6 +398,10 @@ class VerificationEngine:
             if not any((vc.get("url") or vc.get("articleTitle")) == (tc.get("url") or tc.get("articleTitle")) for tc in top_contradicting):
                 top_contradicting.append(vc)
 
+        # Requirement 3: Only accept sources with a real article URL (not a homepage or section page like /technology)
+        top_supporting = [s for s in top_supporting if is_real_article_url(s.get("url", ""))]
+        top_contradicting = [c for c in top_contradicting if is_real_article_url(c.get("url", ""))]
+
         supp_count = len(top_supporting)
         contra_count = len(top_contradicting)
         evidence_results["supportingEvidenceCount"] = supp_count
@@ -472,7 +477,9 @@ class VerificationEngine:
             article_type=article_type,
             source_quality_assessment=source_quality_assessment,
             source_tier=source_data.get("tier", ""),
-            source_category=source_data.get("category", "")
+            source_category=source_data.get("category", ""),
+            top_supporting=top_supporting,
+            top_contradicting=top_contradicting
         )
 
         final_verdict = verdict_results["verdict"]
@@ -480,15 +487,16 @@ class VerificationEngine:
         risk_level = verdict_results["riskLevel"]
         summary_reason = verdict_results["summaryReason"]
 
-        # Ensure conclusively false / contradicted claims receive standard FALSE verdict and low score (Task C)
-        # Never override Satire or Opinion verdicts
-        if final_verdict not in ("Satire", "Opinion - not fact-checked") and (final_verdict == "KNOWN FALSE" or (contra_count >= 1 and supp_count == 0)):
-            final_verdict = "FALSE"
-            if isinstance(final_trust_score, (int, float)):
-                final_trust_score = min(final_trust_score, 12)
-            risk_level = "CRITICAL"
-            if contra_count >= 1 and supp_count == 0:
-                summary_reason = f"Conclusively disproven. Contradicted by authoritative evidence ({contra_count} contradicting record(s))."
+        # Ensure conclusively false / contradicted claims receive standard FALSE verdict and low score
+        # Never override Satire, Opinion, or NEEDS REVIEW verdicts (Requirement 4)
+        if final_verdict not in ("Satire", "Opinion - not fact-checked", "NEEDS REVIEW"):
+            if final_verdict in ("KNOWN FALSE", "FALSE"):
+                final_verdict = "FALSE"
+                if isinstance(final_trust_score, (int, float)):
+                    final_trust_score = min(final_trust_score, 12)
+                risk_level = "CRITICAL"
+                if contra_count >= 1 and supp_count == 0:
+                    summary_reason = f"Conclusively disproven. Contradicted by authoritative evidence ({contra_count} contradicting record(s))."
 
         # -------------------------------------------------------------
         # STEP 6b (RAG): Grounded Reasoning Synthesis
@@ -615,6 +623,7 @@ class VerificationEngine:
             "confidence": confidence,
             "riskLevel": risk_level,
             "prediction": raw_prediction,
+            "stanceClassifierStatus": getattr(self.evidence_ranker.gemini_classifier, "last_status", "available"),
             "summaryReason": summary_reason,
             "explanation": explanation,
             
@@ -747,6 +756,8 @@ class VerificationEngine:
 
             "aiIntegrations": {
                 "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
+                "geminiModel": getattr(self.evidence_ranker.gemini_classifier, "active_model", os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")),
+                "stanceClassifierStatus": getattr(self.evidence_ranker.gemini_classifier, "last_status", "available"),
                 "openAiConfigured": bool(os.getenv("OPENAI_API_KEY")),
                 "factCheckConfigured": bool(os.getenv("FACTCHECK_API_KEY")),
                 "gnewsConfigured": bool(os.getenv("GNEWS_API_KEY")),

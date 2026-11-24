@@ -13,7 +13,7 @@
   --color-on-surface-variant: #434655;
   --color-inverse-surface: #283044;
   --color-inverse-on-surface: #eef0ff;
-  --color-outline: #737686;
+  --color-outline: #5f6272;
   --color-outline-variant: #c3c6d7;
   --color-surface-tint: #0053db;
   --color-primary: #004ac6;
@@ -87,10 +87,21 @@
     background-color: var(--color-surface);
     color: var(--color-on-surface);
     -webkit-font-smoothing: antialiased;
+    background-image: 
+      radial-gradient(at 15% 15%, rgba(0, 74, 198, 0.045) 0px, transparent 55%),
+      radial-gradient(at 85% 85%, rgba(107, 56, 212, 0.045) 0px, transparent 55%);
+    background-attachment: fixed;
   }
   * {
     box-sizing: border-box;
   }
+}
+
+.dark html, .dark body, .dark #root {
+  background-image: 
+    radial-gradient(at 15% 15%, rgba(30, 58, 138, 0.16) 0px, transparent 55%),
+    radial-gradient(at 85% 85%, rgba(107, 56, 212, 0.12) 0px, transparent 55%);
+  background-attachment: fixed;
 }
 
 .dark {
@@ -106,7 +117,7 @@
   --color-on-surface-variant: #94a3b8;
   --color-background: #0a0f1d;
   --color-on-background: #f1f5f9;
-  --color-outline: #475569;
+  --color-outline: #94a3b8;
   --color-outline-variant: #334155;
   --color-primary-fixed: #1e3a8a;
   --color-tertiary-fixed: #064e3b;
@@ -210,10 +221,19 @@
 
 .font-label-xs {
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+/* Enforce minimum font size of 12px throughout UI */
+.text-2xs,
+.text-\[10px\],
+.text-\[11px\],
+.font-label-xs {
+  font-size: 12px !important;
+  line-height: 16px !important;
 }
 
 /* Animations */
@@ -255,5 +275,293 @@
   }
   .print\:flex {
     display: flex !important;
+  }
+}
+
+/* ==========================================================================
+   Scale Magnification & Elevation Effect across all Buttons and Cards
+   Smoothly expands and elevates elements above the rest on hover and click
+   ========================================================================== */
+
+/* 1. BUTTON SCALE MAGNIFICATION & ELEVATION */
+button:not(.no-scale):not(:disabled):not([aria-disabled="true"]),
+[role="button"]:not(.no-scale):not(:disabled):not([aria-disabled="true"]),
+.lucid-btn:not(.no-scale):not(:disabled):not([aria-disabled="true"]) {
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.18s ease,
+              border-color 0.18s ease,
+              color 0.18s ease;
+  will-change: transform, box-shadow;
+  transform-origin: center center;
+}
+
+/* Hover: smoothly expand and float above siblings */
+button:not(.no-scale):not(:disabled):not([aria-disabled="true"]):hover,
+[role="button"]:not(.no-scale):not(:disabled):not([aria-disabled="true"]):hover,
+.lucid-btn:not(.no-scale):not(:disabled):not([aria-disabled="true"]):hover {
+  transform: scale(1.045) translateY(-2px);
+  position: relative;
+  z-index: 25;
+  box-shadow: 0 10px 24px -4px rgba(0, 74, 198, 0.22), 0 4px 10px -2px rgba(0, 0, 0, 0.1);
+}
+
+.dark button:not(.no-scale):not(:disabled):not([aria-disabled="true"]):hover,
+.dark [role="button"]:not(.no-scale):not(:disabled):not([aria-disabled="true"]):hover,
+.dark .lucid-btn:not(.no-scale):not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+/* Click / Active: smoothly expand and elevate even further */
+button:not(.no-scale):not(:disabled):not([aria-disabled="true"]):active,
+[role="button"]:not(.no-scale):not(:disabled):not([aria-disabled="true"]):active,
+.lucid-btn:not(.no-scale):not(:disabled):not([aria-disabled="true"]):active {
+  transform: scale(1.065) translateY(-3px);
+  position: relative;
+  z-index: 30;
+  box-shadow: 0 14px 32px -4px rgba(0, 74, 198, 0.32), 0 8px 16px -4px rgba(0, 0, 0, 0.16);
+}
+
+.dark button:not(.no-scale):not(:disabled):not([aria-disabled="true"]):active,
+.dark [role="button"]:not(.no-scale):not(:disabled):not([aria-disabled="true"]):active,
+.dark .lucid-btn:not(.no-scale):not(:disabled):not([aria-disabled="true"]):active {
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+/* 2. CARD SCALE MAGNIFICATION & ELEVATION */
+
+/* Main Section & Container Cards */
+.lucid-card,
+[data-card="main"],
+.card-main,
+section[class*="bg-surface-container"]:not(.no-scale),
+div[class*="bg-surface-container-lowest"][class*="rounded-2xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale),
+div[class*="bg-surface-container-lowest"][class*="rounded-xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale) {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.22s ease;
+  will-change: transform, box-shadow;
+  transform-origin: center center;
+}
+
+.lucid-card:hover,
+[data-card="main"]:hover,
+.card-main:hover,
+section[class*="bg-surface-container"]:not(.no-scale):hover,
+div[class*="bg-surface-container-lowest"][class*="rounded-2xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):hover,
+div[class*="bg-surface-container-lowest"][class*="rounded-xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):hover {
+  transform: scale(1.02) translateY(-3px);
+  position: relative;
+  z-index: 15;
+  box-shadow: 0 18px 38px -10px rgba(0, 74, 198, 0.12), 0 8px 18px -4px rgba(0, 0, 0, 0.08);
+}
+
+.dark .lucid-card:hover,
+.dark [data-card="main"]:hover,
+.dark .card-main:hover,
+.dark section[class*="bg-surface-container"]:not(.no-scale):hover,
+.dark div[class*="bg-surface-container-lowest"][class*="rounded-2xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):hover,
+.dark div[class*="bg-surface-container-lowest"][class*="rounded-xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):hover {
+  box-shadow: 0 20px 42px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.lucid-card:active,
+[data-card="main"]:active,
+.card-main:active,
+section[class*="bg-surface-container"]:not(.no-scale):active,
+div[class*="bg-surface-container-lowest"][class*="rounded-2xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):active,
+div[class*="bg-surface-container-lowest"][class*="rounded-xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):active {
+  transform: scale(1.03) translateY(-4.5px);
+  position: relative;
+  z-index: 20;
+  box-shadow: 0 24px 48px -10px rgba(0, 74, 198, 0.18), 0 12px 24px -4px rgba(0, 0, 0, 0.12);
+}
+
+.dark .lucid-card:active,
+.dark [data-card="main"]:active,
+.dark .card-main:active,
+.dark section[class*="bg-surface-container"]:not(.no-scale):active,
+.dark div[class*="bg-surface-container-lowest"][class*="rounded-2xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):active,
+.dark div[class*="bg-surface-container-lowest"][class*="rounded-xl"]:not(.fixed):not([class*="fixed"]):not([class*="absolute"]):not(.no-scale):active {
+  box-shadow: 0 26px 52px -10px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* 3. SUB-CARDS / ITEM CARDS (Evidence items, Factor Breakdowns, Claim matrix cards, etc.) */
+.lucid-card-sub,
+[data-card="sub"],
+.card-sub,
+.card-interactive,
+div[class*="bg-surface-container-low"][class*="rounded-xl"]:not(.no-scale),
+div[class*="bg-surface-container-low"][class*="rounded-lg"]:not(.no-scale) {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s ease,
+              background-color 0.2s ease;
+  will-change: transform, box-shadow;
+  transform-origin: center center;
+}
+
+.lucid-card-sub:hover,
+[data-card="sub"]:hover,
+.card-sub:hover,
+.card-interactive:hover,
+div[class*="bg-surface-container-low"][class*="rounded-xl"]:not(.no-scale):hover,
+div[class*="bg-surface-container-low"][class*="rounded-lg"]:not(.no-scale):hover {
+  transform: scale(1.035) translateY(-3px);
+  position: relative;
+  z-index: 18;
+  box-shadow: 0 14px 30px -6px rgba(0, 74, 198, 0.16), 0 6px 14px -3px rgba(0, 0, 0, 0.08);
+}
+
+.dark .lucid-card-sub:hover,
+.dark [data-card="sub"]:hover,
+.dark .card-sub:hover,
+.dark .card-interactive:hover,
+.dark div[class*="bg-surface-container-low"][class*="rounded-xl"]:not(.no-scale):hover,
+.dark div[class*="bg-surface-container-low"][class*="rounded-lg"]:not(.no-scale):hover {
+  box-shadow: 0 16px 34px -6px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.lucid-card-sub:active,
+[data-card="sub"]:active,
+.card-sub:active,
+.card-interactive:active,
+div[class*="bg-surface-container-low"][class*="rounded-xl"]:not(.no-scale):active,
+div[class*="bg-surface-container-low"][class*="rounded-lg"]:not(.no-scale):active {
+  transform: scale(1.05) translateY(-4px);
+  position: relative;
+  z-index: 25;
+  box-shadow: 0 18px 38px -6px rgba(0, 74, 198, 0.24), 0 8px 18px -4px rgba(0, 0, 0, 0.12);
+}
+
+.dark .lucid-card-sub:active,
+.dark [data-card="sub"]:active,
+.dark .card-sub:active,
+.dark .card-interactive:active,
+.dark div[class*="bg-surface-container-low"][class*="rounded-xl"]:not(.no-scale):active,
+.dark div[class*="bg-surface-container-low"][class*="rounded-lg"]:not(.no-scale):active {
+  box-shadow: 0 20px 42px -6px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+/* 4. FORM CONTROL STABILITY (Inputs and textareas maintain crisp text and cursor) */
+input,
+textarea,
+select {
+  transform: none !important;
+}
+
+/* Reduced motion preference respect */
+@media (prefers-reduced-motion: reduce) {
+  button,
+  [role="button"],
+  .lucid-btn,
+  .lucid-card,
+  .lucid-card-sub,
+  [data-card] {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ==========================================================================
+   Glassmorphism (Main Cards: Login card, Claim input card, Verdict banner)
+   ========================================================================== */
+.glass-card {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(218, 226, 253, 0.75) !important;
+}
+
+.dark .glass-card {
+  background: rgba(13, 21, 39, 0.82) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+  .glass-card {
+    background: #ffffff !important;
+    border: 1px solid #dae2fd !important;
+  }
+  .dark .glass-card {
+    background: #0d1527 !important;
+    border: 1px solid #23345c !important;
+  }
+}
+
+/* ==========================================================================
+   Hover Light Spotlight + Elevation (200ms transition, translateY -4px)
+   ========================================================================== */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 200ms ease;
+  will-change: transform, box-shadow;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .spotlight-card:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 20px 38px -8px rgba(0, 74, 198, 0.16), 0 10px 18px -4px rgba(0, 0, 0, 0.08) !important;
+    position: relative;
+    z-index: 20;
+  }
+  .dark .spotlight-card:hover {
+    box-shadow: 0 22px 42px -8px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+  }
+  .spotlight-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    background: radial-gradient(
+      550px circle at var(--mx, -1000px) var(--my, -1000px),
+      rgba(0, 74, 198, 0.08),
+      transparent 70%
+    );
+    z-index: 1;
+  }
+  .dark .spotlight-card::before {
+    background: radial-gradient(
+      550px circle at var(--mx, -1000px) var(--my, -1000px),
+      rgba(180, 197, 255, 0.08),
+      transparent 70%
+    );
+  }
+  .spotlight-card:hover::before {
+    opacity: 1;
+  }
+}
+
+/* Touch devices: disable spotlight effect */
+@media (hover: none) or (pointer: coarse) {
+  .spotlight-card::before {
+    display: none !important;
+  }
+  .spotlight-card:hover {
+    transform: none !important;
+  }
+}
+
+/* Reduced motion preference respect */
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-card {
+    transition: none !important;
+    transform: none !important;
+  }
+  .spotlight-card:hover {
+    transform: none !important;
+  }
+  .spotlight-card::before {
+    display: none !important;
   }
 }

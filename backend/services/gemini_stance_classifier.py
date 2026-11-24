@@ -55,9 +55,10 @@ class GeminiStanceClassifier:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.client = None
-        self.preferred_model = os.getenv("GEMINI_STANCE_MODEL", "gemini-2.5-flash")
+        self.preferred_model = os.getenv("GEMINI_MODEL", os.getenv("GEMINI_STANCE_MODEL", "gemini-3.5-flash-lite")).strip()
         self.active_model = self.preferred_model
         self._disabled = False
+        self.last_status = "available" if (GENAI_AVAILABLE and self.api_key) else "stance classifier unavailable"
 
         if GENAI_AVAILABLE and self.api_key:
             try:
@@ -133,17 +134,22 @@ class GeminiStanceClassifier:
             "3. COMPARATIVE & SUPERLATIVE SWAPS: If the claim asserts 'smallest' and evidence says 'largest' (or vice-versa), the stance is CONTRADICT.\n"
             "4. DEBUNKED MYTHS & FACT-CHECK RATINGS: If the evidence debunks, refutes, or clarifies a known falsehood or myth (e.g. vaccines cause autism, microchips in drinking water), OR if the snippet has an IFCN Fact Check Rating such as 'False' or 'Pants on Fire', the stance is CONTRADICT.\n"
             "5. NO KEYWORD OVERLAP SUPPORT: Never mark 'support' just because words match or the article is about the same general topic/entities. If the evidence is merely on the same general topic without confirming the specific assertion (e.g. an article about Latin American air pollution when the claim is about WHO/European utilities), mark 'neutral'.\n"
-            "6. SUPPORT REQUIREMENT: Mark 'support' if the evidence affirmatively confirms the core factual action, event, or metric of the claim.\n\n"
+            "6. SUPPORT REQUIREMENT: Mark 'support' if the evidence affirmatively confirms the core factual action, event, or metric of the claim.\n"
+            "7. TEMPORAL AWARENESS & EVENT TIMELINE: Pay careful attention to the publication date of each source relative to the claim and today's date. If a claim asserts an event, appointment, decision, resignation, or recent change, a source published BEFORE that event occurred CANNOT contradict it (the source simply reported prior reality before the event happened). In such cases, mark 'neutral', NEVER 'contradict'.\n"
+            "8. OLD SOURCES: Check if the source publication date is older than 6 months relative to today. If so, set 'is_older' to true. (For Wikipedia or reference encyclopedias, set 'is_older' to false).\n"
+            "9. FUTURE OR SPECULATIVE EVENTS VS OCCURRED EVENTS: If the claim asserts an event, decision, appointment, resignation, acquisition, or milestone HAS HAPPENED (completed past/present fact), but the evidence only discusses a possible, planned, proposed, or future event (using phrasing like 'wants to', 'may', 'might', 'could', 'plans to', 'planning to', 'talks about', 'aims to', 'considering', 'expected to', 'proposing to', 'prepares to'), the stance MUST be 'neutral', NEVER 'support'. Only sources reporting that the event has actually occurred count as 'support'.\n"
+            "10. SPECIFIC CLAIM TOPIC & KEY ENTITY REQUIREMENT: An evidence snippet CANNOT contradict a claim unless the snippet explicitly addresses the specific assertion, controversy, or proposition in the claim. A generic overview or background encyclopedia entry (e.g. general article on 'Earth', 'Nvidia', or an entire planet or country) that does not explicitly refute or address the specific claim proposition MUST be 'neutral', NEVER 'contradict'.\n\n"
             "Output must be a JSON array of objects with keys:\n"
             "- id: integer matching the snippet id\n"
             "- stance: exactly one of 'support', 'contradict', or 'neutral'\n"
             "- confidence: integer from 0 to 100\n"
+            "- is_older: boolean (true if source is older than 6 months relative to today)\n"
             "- reason: exactly 1 clear sentence explaining why the evidence supports, contradicts, or is neutral towards the claim."
         )
 
         # Try active model, then fallback models if 404 (model retired) or temporary error
         models_to_try = [self.active_model]
-        for fallback in ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]:
+        for fallback in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.6-flash"]:
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 
@@ -184,14 +190,39 @@ class GeminiStanceClassifier:
                     conf = int(obj.get("confidence", 80))
                     conf = max(0, min(100, conf))
                     reason = str(obj.get("reason", "")).strip()
+                    matched_payload = next((it for it in items_payload if it.get("id") == item_id), None)
+                    is_wiki = False
+                    if matched_payload:
+                        pub = (matched_payload.get("publisher") or "").lower()
+                        if "wikipedia" in pub:
+                            is_wiki = True
+
+                    # Requirement 3: Real publish date & Wikipedia rule
+                    # For Wikipedia, do not label by page edit date
+                    if is_wiki:
+                        is_older = False
+                    elif matched_payload and matched_payload.get("date"):
+                        try:
+                            from datetime import date, datetime
+                            p_dt = datetime.strptime(matched_payload["date"][:10], "%Y-%m-%d").date()
+                            is_older = ((date.today() - p_dt).days > 180)
+                        except Exception:
+                            is_older = False
+                    else:
+                        is_older = False
+
+                    temporal_label = "reference / evergreen" if is_wiki else ("older, may be outdated" if is_older else "recent")
 
                     if isinstance(item_id, int):
                         results[item_id] = {
                             "stance": stance,
                             "confidence": conf,
-                            "reason": reason
+                            "reason": reason,
+                            "is_older": is_older,
+                            "temporal_label": temporal_label
                         }
 
+                self.last_status = "available"
                 logger.info(f"Gemini stance classification succeeded for claim '{claim_text[:45]}...' across {len(results)} items (Model: {model_name}).")
                 return results
 
@@ -204,7 +235,17 @@ class GeminiStanceClassifier:
                 logger.warning(f"Gemini stance classification error with model '{model_name}': ({err_str[:120]}). Trying next fallback model...")
                 continue
 
+        self.last_status = "stance classifier unavailable"
         return None
+
+    def get_status(self) -> Dict[str, Any]:
+        """Returns the current status of the stance classifier."""
+        return {
+            "status": self.last_status,
+            "model": self.active_model,
+            "preferredModel": self.preferred_model,
+            "available": (self.last_status == "available")
+        }
 
 
 # Global singleton instance

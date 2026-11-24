@@ -34,6 +34,7 @@ from typing import List, Dict, Any, Optional
 import requests
 import services.factcheck_service as factcheck_service
 from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
+from utils.url_extractor import is_real_article_url, resolve_google_news_url
 
 logger = logging.getLogger("lucid.rag_retriever")
 if not logger.handlers:
@@ -252,13 +253,26 @@ class RAGRetrievalEngine:
                         except Exception:
                             parsed_date = pub_date_raw[:10]
 
-                    meta = self._match_publisher_metadata(pub_candidate, link)
+                    # Requirement 8: Resolve Google News redirect link to publisher's real article URL and domain
+                    resolved_url, pub_domain = resolve_google_news_url(link)
+                    source_url = source_el.get("url", "") if source_el is not None else ""
+                    if not pub_domain and source_url:
+                        try:
+                            pub_domain = urllib.parse.urlparse(source_url).netloc.lower().replace("www.", "")
+                        except Exception:
+                            pass
 
+                    meta = self._match_publisher_metadata(pub_candidate, resolved_url or link)
+                    if pub_domain and not meta.get("domain"):
+                        meta["domain"] = pub_domain
+
+                    final_url = resolved_url or link
                     results.append({
                         "articleTitle": clean_article_title,
                         "publisher": meta["publisher"],
+                        "publisherDomain": pub_domain or meta.get("domain", ""),
                         "publicationDate": parsed_date,
-                        "url": link,
+                        "url": final_url,
                         "evidenceSnippet": snippet or clean_article_title,
                         "sourceTrustScore": meta["score"],
                         "sourceCategory": meta["category"],
@@ -321,248 +335,6 @@ class RAGRetrievalEngine:
 
         return results
 
-    def _fetch_canonical_wire_archives(self, claim_text: str) -> List[Dict[str, Any]]:
-        """
-        Guaranteed canonical reference coverage for major verified international stories
-        to ensure instantaneous RAG grounding even during network outages.
-        """
-        lower = claim_text.lower()
-        results: List[Dict[str, Any]] = []
-
-        # Example 0: Saudi Arabia missile interception prompt example
-        if any(k in lower for k in ["saudi", "sanaa"]) and any(k in lower for k in ["missile", "intercept", "border", "evacuated"]):
-            results.extend([
-                {
-                    "articleTitle": "Saudi Arabia intercepts three ballistic missiles near southern border",
-                    "publisher": "Reuters",
-                    "publicationDate": "2024-02-16",
-                    "url": "https://www.reuters.com/world/middle-east/saudi-missile-interception",
-                    "evidenceSnippet": "Saudi defense forces intercepted three ballistic missiles fired near the southern border, officials confirmed.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "Wire Service",
-                    "retrievalChannel": "Wire News Archive"
-                },
-                {
-                    "articleTitle": "Missiles intercepted over southern Saudi territory, 33 people evacuated",
-                    "publisher": "Al Jazeera",
-                    "publicationDate": "2024-02-16",
-                    "url": "https://www.aljazeera.com/news/middle-east/saudi-border-missiles",
-                    "evidenceSnippet": "Al Jazeera correspondent confirmed air defense batteries intercepted missiles near the border, with 33 people safely evacuated without airport disruptions.",
-                    "sourceTrustScore": 91,
-                    "sourceCategory": "International News",
-                    "retrievalChannel": "Wire News Archive"
-                },
-                {
-                    "articleTitle": "Saudi military intercepts projectiles near border, airport operations normal",
-                    "publisher": "Associated Press (AP)",
-                    "publicationDate": "2024-02-16",
-                    "url": "https://apnews.com/hub/saudi-missile-incident",
-                    "evidenceSnippet": "Associated Press: Regional authorities reported air defense units intercepted projectiles without causing disruptions to airport operations.",
-                    "sourceTrustScore": 95,
-                    "sourceCategory": "Wire Service",
-                    "retrievalChannel": "Wire News Archive"
-                }
-            ])
-
-        # Example 1: Conflict / Palestinian boy incident
-        elif any(k in lower for k in ["palestinian", "israeli", "idf", "west bank", "gaza"]) and any(k in lower for k in ["shot", "killed", "dead", "boy", "youth"]):
-            results.extend([
-                {
-                    "articleTitle": "Palestinian teenager killed by Israeli forces during West Bank raid",
-                    "publisher": "Reuters",
-                    "publicationDate": "2024-02-15",
-                    "url": "https://www.reuters.com/world/middle-east/palestinian-killed-israeli-forces-west-bank/",
-                    "evidenceSnippet": "Palestinian health officials confirmed a boy was fatally shot during confrontation with Israeli military forces in the occupied West Bank.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "Wire Service",
-                    "retrievalChannel": "Wire News Archive"
-                },
-                {
-                    "articleTitle": "West Bank violence: Israeli forces kill Palestinian youth",
-                    "publisher": "BBC",
-                    "publicationDate": "2024-02-15",
-                    "url": "https://www.bbc.com/news/world-middle-east",
-                    "evidenceSnippet": "BBC correspondent reports eyewitnesses and medics reported gunfire struck a young Palestinian civilian following an armed incursion.",
-                    "sourceTrustScore": 94,
-                    "sourceCategory": "Public Broadcaster",
-                    "retrievalChannel": "Wire News Archive"
-                },
-                {
-                    "articleTitle": "Israeli troops fatally shoot Palestinian boy in West Bank, medics say",
-                    "publisher": "Associated Press (AP)",
-                    "publicationDate": "2024-02-15",
-                    "url": "https://apnews.com/hub/israel-hamas-war",
-                    "evidenceSnippet": "Associated Press wire report: The Palestinian Red Crescent stated an ambulance team evacuated the critically injured youth from the scene.",
-                    "sourceTrustScore": 95,
-                    "sourceCategory": "Wire Service",
-                    "retrievalChannel": "Wire News Archive"
-                },
-                {
-                    "articleTitle": "Palestinian child killed by Israeli gunfire in occupied West Bank",
-                    "publisher": "Al Jazeera",
-                    "publicationDate": "2024-02-15",
-                    "url": "https://www.aljazeera.com/news/middleeast",
-                    "evidenceSnippet": "Human rights monitors and local hospital officials in Jenin reported the victim succumbed to wounds sustained from live ammunition.",
-                    "sourceTrustScore": 91,
-                    "sourceCategory": "International News",
-                    "retrievalChannel": "Wire News Archive"
-                }
-            ])
-
-        # Example 2: Jensen Huang CEO claim
-        elif "jensen huang" in lower and any(k in lower for k in ["nvidia", "ceo", "return", "coming back", "step down"]):
-            results.extend([
-                {
-                    "articleTitle": "Jensen Huang continues as NVIDIA founder and Chief Executive Officer",
-                    "publisher": "Reuters",
-                    "publicationDate": "2024-03-20",
-                    "url": "https://www.reuters.com/technology/nvidia-ceo-jensen-huang-ai-chips/",
-                    "evidenceSnippet": "Jensen Huang, who co-founded NVIDIA in 1993, remains its active Chief Executive Officer and president, discussing future accelerated computing.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "Wire Service",
-                    "retrievalChannel": "Wire News Archive"
-                },
-                {
-                    "articleTitle": "Fact Check: Jensen Huang never left NVIDIA, continues uninterrupted tenure as CEO",
-                    "publisher": "Bloomberg",
-                    "publicationDate": "2024-03-21",
-                    "url": "https://www.bloomberg.com/technology",
-                    "evidenceSnippet": "Online claims that Jensen Huang is 'coming back' as CEO are inaccurate; Huang has continuously served as NVIDIA CEO for over three decades.",
-                    "sourceTrustScore": 94,
-                    "sourceCategory": "Financial News",
-                    "retrievalChannel": "Wire News Archive"
-                }
-            ])
-
-        # Example 3: Renewable capacity growth
-        elif any(k in lower for k in ["renewable", "solar", "capacity"]) and any(k in lower for k in ["50%", "half", "rose", "increase"]):
-            results.extend([
-                {
-                    "articleTitle": "Global renewable capacity additions increased by nearly 50% in 2023, fastest growth rate in two decades",
-                    "publisher": "International Energy Agency (IEA)",
-                    "publicationDate": "2024-01-11",
-                    "url": "https://www.iea.org/reports/renewables-2023",
-                    "evidenceSnippet": "IEA official report: Global annual renewable additions jumped by nearly 50% to almost 510 gigawatts in 2023, the 22nd year in a row of new records.",
-                    "sourceTrustScore": 99,
-                    "sourceCategory": "International Institution",
-                    "retrievalChannel": "Institutional Report Archive"
-                },
-                {
-                    "articleTitle": "Renewables expansion surged 50% in 2023 led by China and solar PV, IEA reports",
-                    "publisher": "Reuters",
-                    "publicationDate": "2024-01-11",
-                    "url": "https://www.reuters.com/business/energy/global-renewable-capacity-rose-50-2023-iea-2024-01-11/",
-                    "evidenceSnippet": "The International Energy Agency documented unprecedented worldwide deployment of solar panels and wind turbines in 2023.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "Wire Service",
-                    "retrievalChannel": "Wire News Archive"
-                }
-            ])
-
-        # Example 4: Pope Francis Trump endorsement claim
-        elif ("pope" in lower or "francis" in lower) and ("trump" in lower or "donald" in lower) and any(k in lower for k in ["endorse", "endorsed", "endorsing", "endorsement", "support"]):
-            results.extend([
-                {
-                    "articleTitle": "FALSE: Pope Francis Shocks World, Endorses Donald Trump for President",
-                    "publisher": "Snopes",
-                    "publicationDate": "2016-07-11",
-                    "url": "https://www.snopes.com/fact-check/pope-francis-donald-trump-endorsement/",
-                    "evidenceSnippet": "A fake news website published an untrue story claiming Pope Francis broke with tradition to endorse Donald Trump for President. The Vatican made no such endorsement and Pope Francis has never endorsed Donald Trump.",
-                    "sourceTrustScore": 95,
-                    "sourceCategory": "IFCN Fact Checker",
-                    "factCheckRating": "FALSE",
-                    "retrievalChannel": "Fact Check Registry"
-                },
-                {
-                    "articleTitle": "Did the Pope Endorse Trump? FactCheck.org Debunks Viral Hoax",
-                    "publisher": "FactCheck.org",
-                    "publicationDate": "2016-10-27",
-                    "url": "https://www.factcheck.org/2016/10/did-the-pope-endorse-trump/",
-                    "evidenceSnippet": "Viral social media posts claiming that Pope Francis endorsed Republican nominee Donald Trump are completely fabricated. Pope Francis did not endorse Trump, and the Catholic Church does not endorse political candidates.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "IFCN Fact Checker",
-                    "factCheckRating": "FALSE",
-                    "retrievalChannel": "Fact Check Registry"
-                },
-                {
-                    "articleTitle": "Pope Francis says he does not endorse political candidates in US election",
-                    "publisher": "Reuters",
-                    "publicationDate": "2016-10-02",
-                    "url": "https://www.reuters.com/article/us-usa-election-pope-idUSKCN1220WB",
-                    "evidenceSnippet": "Pope Francis reiterated that he never advises Catholics on how to vote in elections and categorically denied endorsing candidates in the U.S. presidential race.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "Wire Service",
-                    "retrievalChannel": "Wire News Archive"
-                }
-            ])
-
-        # Example 5: 5G mobile towers / COVID-19 conspiracy theory
-        elif "5g" in lower and any(k in lower for k in ["covid", "coronavirus", "pandemic", "virus", "disease"]):
-            results.extend([
-                {
-                    "articleTitle": "Fact Check: 5G mobile networks DO NOT spread COVID-19",
-                    "publisher": "World Health Organization (WHO)",
-                    "publicationDate": "2020-04-10",
-                    "url": "https://www.who.int/emergencies/diseases/novel-coronavirus-2019/advice-for-public/myth-busters",
-                    "evidenceSnippet": "Viruses cannot travel on radio waves or mobile networks. COVID-19 is spreading in many countries that do not have 5G mobile networks. Claims linking 5G to COVID-19 are completely false and baseless.",
-                    "sourceTrustScore": 99,
-                    "sourceCategory": "International Institution",
-                    "factCheckRating": "FALSE",
-                    "retrievalChannel": "Institutional Fact Check"
-                },
-                {
-                    "articleTitle": "Debunked: The baseless conspiracy theory linking 5G towers to coronavirus",
-                    "publisher": "BBC",
-                    "publicationDate": "2020-04-15",
-                    "url": "https://www.bbc.com/news/52168096",
-                    "evidenceSnippet": "Scientists and public health authorities have confirmed there is absolutely no evidence that 5G mobile technology causes or facilitates COVID-19. It is a completely disproven conspiracy theory.",
-                    "sourceTrustScore": 94,
-                    "sourceCategory": "Public Broadcaster",
-                    "factCheckRating": "FALSE",
-                    "retrievalChannel": "Wire News Archive"
-                },
-                {
-                    "articleTitle": "Fact Check: False claim that 5G cellphone towers caused COVID-19 pandemic",
-                    "publisher": "Reuters",
-                    "publicationDate": "2020-04-09",
-                    "url": "https://www.reuters.com/article/uk-factcheck-coronavirus-5g-idUSKBN21Q2S7",
-                    "evidenceSnippet": "Reuters Fact Check: The claim that 5G technology is linked to the novel coronavirus outbreak has no basis in scientific fact and has been thoroughly refuted by medical researchers worldwide.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "Wire Service",
-                    "factCheckRating": "FALSE",
-                    "retrievalChannel": "Wire News Archive"
-                }
-            ])
-
-        # Example 6: Flat Earth conspiracy claim
-        elif "flat" in lower and "earth" in lower:
-            results.extend([
-                {
-                    "articleTitle": "Debunked: Scientific evidence proves Earth is spherical, not flat",
-                    "publisher": "NASA",
-                    "publicationDate": "2021-01-20",
-                    "url": "https://www.nasa.gov/audience/forstudents/5-8/features/nasa-knows/what-is-earth-58.html",
-                    "evidenceSnippet": "NASA satellite imagery and centuries of physics prove that Earth is an oblate spheroid. Flat earth claims are baseless conspiracy theories completely refuted by direct empirical observation and space missions.",
-                    "sourceTrustScore": 99,
-                    "sourceCategory": "Government Institution",
-                    "factCheckRating": "FALSE",
-                    "retrievalChannel": "Scientific Archive"
-                },
-                {
-                    "articleTitle": "Fact Check: Earth is not flat; empirical observations confirm spherical shape",
-                    "publisher": "Reuters",
-                    "publicationDate": "2021-03-15",
-                    "url": "https://www.reuters.com/article/factcheck-earth-flat-idUSL1N2LD1KJ",
-                    "evidenceSnippet": "Astronomical data, lunar eclipses, ship navigation, and orbital space photographs definitively prove the Earth is spherical. Claims that Earth is flat are demonstrably false with no scientific evidence.",
-                    "sourceTrustScore": 96,
-                    "sourceCategory": "Wire Service",
-                    "factCheckRating": "FALSE",
-                    "retrievalChannel": "Wire News Archive"
-                }
-            ])
-
-        return results
-
     def retrieve_evidence_for_claim(
         self,
         claim_text: str,
@@ -584,9 +356,12 @@ class RAGRetrievalEngine:
 
         def add_candidates(items):
             for item in items:
-                u = item.get("url", "").strip().lower()
+                u = item.get("url", "").strip()
+                # Requirement 3: Only accept sources with a real article URL (not a homepage or a section page like /technology)
+                if not is_real_article_url(u):
+                    continue
                 title = item.get("articleTitle", "").strip().lower()
-                key = u or title
+                key = u.lower() or title
                 if key and key not in seen_urls:
                     seen_urls.add(key)
                     all_candidates.append(item)
@@ -663,31 +438,21 @@ class RAGRetrievalEngine:
             self.session_queried_sources["Institutional Archives (UN/WHO/CDC)"] = self.session_queried_sources.get("Institutional Archives (UN/WHO/CDC)", 0) + len(inst_results)
             add_candidates(inst_results)
 
-        # 5. Canonical archive grounding
-        canon_results = self._fetch_canonical_wire_archives(claim_text)
-        if canon_results:
-            self.session_queried_sources["Canonical Wire Archives"] = self.session_queried_sources.get("Canonical Wire Archives", 0) + len(canon_results)
-            for cr in reversed(canon_results):
-                u = cr.get("url", "").strip().lower()
-                title = cr.get("articleTitle", "").strip().lower()
-                key = u or title
-                if key and key not in seen_urls:
-                    seen_urls.add(key)
-                    all_candidates.insert(0, cr)
 
         logger.info(f"RAG Retrieval for claim '{claim_text[:60]}...': found {len(all_candidates)} raw candidate sources.")
         return all_candidates[:max_items]
 
     def get_sources_searched_list(self) -> List[str]:
         """Returns the formal list of sources actually queried with result counts for user transparency."""
-        if not self.session_queried_sources:
+        filtered_sources = dict(self.session_queried_sources)
+        if not filtered_sources:
             return [
                 "Google News RSS Wire Search (0 results)",
                 "Wikipedia (Official REST API) (0 results)"
             ]
         return [
             f"{source} ({count} result{'s' if count != 1 else ''})"
-            for source, count in self.session_queried_sources.items()
+            for source, count in filtered_sources.items()
         ]
 
 

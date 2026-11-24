@@ -24,6 +24,7 @@ from services.source_reputation import SOURCE_DATABASE
 from services.factcheck_service import query_google_factcheck
 from services.gnews_service import search_gnews, categorize_gnews_articles
 from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
+from utils.url_extractor import is_real_article_url
 
 logger = logging.getLogger("lucid.verifier")
 if not logger.handlers:
@@ -33,57 +34,6 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-# Factual consensus and verified event patterns
-KNOWN_VERIFIED_PATTERNS = [
-    {
-        "topic": "military_geopolitical",
-        "keywords": ["saudi", "missile", "intercept", "houthi", "sanaa"],
-        "supporting": ["Reuters", "BBC News", "Al Jazeera", "Associated Press (AP)"],
-        "contradicting": [],
-        "confidence": 92,
-        "note": "Corroborated by Middle East wire dispatches and coalition press releases."
-    },
-    {
-        "topic": "conflict_incident",
-        "keywords": ["israeli", "palestinian", "forces", "shot", "dead", "boy", "killed", "west bank"],
-        "supporting": ["BBC News", "Reuters", "Associated Press (AP)", "Al Jazeera", "UN"],
-        "contradicting": [],
-        "confidence": 92,
-        "note": "Corroborated by regional human rights dispatches and international news wire coverage (BBC, Reuters, AP, Al Jazeera, UN)."
-    },
-    {
-        "topic": "energy_environment",
-        "keywords": ["renewable", "energy", "iea", "capacity", "solar", "50%"],
-        "supporting": ["International Energy Agency (IEA)", "Reuters", "Bloomberg News", "UN"],
-        "contradicting": [],
-        "confidence": 96,
-        "note": "Directly backed by IEA Global Renewable Energy Market Report."
-    },
-    {
-        "topic": "economy_finance",
-        "keywords": ["interest rate", "central bank", "inflation", "monetary policy", "basis points"],
-        "supporting": ["Financial Times", "Wall Street Journal", "Reuters", "Bloomberg News"],
-        "contradicting": [],
-        "confidence": 94,
-        "note": "Corroborated by official central bank press statements and wire records."
-    },
-    {
-        "topic": "judicial_legal",
-        "keywords": ["supreme court", "ruling", "unanimous", "verdict", "clarifying"],
-        "supporting": ["Associated Press (AP)", "The Hindu", "Reuters", "Washington Post"],
-        "contradicting": [],
-        "confidence": 91,
-        "note": "Validated by judicial docket records and legal wire reporting."
-    },
-    {
-        "topic": "health_medical",
-        "keywords": ["clinical trial", "vaccine efficacy", "epidemiology", "peer-reviewed study", "medical guidelines", "disease outbreak"],
-        "supporting": ["World Health Organization (WHO)", "The Lancet", "Nature Journal"],
-        "contradicting": [],
-        "confidence": 97,
-        "note": "Matches established international public health and peer-reviewed consensus."
-    }
-]
 
 # Conflict and military event detection patterns
 CONFLICT_KEYWORDS_REGEX = re.compile(
@@ -188,58 +138,6 @@ def compute_semantic_similarity(claim_text: str, candidate_title: str) -> float:
     seq_sim = SequenceMatcher(None, claim_text.lower()[:150], candidate_title.lower()[:200]).ratio()
     return round(0.6 * jaccard + 0.4 * seq_sim, 2)
 
-# Flagged viral hoaxes and known falsehood patterns
-KNOWN_DEBUNKED_PATTERNS = [
-    {
-        "keywords": ["5g", "microchip", "mind control", "drinking water"],
-        "supporting": [],
-        "contradicting": ["Snopes Fact Check", "Reuters Fact Check", "PolitiFact", "WHO Debunk Archive"],
-        "confidence": 98,
-        "note": "Documented viral conspiracy theory repeatedly debunked by telecommunication and water safety audits."
-    },
-    {
-        "keywords": ["unmarked vans", "midnight", "ballot", "fake ballots", "alter counting"],
-        "supporting": [],
-        "contradicting": ["Associated Press Fact Check", "PolitiFact", "FactCheck.org"],
-        "confidence": 96,
-        "note": "Debunked election disinformation rumor verified false by official state audit certifiers."
-    },
-    {
-        "keywords": ["chemtrails", "poisonous spray", "population control", "secret chemicals"],
-        "supporting": [],
-        "contradicting": ["Science Magazine (AAAS)", "Snopes Fact Check", "EPA Fact Registry"],
-        "confidence": 97,
-        "note": "Scientific atmospheric testing verifies normal aircraft condensation trails."
-    },
-    {
-        "keywords": ["miracle cure", "cure all diseases", "hidden truth", "secret remedy"],
-        "supporting": [],
-        "contradicting": ["World Health Organization (WHO)", "The Lancet", "FDA Consumer Alert"],
-        "confidence": 95,
-        "note": "Medical fraud pattern flagged by health authorities for predatory medical claims."
-    },
-    {
-        "keywords": ["pope", "francis", "trump", "endorse"],
-        "supporting": [],
-        "contradicting": ["Snopes Fact Check", "FactCheck.org", "Reuters Fact Check", "PolitiFact"],
-        "confidence": 99,
-        "note": "Documented viral political hoax claiming Pope Francis endorsed Donald Trump for President, comprehensively debunked by Snopes, FactCheck.org, and the Vatican."
-    },
-    {
-        "keywords": ["5g", "covid", "coronavirus", "pandemic", "virus"],
-        "supporting": [],
-        "contradicting": ["World Health Organization (WHO)", "BBC Reality Check", "Reuters Fact Check", "Full Fact"],
-        "confidence": 99,
-        "note": "Documented viral conspiracy theory linking 5G mobile networks to COVID-19. World Health Organization confirmed viruses cannot travel on radio waves or mobile networks."
-    },
-    {
-        "keywords": ["earth is flat", "flat earth", "earth flat", "earth is a disk"],
-        "supporting": [],
-        "contradicting": ["NASA Earth Science", "National Oceanic and Atmospheric Administration (NOAA)", "Encyclopaedia Britannica"],
-        "confidence": 99,
-        "note": "Documented flat earth conspiracy theory. Centuries of empirical astronomical and orbital measurements conclusively verify Earth is an oblate spheroid."
-    }
-]
 
 FALSE_RATING_KEYWORDS = [
     "false", "fake", "pants on fire", "hoax", "incorrect", "misleading",
@@ -258,7 +156,7 @@ def is_verifiable_citation(item: Dict[str, Any]) -> bool:
     1. sourceName
     2. articleTitle
     3. publicationDate
-    4. url (valid http/https URL)
+    4. url (valid real article HTTP/HTTPS URL; not a homepage or section page)
     5. matchingClaim
     Points are NEVER awarded unless all 5 fields are present and valid.
     """
@@ -268,7 +166,8 @@ def is_verifiable_citation(item: Dict[str, Any]) -> bool:
     url = (item.get("url") or "").strip()
     matching_claim = (item.get("matchingClaim") or "").strip()
 
-    has_valid_url = bool(url and url != "#" and (url.startswith("http://") or url.startswith("https://")))
+    # Requirement 3: Only accept sources with a real article URL (not a homepage or a section page like /technology)
+    has_valid_url = is_real_article_url(url)
     return bool(source and title and pub_date and has_valid_url and matching_claim)
 
 
@@ -434,9 +333,9 @@ class EvidenceVerificationEngine:
                 re.I
             ))
 
-            # Contradiction requires the article to be specifically relevant to the claim (sim >= 0.35)
-            # A random article merely containing the word "misleading" or "false" must not contradict unrelated claims.
-            if ((debunk_match and sim >= 0.35) or (gn.get("stance") == "contradict" and sim >= 0.35)):
+            # Requirement 6: Keyword/regex fallback must NEVER create a "contradicting" source on its own.
+            # Only accept contradict if stance was classified by Gemini or certified fact-checker.
+            if gn.get("stance") == "contradict" and sim >= 0.35 and is_real_article_url(gn_url):
                 contradicting_sources.append(src)
                 pts = int(round((trust / 100.0) * 16))
                 snippets.append({
@@ -445,13 +344,13 @@ class EvidenceVerificationEngine:
                     "articleTitle": title or f"Contradicting Wire: {claim_text[:50]}...",
                     "publicationDate": pub_date,
                     "sourceTrustScore": trust,
-                    "url": gn_url or f"https://news.google.com/search?q={src}",
+                    "url": gn_url,
                     "matchingClaim": claim_text,
                     "stance": "contradict",
                     "snippet": f"Wire Contradiction: \"{title}\" refutes or disputes claim",
                     "trust": trust,
                     "pointsAssigned": f"-{pts} pts",
-                    "calculationReason": f"Debunk or conflicting wire evidence from trusted publisher ({src}, Trust: {trust}/100) (-{pts} pts)"
+                    "calculationReason": f"Conflicting wire evidence from trusted publisher ({src}, Trust: {trust}/100) (-{pts} pts)"
                 })
                 status = "Contradicted"
                 confidence = max(confidence, 94)
@@ -469,8 +368,8 @@ class EvidenceVerificationEngine:
             if is_resignation_claim and not any(k in combined_wire for k in ["resigned", "resignation", "stepped down"]):
                 continue
 
-            # Supporting evidence must meet semantic agreement threshold and have no debunk signal
-            if agree >= 60 and not debunk_match and (sim >= 0.20 or is_trusted):
+            # Supporting evidence must meet semantic agreement threshold, have a real article URL, and no debunk signal
+            if agree >= 60 and not debunk_match and (sim >= 0.20 or is_trusted) and is_real_article_url(gn_url):
                 supporting_sources.append(src)
                 pts = int(round((trust / 100.0) * 10))
                 snippets.append({
@@ -479,7 +378,7 @@ class EvidenceVerificationEngine:
                     "articleTitle": title or f"News Dispatch: {claim_text[:50]}...",
                     "publicationDate": pub_date,
                     "sourceTrustScore": trust,
-                    "url": gn_url or f"https://news.google.com/search?q={src}",
+                    "url": gn_url,
                     "matchingClaim": claim_text,
                     "stance": "support",
                     "snippet": f"Wire Corroboration: \"{title}\" (Agreement Score: {agree}%)",
@@ -491,118 +390,18 @@ class EvidenceVerificationEngine:
                     status = "Supported"
                     confidence = max(confidence, min(95, 75 + int(agree * 0.2)))
                     notes = f"Corroborated by reporting from {src} (Agreement: {agree}%)."
-            elif agree < 30 and is_trusted:
-                has_contradiction_signal = any(
-                    kw in title.lower()
-                    for kw in ["fact check: false", "fact-check: false", "debunk:", "hoax:", "is false", "is fake", "is untrue", "pants on fire", "rated false", "claim is false", "refuted:"]
-                )
-                if has_contradiction_signal:
-                    contradicting_sources.append(src)
-                    pts = int(round((trust / 100.0) * 15))
-                    snippets.append({
-                        "source": src,
-                        "sourceName": src,
-                        "articleTitle": title or f"Contradicting Wire: {claim_text[:50]}...",
-                        "publicationDate": pub_date,
-                        "sourceTrustScore": trust,
-                        "url": gn_url or f"https://news.google.com/search?q={src}",
-                        "matchingClaim": claim_text,
-                        "stance": "contradict",
-                        "snippet": f"Wire Contradiction: \"{title}\" refutes or disputes claim",
-                        "trust": trust,
-                        "pointsAssigned": f"-{pts} pts",
-                        "calculationReason": f"Conflicting wire evidence from trusted publisher ({src}, Trust: {trust}/100) (-{pts} pts)"
-                    })
-                    if status != "Contradicted":
-                        status = "Contradicted"
-                        confidence = 88
-                        notes = f"Contradicted by reporting from {src}."
 
         # -------------------------------------------------------------
-        # 2. Check known debunked / viral hoax patterns
+        # 2. Check known debunked / viral hoax patterns (Test corpus only)
         # -------------------------------------------------------------
-        if status != "Contradicted":
-            matched_debunk = None
-            for pattern in KNOWN_DEBUNKED_PATTERNS:
-                match_count = sum(1 for kw in pattern["keywords"] if kw in claim_lower or kw in full_article_text.lower())
-                if match_count >= 2:
-                    matched_debunk = pattern
-                    break
-
-            if matched_debunk:
-                contradicting_sources.extend(matched_debunk["contradicting"])
-                confidence = matched_debunk["confidence"]
-                status = "Contradicted"
-                notes = matched_debunk["note"]
-                for src in matched_debunk["contradicting"]:
-                    trust_score = SOURCE_DATABASE.get(src.lower(), {}).get("trust", 95)
-                    domain = SOURCE_DATABASE.get(src.lower(), {}).get("domain", "factcheck.org")
-                    snippets.append({
-                        "source": src,
-                        "sourceName": src,
-                        "articleTitle": f"Debunk Audit: {matched_debunk['keywords'][0].upper()} Claim Refutation",
-                        "publicationDate": "2024-02-01",
-                        "sourceTrustScore": trust_score,
-                        "url": f"https://{domain}" if not domain.startswith("http") else domain,
-                        "matchingClaim": claim_text,
-                        "stance": "contradict",
-                        "snippet": f"Identified false assertion contradicting verified factual consensus: {notes}",
-                        "trust": trust_score,
-                        "pointsAssigned": "-20 pts",
-                        "calculationReason": f"Matched documented disinformation pattern refuted by {src} (-20 pts)"
-                    })
 
         # -------------------------------------------------------------
-        # 3. Check known verified consensus patterns
+        # 3. Check known verified consensus patterns (Test corpus only)
         # -------------------------------------------------------------
         src_name = source_context.get("sourceName", "")
         src_trust = source_context.get("trustScore", 50)
         is_trusted_publisher = source_context.get("isTrusted", False)
 
-        if status not in ("Contradicted", "Supported"):
-            matched_verified = None
-            is_conflict = is_conflict_or_military_event(f"{claim_lower} {full_article_text.lower()}")
-            for pattern in KNOWN_VERIFIED_PATTERNS:
-                # Do not match health/medical pattern for military clashes or killings
-                if pattern.get("topic") == "health_medical" and is_conflict:
-                    continue
-                match_count = sum(1 for kw in pattern["keywords"] if kw in claim_lower or kw in full_article_text.lower())
-                if match_count >= 2:
-                    matched_verified = pattern
-                    break
-
-            if matched_verified:
-                confidence = matched_verified["confidence"]
-                notes = matched_verified["note"]
-                # Always preserve primary source first if trusted and topic-relevant
-                if is_trusted_publisher and src_name and is_evidence_topic_relevant(claim_text, src_name, claim_text, full_article_text):
-                    supporting_sources.append(src_name)
-                for ext_src in matched_verified["supporting"]:
-                    if ext_src.lower() != src_name.lower() and is_evidence_topic_relevant(claim_text, ext_src, claim_text, full_article_text):
-                        supporting_sources.append(ext_src)
-
-                if supporting_sources:
-                    status = "Supported"
-                    for src in matched_verified["supporting"][:4]:
-                        if src.lower() == src_name.lower() or not is_evidence_topic_relevant(claim_text, src, claim_text, full_article_text):
-                            continue
-                        trust_score = SOURCE_DATABASE.get(src.lower(), {}).get("trust", 92)
-                        domain = SOURCE_DATABASE.get(src.lower(), {}).get("domain", "reuters.com")
-                        snippets.append({
-                            "source": src,
-                            "sourceName": src,
-                            "articleTitle": f"External Wire Reference: {claim_text[:60]}...",
-                            "publicationDate": "2024-01-11",
-                            "sourceTrustScore": trust_score,
-                            "url": f"https://{domain}" if not domain.startswith("http") else domain,
-                            "matchingClaim": claim_text,
-                            "stance": "support",
-                            "snippet": f"Corroborating reporting logged in {src} wire archives: {claim_text}",
-                            "trust": trust_score,
-                            "pointsAssigned": "+8 pts",
-                            "calculationReason": f"External corroborating citation ({src}, Trust: {trust_score}/100) (+8 pts)",
-                            "isPrimary": False
-                        })
 
         # -------------------------------------------------------------
         # 4. Incorporate Source Reputation Context
@@ -626,11 +425,16 @@ class EvidenceVerificationEngine:
             if snip.get("stance") != "support" or is_evidence_topic_relevant(claim_text, snip.get("sourceName", ""), snip.get("articleTitle", ""), full_article_text)
         ]
 
-        if not supporting_sources and status != "Contradicted":
+        if not supporting_sources and not contradicting_sources:
             status = "Unverified"
             confidence = 50
-            notes = "NO SUPPORTING EVIDENCE FOUND."
-            claim["supportingCitationStatus"] = "NO SUPPORTING EVIDENCE FOUND"
+            notes = "no live evidence found"
+            claim["supportingCitationStatus"] = "no live evidence found"
+        elif not supporting_sources and status != "Contradicted":
+            status = "Unverified"
+            confidence = 50
+            notes = "no live evidence found"
+            claim["supportingCitationStatus"] = "no live evidence found"
 
         # Deduplicate sources while maintaining order
         supporting_sources = list(dict.fromkeys(supporting_sources))

@@ -25,6 +25,7 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 
 import requests
+from utils.url_extractor import is_real_article_url, resolve_google_news_url
 
 logger = logging.getLogger("lucid.gnews")
 if not logger.handlers:
@@ -232,13 +233,17 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
                 agreement = _compute_agreement_score(claim_text, clean_title, description)
                 is_trusted = trust_score >= 85
 
+                resolved_url, pub_domain = resolve_google_news_url(article_url)
+                final_url = resolved_url or article_url
+
                 results.append({
                     "sourceName": source_name,
+                    "publisherDomain": pub_domain,
                     "articleTitle": clean_title,
                     "publicationDate": parsed_date,
                     "publicationTime": pub_date or parsed_date,
                     "sourceTrustScore": trust_score,
-                    "url": article_url,
+                    "url": final_url,
                     "matchingClaim": claim_text,
                     "agreementScore": agreement,
                     "description": description[:250] if description else clean_title,
@@ -323,110 +328,21 @@ def search_gnews(claim_text: str, max_articles: int = 5) -> List[Dict[str, Any]]
     if not results:
         results = _fetch_from_google_news_rss(claim_text, max_articles=max_articles)
 
-    # 3. Contextual wire archives fallback if network returned zero matches
-    if not results:
-        clean_lower = claim_text.lower()
-        if "renewable" in clean_lower or "solar" in clean_lower or "capacity" in clean_lower or "energy" in clean_lower:
-            results = [
-                {
-                    "sourceName": "Reuters",
-                    "articleTitle": "Global renewable capacity additions increased by nearly 50% in 2023",
-                    "publicationDate": "2024-01-11",
-                    "publicationTime": "2024-01-11T10:30:00Z",
-                    "sourceTrustScore": 96,
-                    "url": "https://www.reuters.com/business/energy/global-renewable-capacity-rose-50-2023-iea-2024-01-11/",
-                    "matchingClaim": claim_text,
-                    "agreementScore": 94,
-                    "description": "Renewables expansion reached historic peaks led by solar PV and wind generation worldwide.",
-                    "isTrustedSource": True
-                },
-                {
-                    "sourceName": "International Energy Agency (IEA)",
-                    "articleTitle": "Renewables 2023 Analysis and Forecast to 2028",
-                    "publicationDate": "2024-01-11",
-                    "publicationTime": "2024-01-11T09:00:00Z",
-                    "sourceTrustScore": 99,
-                    "url": "https://www.iea.org/reports/renewables-2023",
-                    "matchingClaim": claim_text,
-                    "agreementScore": 96,
-                    "description": "Primary market report documenting fastest global renewable growth rate in two decades.",
-                    "isTrustedSource": True
-                }
-            ]
-        elif "5g" in clean_lower or "microchip" in clean_lower or "water" in clean_lower:
-            results = [
-                {
-                    "sourceName": "Reuters Fact Check",
-                    "articleTitle": "Fact Check: No evidence of microchips or 5G nano-devices in municipal water supplies",
-                    "publicationDate": "2023-08-20",
-                    "publicationTime": "2023-08-20T14:15:00Z",
-                    "sourceTrustScore": 96,
-                    "url": "https://www.reuters.com/fact-check/",
-                    "matchingClaim": claim_text,
-                    "agreementScore": 15,
-                    "description": "Water quality regulators and telecommunication engineers confirm claim is scientifically unfounded.",
-                    "isTrustedSource": True
-                },
-                {
-                    "sourceName": "PolitiFact",
-                    "articleTitle": "Debunking the viral 5G drinking water microchip conspiracy theory",
-                    "publicationDate": "2023-09-02",
-                    "publicationTime": "2023-09-02T16:00:00Z",
-                    "sourceTrustScore": 95,
-                    "url": "https://www.politifact.com/factchecks/",
-                    "matchingClaim": claim_text,
-                    "agreementScore": 12,
-                    "description": "Pants on Fire rating: microchips cannot be dissolved into liquid tap water for surveillance.",
-                    "isTrustedSource": True
-                }
-            ]
-        elif "ballot" in clean_lower or "election" in clean_lower or "van" in clean_lower:
-            results = [
-                {
-                    "sourceName": "Associated Press (AP)",
-                    "articleTitle": "AP Fact Check: Video of ballot delivery vans misrepresents routine election logistics",
-                    "publicationDate": "2024-11-04",
-                    "publicationTime": "2024-11-04T12:00:00Z",
-                    "sourceTrustScore": 95,
-                    "url": "https://apnews.com/hub/ap-fact-check",
-                    "matchingClaim": claim_text,
-                    "agreementScore": 18,
-                    "description": "Official election certifiers confirm all delivered ballots were cataloged with bipartisan observers present.",
-                    "isTrustedSource": True
-                }
-            ]
-        else:
-            results = []
+    # Filter live results to ensure only real article URLs are kept (Requirement 3)
+    results = [it for it in results if is_real_article_url(it.get("url", ""))]
+
 
     # Calculate evidence contribution and stance for each source
-    debunk_regex = re.compile(
-        r'\b('
-        r'conspiracy\s+theor(y|ies|ists?)|conspiracy|'
-        r'debunk|debunked|debunking|debunks|'
-        r'false|falsely|falsehood|false\s+claim|'
-        r'misleading|misinformation|disinformation|'
-        r'no\s+evidence|no\s+scientific\s+evidence|no\s+proof|lacks\s+evidence|without\s+evidence|no\s+basis|'
-        r'baseless|baseless\s+fear|baseless\s+claim|unfounded|unsubstantiated|groundless|'
-        r'hoax|pants\s+on\s+fire|fake\s+news|fabricated|fake|refuted|refutes|disproven|discredited|untrue|'
-        r'does\s+not\s+cause|doesn\'?t\s+cause|did\s+not\s+cause|cannot\s+cause|not\s+cause|no\s+link|not\s+linked|'
-        r'does\s+not\s+spread|doesn\'?t\s+spread|cannot\s+spread|does\s+not\s+transmit|'
-        r'bans\s+incitement\s+to\s+attack|burn(ing)?\s+cell\s+towers|towers\s+ablaze|'
-        r'did\s+not\s+endorse|never\s+endorsed?|not\s+endorse|no\s+endorsement|'
-        r'not\s+flat|earth\s+is\s+not\s+flat|earth\s+isn\'?t\s+flat|earth\s+is\s+spherical|earth\s+is\s+round'
-        r')\b',
-        re.I
-    )
+    # Requirement 6: Keyword/regex fallback must NEVER create a "contradicting" source on its own.
     for item in results:
         agree = item.get("agreementScore", 50)
         trust = item.get("sourceTrustScore", 80)
-        title = item.get("articleTitle", "")
-        desc = item.get("description", "")
-        has_debunk = bool(debunk_regex.search(f"{title} {desc}"))
 
-        if has_debunk or item.get("stance") == "contradict":
+        # Only accept contradict if pre-classified by Gemini or verified fact-checker
+        if item.get("stance") == "contradict":
             item["stance"] = "contradict"
             pts = int(round((trust / 100.0) * 16))
-            item["evidenceCalculation"] = f"Contradicting Source ({trust}/100 Trust, Debunk / Contradiction Flag) -> Subtracts -{pts} pts from Evidence Score"
+            item["evidenceCalculation"] = f"Contradicting Source ({trust}/100 Trust) -> Subtracts -{pts} pts from Evidence Score"
         elif agree >= 60:
             item["stance"] = "support"
             pts = int(round((trust / 100.0) * 12))

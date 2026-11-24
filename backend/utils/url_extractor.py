@@ -1,8 +1,9 @@
+import base64
 import ipaddress
 import logging
 import re
 import socket
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import requests
 from bs4 import BeautifulSoup
 from typing import Dict, Any, Tuple
@@ -22,7 +23,9 @@ BLOCKED_IP_NETWORKS = [
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("::/128"),
     ipaddress.ip_network("fe80::/10"),
     ipaddress.ip_network("fc00::/7"),
 ]
@@ -34,6 +37,7 @@ BROWSER_USER_AGENT = (
 )
 
 REQUEST_TIMEOUT = 10  # 10 second timeout required by Task A
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB maximum response size (SSRF & resource exhaustion protection)
 
 
 def is_ssrf_blocked_ip(ip_str: str) -> bool:
@@ -75,25 +79,179 @@ def validate_url_security(url: str) -> Tuple[bool, str, str]:
 
         hostname_lower = hostname.lower()
         if hostname_lower in ('localhost', '127.0.0.1', '0.0.0.0', '::1') or hostname_lower.endswith('.local') or hostname_lower.endswith('.internal'):
-            return False, "Access to private or internal network addresses is blocked.", ""
+            return False, "Access to private or local network resources is forbidden.", ""
 
-        # Resolve hostname to check all destination IPs
         try:
-            addr_info = socket.getaddrinfo(hostname, None)
-            for item in addr_info:
-                sockaddr = item[4]
-                ip_candidate = sockaddr[0]
-                if is_ssrf_blocked_ip(ip_candidate):
-                    logger.warning(f"SSRF block triggered for host '{hostname}' resolving to '{ip_candidate}'")
-                    return False, "Access to private or internal network addresses is blocked.", ""
-        except socket.gaierror:
+            ip_obj = ipaddress.ip_address(hostname_lower)
+            if is_ssrf_blocked_ip(str(ip_obj)):
+                return False, "Access to private or internal IP addresses is forbidden.", ""
+        except ValueError:
+            pass
+
+        try:
+            addr_info = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+            for entry in addr_info:
+                ip_addr = entry[4][0]
+                if is_ssrf_blocked_ip(ip_addr):
+                    logger.warning(f"SSRF blocked: {hostname} resolved to private/restricted IP: {ip_addr}")
+                    return False, "Target host resolves to a private or restricted network address.", ""
+        except socket.gaierror as e:
+            logger.warning(f"DNS resolution failure for host {hostname}: {e}")
             return False, "Could not resolve hostname.", ""
 
         return True, "", url_clean
 
     except Exception as e:
         logger.error(f"URL validation error: {e}")
-        return False, f"URL validation failed: {str(e)}", ""
+        return False, "Malformed or invalid URL.", ""
+
+
+def is_real_article_url(url: str) -> bool:
+    """
+    Validates whether a URL points to a specific article or document,
+    rather than a generic website homepage, section index, hub page, or search query.
+    Only sources with a real article URL are accepted for evidence verification.
+    """
+    if not url or not isinstance(url, str):
+        return False
+
+    url_clean = url.strip()
+    if not (url_clean.startswith("http://") or url_clean.startswith("https://")):
+        return False
+
+    try:
+        parsed = urlparse(url_clean)
+        netloc = (parsed.netloc or "").lower().replace("www.", "")
+        path = (parsed.path or "").strip("/")
+    except Exception:
+        return False
+
+    if not netloc:
+        return False
+
+    # Block API endpoints, search queries, and placeholder paths
+    if "factchecktools.googleapis.com" in netloc or "googleapis.com" in netloc:
+        return False
+    if "google.com" in netloc and ("search" in path or not path or path == "search"):
+        return False
+    if url_clean.endswith("#") or url_clean.endswith("/#"):
+        return False
+
+    # A homepage with no path or only whitespace/slash is never an article URL
+    if not path:
+        return False
+
+    segments = [s.lower() for s in path.split("/") if s]
+    if not segments:
+        return False
+
+    # Generic top-level section and hub directories
+    GENERIC_SECTIONS = {
+        "news", "technology", "tech", "business", "politics", "world", "opinion",
+        "opinions", "sports", "sport", "science", "health", "features", "hub",
+        "topics", "topic", "category", "categories", "section", "sections", "tag",
+        "tags", "video", "videos", "live", "about", "contact", "home", "index",
+        "default", "middleeast", "middle-east", "us", "asia", "europe", "africa",
+        "americas", "latin-america", "national", "international", "lifestyle"
+    }
+
+    # Case 1: Single segment path, e.g. /technology, /news, /middleeast
+    if len(segments) == 1:
+        seg = segments[0]
+        if seg in GENERIC_SECTIONS:
+            return False
+        # If single segment is short and has no slug indicators (dashes, numbers, or file extension)
+        if len(seg) < 20 and not re.search(r'[-_0-9.]', seg):
+            return False
+
+    # Case 2: Two-segment path that points to a hub or sub-section
+    # e.g., /hub/israel-hamas-war, /news/world-middle-east, /category/technology, /section/politics
+    if segments[0] in ("hub", "topics", "topic", "category", "categories", "section", "sections", "tag", "tags"):
+        return False
+
+    if segments[0] in ("news", "world", "business", "technology", "tech", "politics"):
+        if len(segments) == 2 and segments[1] in (
+            "world-middle-east", "middleeast", "middle-east", "us", "asia", "europe",
+            "africa", "politics", "business", "technology", "tech", "national", "international"
+        ):
+            return False
+
+    return True
+
+
+def resolve_google_news_url(url: str, timeout: float = 2.5) -> Tuple[str, str]:
+    """
+    Attempts to resolve a Google News redirect URL to the publisher's real article URL and domain.
+    Returns (resolved_url, publisher_domain).
+    If resolution fails or URL is not a Google News redirect, returns (url, extracted_domain).
+    """
+    if not url or not isinstance(url, str):
+        return "", ""
+
+    url_clean = url.strip()
+    try:
+        parsed = urlparse(url_clean)
+        netloc = (parsed.netloc or "").lower().replace("www.", "")
+    except Exception:
+        return url_clean, ""
+
+    if "news.google.com" not in netloc:
+        return url_clean, netloc
+
+    # Method 1: Decode base64 / protobuf token if present in path
+    # Google News article URLs: https://news.google.com/rss/articles/<TOKEN>?oc=5
+    resolved_url = None
+    try:
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) >= 2 and parts[-2] == "articles":
+            token = parts[-1].split("?")[0]
+            padded = token + "=" * (-len(token) % 4)
+            decoded = base64.urlsafe_b64decode(padded)
+            found_urls = re.findall(rb'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[^\x00-\x1f\x7f-\xff\s\"\'<>]*', decoded)
+            for raw_u in found_urls:
+                cand_u = raw_u.decode('utf-8', errors='ignore')
+                cand_parsed = urlparse(cand_u)
+                cand_netloc = (cand_parsed.netloc or "").lower().replace("www.", "")
+                if cand_netloc and "google.com" not in cand_netloc and is_real_article_url(cand_u):
+                    resolved_url = cand_u
+                    break
+    except Exception:
+        pass
+
+    if resolved_url:
+        cand_domain = urlparse(resolved_url).netloc.lower().replace("www.", "")
+        return resolved_url, cand_domain
+
+    # Method 2: HTTP GET with redirects followed
+    try:
+        resp = requests.get(
+            url_clean,
+            headers={"User-Agent": BROWSER_USER_AGENT},
+            timeout=timeout,
+            allow_redirects=True
+        )
+        if resp.url and "news.google.com" not in resp.url and is_real_article_url(resp.url):
+            resolved_domain = urlparse(resp.url).netloc.lower().replace("www.", "")
+            return resp.url, resolved_domain
+
+        # Check HTML for meta refresh or anchor redirect
+        if resp.content:
+            soup = BeautifulSoup(resp.content[:10000], "html.parser")
+            meta_refresh = soup.find("meta", attrs={"http-equiv": re.compile(r"^refresh$", re.I)})
+            if meta_refresh and meta_refresh.get("content"):
+                m = re.search(r'url=(https?://[^\s"\']+)', meta_refresh["content"], re.I)
+                if m and "google.com" not in m.group(1) and is_real_article_url(m.group(1)):
+                    ru = m.group(1)
+                    return ru, urlparse(ru).netloc.lower().replace("www.", "")
+
+            for a_tag in soup.find_all("a", href=True):
+                href = a_tag["href"]
+                if href.startswith("http") and "google.com" not in href and is_real_article_url(href):
+                    return href, urlparse(href).netloc.lower().replace("www.", "")
+    except Exception:
+        pass
+
+    return url_clean, netloc
 
 
 def fetch_and_extract_article(url_input: str) -> Dict[str, Any]:
@@ -102,69 +260,84 @@ def fetch_and_extract_article(url_input: str) -> Dict[str, Any]:
     1. 10-second timeout.
     2. Browser-like User-Agent.
     3. SSRF prevention for localhost, private and link-local ranges.
-    4. Text extraction of article title and main body.
-    5. Clean error message if page cannot be read or has too little text.
+    4. Text sufficiency check (>= 150 chars, >= 30 words).
+    5. Clean text parsing (removing script, style, nav, ads, boilerplate).
     """
-    is_valid, err_msg, url = validate_url_security(url_input)
+    is_valid, err, validated_url = validate_url_security(url_input)
     if not is_valid:
+        logger.warning(f"URL validation failed for {url_input}: {err}")
         return {
             "success": False,
-            "error": err_msg,
-            "url": url_input
+            "error": err,
+            "reason": "URL security validation failed (SSRF or malformed URL)."
         }
 
-    domain = urlparse(url).netloc
+    url = validated_url
+    domain = urlparse(url).netloc.lower().replace("www.", "")
 
     headers = {
         "User-Agent": BROWSER_USER_AGENT,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
-        "DNT": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
         "Upgrade-Insecure-Requests": "1"
     }
 
     try:
-        logger.info(f"Fetching URL: {url} (Timeout: {REQUEST_TIMEOUT}s)")
-        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+        logger.info(f"Fetching URL with 10s timeout: {url}")
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+            stream=True,
+            allow_redirects=True
+        )
 
-        # Check final redirected URL for SSRF as well
-        resp_history = getattr(resp, 'history', None)
-        if resp_history and isinstance(resp_history, (list, tuple)):
-            for r in resp_history:
-                r_url = getattr(r, 'url', None)
-                if r_url and isinstance(r_url, str):
-                    r_valid, r_err, _ = validate_url_security(r_url)
-                    if not r_valid:
-                        return {"success": False, "error": r_err, "url": url}
-        final_url = getattr(resp, 'url', None)
-        if final_url and isinstance(final_url, str):
-            final_valid, final_err, _ = validate_url_security(final_url)
-            if not final_valid:
-                return {"success": False, "error": final_err, "url": url}
+        final_url = response.url
+        final_valid, final_err, _ = validate_url_security(final_url)
+        if not final_valid:
+            logger.warning(f"Redirected to disallowed URL ({final_url}): {final_err}")
+            return {
+                "success": False,
+                "error": "Redirected to forbidden or internal address.",
+                "reason": "SSRF protection blocked redirect."
+            }
 
-        if resp.status_code >= 400:
-            logger.warning(f"Failed to fetch {url} - HTTP status {resp.status_code}")
+        content_bytes = bytearray()
+        for chunk in response.iter_content(chunk_size=16384):
+            content_bytes.extend(chunk)
+            if len(content_bytes) > MAX_RESPONSE_BYTES:
+                logger.warning(f"Response size exceeded {MAX_RESPONSE_BYTES} bytes. Truncating.")
+                break
+
+        if not content_bytes:
             return {
                 "success": False,
                 "error": "Could not read this page. Paste the article text instead.",
-                "statusCode": resp.status_code
+                "reason": "Empty HTTP response received."
             }
 
-        soup = BeautifulSoup(resp.text, 'html.parser')
+        encoding = response.encoding or response.apparent_encoding or 'utf-8'
+        html_content = content_bytes.decode(encoding, errors='replace')
 
-        # 1. Extract title (og:title, twitter:title, h1, or title tag)
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # 1. Extract title
         title = ""
-        og_title = (
-            soup.find('meta', property='og:title') or
-            soup.find('meta', attrs={'name': 'og:title'}) or
-            soup.find('meta', attrs={'name': 'twitter:title'})
-        )
+        og_title = soup.find('meta', property='og:title')
         if og_title and og_title.get('content'):
             title = og_title['content'].strip()
-        elif soup.find('h1'):
-            title = soup.find('h1').get_text(strip=True)
         elif soup.title and soup.title.string:
             title = soup.title.string.strip()
+
+        # Remove site name suffix from title if present
+        if " | " in title:
+            title = title.split(" | ")[0].strip()
+        elif " - " in title:
+            title = title.rsplit(" - ", 1)[0].strip()
 
         # 2. Decompose noise and boilerplate tags
         for tag in soup([
