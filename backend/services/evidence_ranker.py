@@ -19,6 +19,7 @@ from typing import List, Dict, Any, Tuple
 from services.semantic_embeddings import get_semantic_engine
 from services.gemini_stance_classifier import get_gemini_stance_classifier
 from services.wikipedia_service import claim_refers_to_relative_or_associate
+from utils.url_extractor import is_real_article_url
 
 logger = logging.getLogger("lucid.ranker")
 if not logger.handlers:
@@ -197,21 +198,22 @@ class EvidenceRanker:
                     return ("neutral", 40)
 
         # 3b. Role & Corporate Leadership attribution check
+        # Requirement 6: Keyword/regex fallback must NEVER create a "contradicting" source on its own.
         roles = ["founder", "co-founder", "ceo", "chief executive", "president", "prime minister"]
         has_role_claim = any(r in claim_lower for r in roles)
         if has_role_claim:
             if any(term in combined for term in ["founded by", "founded in", "chief executive of", "ceo of", "president and ceo"]):
                 is_match, reason = self._check_specific_claim_match(claim_text, combined)
                 if not is_match and "conflicting organization" in reason.lower() and sim_score >= 0.35:
-                    return ("contradict", 95)
+                    return ("neutral", 50)
 
         # 3c. Directional Negation Polarity Check:
         has_negation = bool(re.search(r'\b(is\s+not|isn\'?t|not\s+inside|not\s+in|never|no|none)\b', claim_lower))
         if has_negation:
             if "not inside" in claim_lower and ("inside" in combined or "located in" in combined or "orbits in" in combined or "part of" in combined):
-                return ("contradict", 95)
+                return ("neutral", 50)
             if "is not round" in claim_lower and "oblate spheroid" not in claim_lower and ("round" in combined or "sphere" in combined):
-                return ("contradict", 90)
+                return ("neutral", 50)
 
         # Check if candidate evidence explicitly refutes/negates an affirmative claim:
         ev_negation_terms = [
@@ -220,7 +222,7 @@ class EvidenceRanker:
             "falsely claimed", "falsely claims", "baseless claim"
         ]
         if any(term in combined for term in ev_negation_terms):
-            return ("contradict", 95)
+            return ("neutral", 50)
 
         # 4. Strict NLP Stance: SUPPORTS vs RELATED vs NEUTRAL
         # Requirement 2: A headline counts as "Supported" only if it matches the specific claim (same entities, numbers, or event).
@@ -229,10 +231,10 @@ class EvidenceRanker:
             is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
             if not is_specific_match:
                 if "conflicting organization" in match_reason.lower() and sim_score >= 0.35:
-                    return ("contradict", 95)
+                    return ("neutral", 50)
                 # Task 1: Time-sensitive conflicting metric (rates, prices, office holders)
                 if self._is_time_sensitive_claim(claim_text) and "conflicting percentage" in match_reason.lower() and sim_score >= 0.35:
-                    return ("contradict", 95)
+                    return ("neutral", 50)
                 conf = int(min(90, max(50, sim_score * 100)))
                 return ("related", conf)
 
@@ -261,6 +263,20 @@ class EvidenceRanker:
             if any(c_term in claim_lower for c_term in ["caused", "causes", "causes of", "responsible for"]):
                 if not any(a in combined for a in ["study proves", "scientists confirm", "medical audit confirms", "evidence shows"]):
                     return ("neutral", 50)
+
+            # Requirement 2: Speculative / future-event wording check
+            # A source that only discusses a possible or future event (wants to, may, plans to, talks about, etc.)
+            # must be "neutral" for a claim that says the event happened.
+            FUTURE_EVENT_REGEX = re.compile(
+                r'\b(wants to|want to|plans to|plan to|planning to|may|might|could|aims to|aiming to|talks about|considering|considers|expected to|expects to|proposes to|proposing to|prepares to|preparing to|hopes to|hoping to|looking to|mulls|mulling)\b',
+                re.IGNORECASE
+            )
+            COMPLETED_EVENT_REGEX = re.compile(
+                r'\b(has returned|have returned|has stepped down|have stepped down|has resigned|have resigned|has taken office|has completed|was completed|were completed|has passed|was signed|was enacted|already returned|already resigned|already took office|officially took office|officially stepped down|officially resigned)\b',
+                re.IGNORECASE
+            )
+            if FUTURE_EVENT_REGEX.search(combined) and not COMPLETED_EVENT_REGEX.search(combined):
+                return ("neutral", 50)
 
             if has_affirmative:
                 conf = int(min(98, max(65, sim_score * 100 + 10)))
@@ -425,11 +441,58 @@ class EvidenceRanker:
 
         return True, "Matches specific claim."
 
+    def _snippet_mentions_claim_topic_or_entities(self, claim_text: str, combined_text: str) -> bool:
+        """
+        Validates that the evidence snippet actually mentions the claim's key entities and specific topic/predicate.
+        A generic overview page (e.g. an encyclopedia entry on a whole planet, country, or company)
+        that does not address the specific controversy/predicate cannot count as a contradiction.
+        """
+        claim_lower = claim_text.lower()
+        comb_lower = combined_text.lower()
+
+        STOP = {
+            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "do", "does", "did", "to", "at", "in", "for",
+            "on", "by", "with", "about", "against", "between", "into", "through",
+            "during", "before", "after", "above", "below", "from", "up", "down",
+            "out", "off", "over", "under", "again", "further", "then", "once",
+            "here", "there", "when", "where", "why", "how", "all", "any", "both",
+            "each", "few", "more", "most", "other", "some", "such", "no", "nor",
+            "not", "only", "own", "same", "so", "than", "too", "very", "can",
+            "will", "just", "should", "now", "it", "its", "this", "that"
+        }
+        tokens = [w for w in re.findall(r'\b[a-zA-Z0-9_-]+\b', claim_lower) if w not in STOP and len(w) > 2]
+        if not tokens:
+            return True
+
+        matched = [w for w in tokens if w in comb_lower]
+
+        if len(tokens) >= 2 and len(matched) < 2:
+            synonyms = {
+                "flat": ["shape", "sphere", "spherical", "round", "curvature", "disk", "oblate"],
+                "ceo": ["executive", "chief", "resigned", "leadership", "founded"],
+                "return": ["resigned", "stepped down", "left", "tenure", "continuous"],
+                "covid": ["coronavirus", "pandemic", "sars-cov-2", "virus", "pathogen"],
+                "5g": ["radiation", "cellular", "telecommunications", "radio waves", "electromagnetic"]
+            }
+            missing = [t for t in tokens if t not in matched]
+            covered = 0
+            for t in missing:
+                if t in synonyms and any(syn in comb_lower for syn in synonyms[t]):
+                    covered += 1
+            if (len(matched) + covered) < 2:
+                return False
+
+        return len(matched) >= 1
+
     def rank_evidence_for_claim(self, claim_text: str, candidate_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Ranks all candidate sources for a claim using embeddings, credibility, and recency.
         Returns categorized supporting, contradicting, related, and neutral items.
         """
+        # Requirement 3: Only accept sources with a real article URL (not a homepage or a section page like /technology)
+        candidate_items = [it for it in (candidate_items or []) if is_real_article_url(it.get("url", ""))]
+
         if not candidate_items:
             return {
                 "supporting": [],
@@ -494,11 +557,36 @@ class EvidenceRanker:
                 stance, stance_conf = self.classify_stance(claim_text, item, sim)
                 stance_reason = ""
 
+            # Requirement 5: Require snippet to mention claim's key entities or topic.
+            # A generic overview page (like a Wikipedia article on a whole planet) must not count as a contradiction.
+            combined_snip = f"{title} {snippet}"
+            if stance == "contradict":
+                if not self._snippet_mentions_claim_topic_or_entities(claim_text, combined_snip):
+                    stance = "related" if sim >= 0.35 else "neutral"
+                    stance_conf = 50
+                    stance_reason = "Generic overview page does not address the specific claim proposition (not a contradiction)."
+
             # 3. Trust score (neutral 50 baseline for unlisted sources)
             trust = item.get("sourceTrustScore", 50)
 
-            # 4. Recency score
-            recency = self._calculate_recency_score(item.get("publicationDate", ""))
+            # 4. Recency score & Temporal check (Requirement 3: Real publish date & Wikipedia exemption)
+            pub_date_val = str(item.get("publicationDate") or item.get("publicationTime") or "").strip()[:10]
+            recency = self._calculate_recency_score(pub_date_val)
+
+            is_wiki = "wikipedia" in str(item.get("publisher", "")).lower() or "wikipedia" in str(item.get("sourceName", "")).lower() or "wikipedia.org" in str(item.get("url", "")).lower()
+            if is_wiki:
+                is_old_source = False
+                temporal_status = "reference / evergreen"
+            else:
+                is_old_source = False
+                if pub_date_val:
+                    try:
+                        p_dt = datetime.strptime(pub_date_val, "%Y-%m-%d").date()
+                        if (date.today() - p_dt).days > 180:
+                            is_old_source = True
+                    except Exception:
+                        pass
+                temporal_status = "older, may be outdated" if is_old_source else "recent"
 
             # Composite ranking score (0 - 100)
             composite_score = int(round(
@@ -516,7 +604,9 @@ class EvidenceRanker:
                 "stance": stance,
                 "stanceConfidence": stance_conf,
                 "stanceReason": stance_reason,
-                "matchingClaim": claim_text
+                "matchingClaim": claim_text,
+                "temporalStatus": temporal_status,
+                "isOlder": is_old_source
             })
             evaluated.append(ranked_item)
 
@@ -547,7 +637,8 @@ class EvidenceRanker:
             "supportingCount": len(supporting),
             "contradictingCount": len(contradicting),
             "relatedCount": len(related),
-            "neutralCount": len(neutral)
+            "neutralCount": len(neutral),
+            "stanceClassifierStatus": getattr(self.gemini_classifier, "last_status", "available")
         }
 
     def build_evidence_matrix_for_claims(

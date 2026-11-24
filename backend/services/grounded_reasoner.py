@@ -109,7 +109,7 @@ class GroundedReasoningEngine:
             elif verdict == "Opinion - not fact-checked":
                 summary_reason = "Opinion / commentary piece — subjective perspectives are not evaluated as factual breaking-news claims."
             else:
-                summary_reason = "No sufficiently relevant corroborating sources were found. Unverified pending independent evidence."
+                summary_reason = "No live evidence found across news wire feeds or fact-check registries. Low confidence — unverified pending independent evidence."
         elif article_type in ("Opinion Piece", "Opinion"):
             verdict = "Opinion - not fact-checked"
             trust_score = "Not scored"
@@ -178,7 +178,7 @@ class GroundedReasoningEngine:
             verdict = "UNVERIFIED"
             trust_score = 50
             risk_level = "MEDIUM"
-            summary_reason = "No sufficiently relevant corroborating sources were found. Unverified pending independent evidence."
+            summary_reason = "No live evidence found across news wire feeds or fact-check registries. Low confidence — unverified pending independent evidence."
 
         # -------------------------------------------------------------
         # 2. GROUNDED SYNTHESIS GENERATION

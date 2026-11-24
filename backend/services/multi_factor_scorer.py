@@ -17,6 +17,8 @@ Replaces binary REAL/FAKE with granular verdict types:
 - KNOWN FALSE
 """
 from typing import Dict, Any, List, Tuple
+from datetime import datetime, date
+from utils.url_extractor import is_real_article_url
 
 TupleScore = Tuple[int, str]
 
@@ -103,7 +105,9 @@ class MultiFactorScoringEngine:
         article_type: str = "News Report",
         source_quality_assessment: Dict[str, Any] = None,
         source_tier: str = "",
-        source_category: str = ""
+        source_category: str = "",
+        top_supporting: List[Dict[str, Any]] = None,
+        top_contradicting: List[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Computes the final 5-factor weighted score and maps to the 6-tier verdict.
@@ -339,84 +343,194 @@ class MultiFactorScoringEngine:
                     if has_false_fact_check:
                         break
 
-        # Check whether contradicting evidence exists
-        contra_exceeds_threshold = (
-            contradicting_evidence_count >= contradiction_threshold and
-            (contradicting_evidence_count - supporting_evidence_count) >= contradiction_threshold
-        )
+        # -----------------------------------------------------------------
+        # 3. WEIGHTED EVIDENCE SCORING & VERDICT ASSIGNMENT (Requirements 4, 7, 8)
+        # Weight = relevance x recency x domain_trust
+        # NEEDS REVIEW only when both sides are strong and close.
+        # If support clearly dominates, verdict is VERIFIED or LIKELY TRUE even with weak contradiction.
+        # Hard caps: score not forced to 38 for NEEDS REVIEW (kept in sensible band 40-60).
+        # Outdated: 6-month downgrade ONLY when claim is time-sensitive AND all supporting sources are old.
+        # -----------------------------------------------------------------
+        def _calc_source_weight(item: Dict[str, Any]) -> float:
+            u = item.get("url", "")
+            if not is_real_article_url(u):
+                return 0.0
 
-        # -----------------------------------------------------------------
-        # 3. VERDICT ASSIGNMENT WITH STRICT EVIDENCE SAFEGUARDS
-        # - A reliable publisher with a false claim inside must score LOW.
-        # - An unknown publisher with a true, well-sourced claim must not be punished.
-        # - FALSE: Conclusively contradicted by evidence or rated false.
-        # - UNVERIFIED: No evidence found (missing evidence is NEVER false!).
-        # -----------------------------------------------------------------
+            # 1. Relevance (0.1 - 1.0)
+            rel_score = item.get("relevanceScore")
+            if rel_score is not None:
+                rel = max(0.1, min(1.0, float(rel_score) / 100.0))
+            else:
+                rel = max(0.1, min(1.0, float(item.get("semanticSimilarity", 0.6))))
+            stance_conf = item.get("stanceConfidence")
+            if stance_conf is not None:
+                rel = 0.5 * rel + 0.5 * max(0.1, min(1.0, float(stance_conf) / 100.0))
+
+            # 2. Recency (0.4 - 1.0)
+            pub_date = str(item.get("publicationDate") or item.get("publicationTime") or item.get("review_date") or "").strip()[:10]
+            recency = 0.75
+            if pub_date:
+                try:
+                    dt = datetime.strptime(pub_date, "%Y-%m-%d").date()
+                    delta_days = (date.today() - dt).days
+                    if delta_days <= 90:
+                        recency = 1.0
+                    elif delta_days <= 180:
+                        recency = 0.90
+                    elif delta_days <= 365:
+                        recency = 0.75
+                    elif delta_days <= 730:
+                        recency = 0.60
+                    else:
+                        recency = 0.40
+                except Exception:
+                    recency = 0.75
+
+            # 3. Domain Trust (0.1 - 1.0)
+            trust_val = item.get("sourceTrustScore") or item.get("trust") or 50
+            domain_trust = max(0.1, min(1.0, float(trust_val) / 100.0))
+
+            return round(rel * recency * domain_trust, 4)
+
+        # Collect verified supporting and contradicting items
+        supp_items: List[Dict[str, Any]] = []
+        contra_items: List[Dict[str, Any]] = []
+
+        if top_supporting:
+            supp_items.extend([it for it in top_supporting if is_real_article_url(it.get("url", ""))])
+        if top_contradicting:
+            contra_items.extend([it for it in top_contradicting if is_real_article_url(it.get("url", ""))])
+
+        if not supp_items and claims:
+            for c in claims:
+                for snip in c.get("evidenceSnippets", []):
+                    u = snip.get("url", "")
+                    if is_real_article_url(u):
+                        if snip.get("stance") == "support":
+                            supp_items.append(snip)
+                        elif snip.get("stance") == "contradict":
+                            contra_items.append(snip)
+
+        total_support_weight = sum(_calc_source_weight(s) for s in supp_items)
+        total_contradict_weight = sum(_calc_source_weight(c) for c in contra_items)
+
+        # Both sides are strong and close (balanced conflict)
+        both_sides_strong = (total_support_weight >= 0.20 and total_contradict_weight >= 0.20)
+        weights_close = False
+        if both_sides_strong:
+            ratio = total_support_weight / max(0.001, total_contradict_weight)
+            weights_close = (0.5 <= ratio <= 2.0)
+
+        is_needs_review = both_sides_strong and weights_close
+        support_clearly_dominates = (total_support_weight >= 0.45 and (total_contradict_weight == 0 or total_support_weight >= 2.0 * total_contradict_weight))
+        contradict_clearly_dominates = (total_contradict_weight >= 0.45 and (total_support_weight == 0 or total_contradict_weight >= 2.0 * total_support_weight))
+
         if has_false_fact_check:
             verdict = "KNOWN FALSE"
             final_trust_score = min(final_trust_score, 12)
             risk_level = "CRITICAL"
-            summary_reason = "Conclusively disproven. Flagged as false by Google Fact Check API."
+            summary_reason = "Conclusively disproven. Flagged as false by certified fact-check organization."
 
-        elif contra_exceeds_threshold:
-            verdict = "KNOWN FALSE"
-            final_trust_score = min(final_trust_score, 12)
-            risk_level = "CRITICAL"
-            summary_reason = f"Contradicting evidence exceeds supporting by {contradicting_evidence_count - supporting_evidence_count}. Contradicted by authoritative evidence."
+        elif contradict_clearly_dominates:
+            if total_contradict_weight >= 0.8:
+                verdict = "KNOWN FALSE"
+                final_trust_score = min(final_trust_score, 12)
+                risk_level = "CRITICAL"
+                summary_reason = f"Conclusively disproven. Contradicting evidence strongly dominates (Support: {round(total_support_weight, 2)} vs Contradict: {round(total_contradict_weight, 2)} weight)."
+            else:
+                verdict = "LIKELY FALSE"
+                final_trust_score = min(final_trust_score, 35)
+                risk_level = "HIGH"
+                summary_reason = f"Likely inaccurate. Retrieved evidence disputes the claim (Contradict: {round(total_contradict_weight, 2)} vs Support: {round(total_support_weight, 2)} weight)."
 
-        elif supporting_evidence_count > 0 and contradicting_evidence_count > 0:
+        elif is_needs_review:
             verdict = "NEEDS REVIEW"
-            final_trust_score = min(final_trust_score, 38)
             risk_level = "MEDIUM"
-            summary_reason = f"Mixed evidence detected across wire sources ({supporting_evidence_count} supporting vs {contradicting_evidence_count} contradicting citations). Contains refuted assertions."
+            # Requirement 7: Do not force score to 38. Keep within sensible band [40, 60]
+            final_trust_score = max(40, min(60, int(computed_score)))
+            summary_reason = f"Mixed evidence detected across wire sources. Conflicting evidence exists on both sides (Support weight: {round(total_support_weight, 2)} vs Contradict weight: {round(total_contradict_weight, 2)})."
 
-        elif contradicting_evidence_count > 0:
-            verdict = "LIKELY FALSE"
-            final_trust_score = min(final_trust_score, 35)
-            risk_level = "HIGH"
-            summary_reason = f"Likely inaccurate. Retrieved evidence disputes the claim with {contradicting_evidence_count} contradicting flag(s)."
+        elif support_clearly_dominates:
+            if total_support_weight >= 1.0 and len(supp_items) >= 2:
+                verdict = "VERIFIED"
+                # Requirement 6: Do not floor at 78. Let weighted score show within sensible band [70, 98]
+                final_trust_score = max(70, min(98, int(computed_score)))
+                risk_level = "LOW"
+                summary_reason = f"Corroborated across reliable wire sources (Support weight: {round(total_support_weight, 2)}) with support clearly dominating."
+            else:
+                verdict = "LIKELY TRUE"
+                # Requirement 6: Do not floor at 68. Let weighted score show within sensible band [60, 85]
+                final_trust_score = max(60, min(85, int(computed_score)))
+                risk_level = "LOW"
+                summary_reason = f"Supported by reputable reporting (Support weight: {round(total_support_weight, 2)}) without substantial contradiction."
 
-        elif supporting_evidence_count == 0 and contradicting_evidence_count == 0:
+        elif total_support_weight < 0.25 and total_contradict_weight < 0.25:
+            # Requirement 2: Return UNVERIFIED with "no live evidence found"
             verdict = "UNVERIFIED"
-            # Requirement 4: Zero evidence must not give half marks. Cap the final score at 50 and label low confidence.
             final_trust_score = min(50, final_trust_score)
             risk_level = "MEDIUM"
-            summary_reason = "No reliable supporting or contradicting citations attached. Low confidence — unverified pending independent evidence."
+            summary_reason = "No live evidence found across news wire feeds or fact-check registries. Low confidence — unverified pending independent evidence."
 
-        elif evidence_score < evidence_threshold and supporting_evidence_count < 2:
-            verdict = "UNVERIFIED"
-            final_trust_score = min(50, final_trust_score)
-            risk_level = "MEDIUM"
-            summary_reason = "Insufficient independent evidence citations. Low confidence — unverified pending further corroboration."
-
-        elif supporting_evidence_count >= 2 and contradicting_evidence_count == 0:
-            verdict = "VERIFIED"
-            final_trust_score = max(final_trust_score, 78)
-            risk_level = "LOW"
-            summary_reason = f"Corroborated across {supporting_evidence_count} independent reliable sources with zero contradicting evidence."
-
-        elif supporting_evidence_count >= 1 and contradicting_evidence_count == 0:
+        elif total_support_weight > total_contradict_weight:
             verdict = "LIKELY TRUE"
-            final_trust_score = max(final_trust_score, 68)
+            final_trust_score = max(60, min(75, int(computed_score)))
             risk_level = "LOW"
-            summary_reason = f"Supported by reputable reporting ({supporting_evidence_count} corroborating citation(s)) without contradiction."
+            summary_reason = f"Supported by reporting (Support weight: {round(total_support_weight, 2)} vs Contradict: {round(total_contradict_weight, 2)})."
 
         else:
-            verdict = "NEEDS REVIEW"
+            verdict = "UNVERIFIED"
+            final_trust_score = min(50, final_trust_score)
             risk_level = "MEDIUM"
-            summary_reason = "Content requires editorial review due to mixed or incomplete evidence signals."
+            summary_reason = "No live evidence found across news wire feeds or fact-check registries. Low confidence — unverified pending independent evidence."
 
-        # Check for outdated supporting evidence on time-sensitive claims (Task 1)
-        has_outdated_claim = any(
-            c.get("isOutdated") or c.get("status") == "May be outdated"
-            for c in (claims or [])
-        )
-        if has_outdated_claim:
-            final_trust_score = min(final_trust_score, 60)
-            if verdict in ("VERIFIED", "LIKELY TRUE"):
+        # -----------------------------------------------------------------
+        # Requirement 4: Compound claims evidence check
+        # A source only counts for the sub-claim it actually addresses.
+        # If one sub-claim has no evidence, the verdict must not be FALSE or LIKELY FALSE from the other part alone.
+        # -----------------------------------------------------------------
+        if claims and len(claims) > 1 and verdict in ("KNOWN FALSE", "LIKELY FALSE", "FALSE"):
+            has_unverified_subclaim = False
+            for c in claims:
+                supp_c = len(c.get("supportingSources", [])) + len([s for s in (c.get("evidenceSnippets") or []) if s.get("stance") == "support"])
+                contra_c = len(c.get("contradictingSources", [])) + len([s for s in (c.get("evidenceSnippets") or []) if s.get("stance") == "contradict"])
+                if supp_c == 0 and contra_c == 0:
+                    has_unverified_subclaim = True
+                    break
+
+            if has_unverified_subclaim:
                 verdict = "NEEDS REVIEW"
                 risk_level = "MEDIUM"
-            summary_reason += " Supporting evidence is older than 6 months for time-sensitive claim(s) and may be outdated. Trust score capped at 60."
+                final_trust_score = max(35, min(55, int(computed_score)))
+                summary_reason = "Compound claim contains mixed verification status: one part is contradicted, but another sub-claim has no live evidence found and cannot be judged false from the other part alone."
+
+        # -----------------------------------------------------------------
+        # Requirement 8: Outdated evidence rule
+        # Apply the 6-month downgrade only when the claim is time-sensitive
+        # AND all supporting sources are old. Recent supporting sources prevent the downgrade.
+        # -----------------------------------------------------------------
+        is_time_sensitive_claim = any(
+            c.get("isTimeSensitive") or c.get("isOutdated") or c.get("status") == "May be outdated"
+            for c in (claims or [])
+        )
+        if is_time_sensitive_claim and supp_items:
+            has_recent_supporting = False
+            for s in supp_items:
+                p_date = str(s.get("publicationDate") or s.get("publicationTime") or "").strip()[:10]
+                if p_date:
+                    try:
+                        dt = datetime.strptime(p_date, "%Y-%m-%d").date()
+                        if (date.today() - dt).days <= 180:
+                            has_recent_supporting = True
+                            break
+                    except Exception:
+                        pass
+
+            if not has_recent_supporting:
+                final_trust_score = min(final_trust_score, 60)
+                if verdict in ("VERIFIED", "LIKELY TRUE"):
+                    verdict = "NEEDS REVIEW"
+                    risk_level = "MEDIUM"
+                summary_reason += " All supporting evidence is older than 6 months for a time-sensitive claim and may be outdated. Trust score capped at 60."
 
         return {
             "finalTrustScore": final_trust_score,
