@@ -1,5 +1,11 @@
 import os
 import re
+import time
+import socket
+import logging
+import threading
+from collections import defaultdict
+from typing import Tuple, Dict, Any, Optional
 from urllib.parse import urlparse
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -37,10 +43,9 @@ if cors_origins_env:
         if origin.strip()
     ]
 else:
-    # Default fallback origins for local development
+    # Strict Vercel production origin + local development (never wildcard *)
     allowed_origins = [
-        "https://www.yourdomain.com",
-        "https://yourdomain.com",
+        "https://weblucid.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
@@ -70,22 +75,169 @@ def add_cors_headers(response):
     origin = request.headers.get("Origin")
     if origin:
         origin_clean = origin.rstrip("/")
-        if origin_clean in allowed_origins or (not is_production and ("localhost" in origin_clean or "127.0.0.1" in origin_clean)):
+        if origin_clean in allowed_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
-    # Never set Access-Control-Allow-Origin to "*" in production
+    # Never set Access-Control-Allow-Origin to "*"
     return response
+
+# ==========================================
+# SECURITY: RATE LIMITING & TOKEN VERIFICATION
+# ==========================================
+
+class SlidingWindowRateLimiter:
+    """Thread-safe sliding window rate limiter per user/IP."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.requests = defaultdict(list)
+
+    def is_allowed(self, identifier: str, endpoint_category: str, max_requests: int, window_seconds: int = 60) -> Tuple[bool, int]:
+        now = time.time()
+        key = f"{identifier}:{endpoint_category}"
+        with self.lock:
+            cutoff = now - window_seconds
+            self.requests[key] = [t for t in self.requests[key] if t > cutoff]
+            if len(self.requests[key]) >= max_requests:
+                retry_after = int(self.requests[key][0] + window_seconds - now) + 1
+                return False, max(retry_after, 1)
+            self.requests[key].append(now)
+            return True, 0
+
+rate_limiter = SlidingWindowRateLimiter()
+
+# In-memory TTL cache for verified Firebase ID tokens: token -> (user_info, expiry_ts)
+TOKEN_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
+TOKEN_CACHE_LOCK = threading.Lock()
+
+def get_auth_context() -> Dict[str, Any]:
+    """
+    Extracts and verifies Firebase ID token from Authorization: Bearer <token>.
+    Returns dict:
+      {
+        "is_authenticated": bool,
+        "user_id": str or None,
+        "email": str or None,
+        "is_guest": bool,
+        "identifier": str (user_id for auth users, client IP for guests)
+      }
+    """
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "127.0.0.1").split(",")[0].strip()
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return {
+            "is_authenticated": False,
+            "user_id": None,
+            "email": None,
+            "is_guest": True,
+            "identifier": ip
+        }
+
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return {
+            "is_authenticated": False,
+            "user_id": None,
+            "email": None,
+            "is_guest": True,
+            "identifier": ip
+        }
+
+    now = time.time()
+    with TOKEN_CACHE_LOCK:
+        if token in TOKEN_CACHE:
+            info, expiry = TOKEN_CACHE[token]
+            if now < expiry:
+                return info
+
+    try:
+        # Validate Firebase ID token with Google's public tokeninfo endpoint
+        resp = requests.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}", timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            user_id = data.get("sub") or data.get("user_id")
+            email = data.get("email", "")
+            exp = float(data.get("exp", now + 300))
+            info = {
+                "is_authenticated": True,
+                "user_id": user_id,
+                "email": email,
+                "is_guest": False,
+                "identifier": user_id or email or ip
+            }
+            with TOKEN_CACHE_LOCK:
+                TOKEN_CACHE[token] = (info, min(exp, now + 300))
+            return info
+    except Exception as err:
+        app.logger.warning(f"Failed to verify Firebase token: {err}")
+
+    # Fall back to unauthenticated / guest with client IP identifier
+    return {
+        "is_authenticated": False,
+        "user_id": None,
+        "email": None,
+        "is_guest": True,
+        "identifier": ip
+    }
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'pdf', 'txt'}
+PROHIBITED_EXTENSIONS = {
+    'exe', 'bat', 'cmd', 'sh', 'bash', 'bin', 'dll', 'msi', 'com', 'ps1',
+    'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'scr', 'pif', 'py', 'pl', 'php'
+}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25 MB max
+app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB max
 
 def allowed_file(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def validate_uploaded_file(file_storage) -> Tuple[bool, str]:
+    """
+    Validates uploaded file: verifies extension, magic bytes header,
+    blocks executable types, and checks non-empty size.
+    """
+    if not file_storage or not file_storage.filename:
+        return False, "No file provided in request."
+
+    filename = secure_filename(file_storage.filename)
+    if not filename or '.' not in filename:
+        return False, "Invalid filename or missing extension."
+
+    ext = filename.rsplit('.', 1)[1].lower()
+    if ext in PROHIBITED_EXTENSIONS:
+        return False, "Executable and script files are strictly prohibited."
+
+    if ext not in ALLOWED_EXTENSIONS:
+        return False, f"File format .{ext} is not allowed. Supported formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}."
+
+    # Inspect magic bytes header
+    header = file_storage.read(2048)
+    file_storage.seek(0)
+
+    if len(header) == 0:
+        return False, "The uploaded file is empty."
+
+    if ext in ('jpg', 'jpeg'):
+        if not header.startswith(b'\xff\xd8\xff'):
+            return False, "File is not a valid JPEG image."
+    elif ext == 'png':
+        if not header.startswith(b'\x89PNG\r\n\x1a\n'):
+            return False, "File is not a valid PNG image."
+    elif ext == 'pdf':
+        if not header.startswith(b'%PDF-'):
+            return False, "File is not a valid PDF document."
+    elif ext == 'txt':
+        if b'\x00' in header:
+            return False, "Text files must not contain binary null bytes."
+        try:
+            header.decode('utf-8')
+        except UnicodeDecodeError:
+            return False, "Text files must be valid UTF-8/ASCII."
+
+    return True, ""
 
 @app.route('/api/health', methods=['GET'])
 @app.route('/api/health/', methods=['GET'])
@@ -176,8 +328,19 @@ def analyze():
     Accepts text, optional source_hint or url.
     Returns 5-factor scoring, atomic claims, evidence corroboration,
     source reputation, and AI reasoning.
+    Protected by Firebase token auth verification and sliding-window rate limiting.
     """
     try:
+        # 1. Auth context & Rate limiting (stricter limits for unauthenticated guests)
+        auth_ctx = get_auth_context()
+        limit = 30 if auth_ctx["is_authenticated"] else 8
+        allowed, retry_after = rate_limiter.is_allowed(auth_ctx["identifier"], "verify", limit, 60)
+        if not allowed:
+            return jsonify({
+                "error": f"Rate limit reached ({limit} requests/min). Please wait {retry_after} seconds before submitting another verification.",
+                "retryAfter": retry_after
+            }), 429
+
         data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "").strip()
         source_hint = data.get("source", "") or data.get("sourceHint", "")
@@ -195,6 +358,10 @@ def analyze():
                 "disclaimer": TRANSPARENCY_WARNING,
                 "explanation": ["Empty text input received."]
             }), 400
+
+        # Input length validation
+        if len(text) > 50000:
+            return jsonify({"error": "Input text exceeds maximum allowed length of 50,000 characters."}), 400
 
         # If input text is actually a web URL, fetch and extract article content
         is_url_input = bool(re.match(r'^https?://', text, re.I)) or ('.' in text and ' ' not in text and not text.endswith('.') and len(text.split('\n')) == 1)
@@ -225,8 +392,9 @@ def analyze():
         return jsonify(result), 200
 
     except Exception as e:
+        app.logger.exception(f"[analyze] Internal verification error: {e}")
         return jsonify({
-            "error": str(e),
+            "error": "An internal error occurred while processing the verification request. Please try again.",
             "prediction": "UNKNOWN",
             "verdict": "UNVERIFIED",
             "confidence": 0,
@@ -234,7 +402,7 @@ def analyze():
             "trustScore": 0,
             "riskLevel": "UNKNOWN",
             "disclaimer": TRANSPARENCY_WARNING,
-            "explanation": [f"Analysis error: {str(e)}"]
+            "explanation": ["The system encountered an unexpected error during analysis."]
         }), 500
 
 @app.route('/api/analyze-file', methods=['POST'])
@@ -243,32 +411,35 @@ def analyze_file():
     """
     Handles file upload (images with OCR, PDFs with PyPDF2, and TXT files),
     extracts content, and runs multi-factor verification pipeline.
+    Enforces token verification, guest rate limits, magic byte validation,
+    and blocks prohibited executable formats.
     """
+    # 1. Rate Limiting Check
+    auth_ctx = get_auth_context()
+    limit = 15 if auth_ctx["is_authenticated"] else 4
+    allowed, retry_after = rate_limiter.is_allowed(auth_ctx["identifier"], "upload", limit, 60)
+    if not allowed:
+        return jsonify({
+            "error": f"Upload rate limit reached ({limit} files/min). Please wait {retry_after} seconds.",
+            "retryAfter": retry_after
+        }), 429
+
     # Robust file parameter extraction (accepts 'file', 'image', 'document', or first multipart entry)
     file = request.files.get('file') or request.files.get('image') or request.files.get('document')
     if file is None and request.files:
         file = next(iter(request.files.values()), None)
 
-    if file is None or not file.filename:
-        return jsonify({
-            "error": "No file part in request. Expected form-data key 'file'.",
-            "receivedKeys": list(request.files.keys())
-        }), 400
-
-    if not allowed_file(file.filename):
-        return jsonify({
-            "error": f"File type not allowed. Supported formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-        }), 400
+    # 2. Strict Magic Byte & File Type Validation
+    is_valid_f, val_err = validate_uploaded_file(file)
+    if not is_valid_f:
+        return jsonify({"error": val_err}), 400
 
     filename = secure_filename(file.filename)
     save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(save_path)
 
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ""
-    app.logger.info(f"[analyze-file] Received file name: {filename}")
-    app.logger.info(f"[analyze-file] File extension: {ext}")
-    print(f"[analyze-file] Received file name: {filename}")
-    print(f"[analyze-file] File extension: {ext}")
+    app.logger.info(f"[analyze-file] Received file: {filename} (Ext: {ext})")
 
     extracted_text = ""
     extraction_note = ""
@@ -277,13 +448,10 @@ def analyze_file():
 
     try:
         if ext in ('jpg', 'jpeg', 'png'):
-            app.logger.info(f"[analyze-file] OCR started for image: {filename}")
-            print(f"[analyze-file] OCR started for image: {filename}")
             extracted_text, success, msg, ocr_details = extract_text_from_image(save_path, return_details=True)
 
             if not success:
-                app.logger.error(f"[analyze-file] OCR failed for {filename}. Exact error: {msg}")
-                print(f"[analyze-file ERROR] OCR failed for {filename}. Exact error: {msg}")
+                app.logger.error(f"[analyze-file] OCR failed for {filename}: {msg}")
                 return jsonify({
                     "error": f"OCR failed: {msg}",
                     "exactError": msg,
@@ -291,12 +459,6 @@ def analyze_file():
                     "fileExtension": ext
                 }), 422
 
-            app.logger.info(f"[analyze-file] OCR completed for image: {filename}")
-            app.logger.info(f"[analyze-file] Extracted text length: {len(extracted_text)}")
-            app.logger.info(f"[analyze-file] First 300 characters of extracted text:\n{extracted_text[:300]}")
-            print(f"[analyze-file] OCR completed for image: {filename}")
-            print(f"[analyze-file] Extracted text length: {len(extracted_text)}")
-            print(f"[analyze-file] First 300 characters of extracted text:\n{extracted_text[:300]}")
             extraction_note = f"OCR ({ext.upper()}): {msg}"
             
             ocr_preview = {
@@ -319,13 +481,11 @@ def analyze_file():
                 extracted_text = f"Image {filename} was processed via OCR, but no clear text was detected."
 
         elif ext == 'pdf':
-            app.logger.info(f"[analyze-file] PDF extraction started for: {filename}")
             extracted_text, success, msg = extract_text_from_pdf(save_path)
             if not success and not extracted_text:
                 app.logger.error(f"[analyze-file] PDF extraction failed for {filename}: {msg}")
                 return jsonify({
-                    "error": f"PDF extraction failed: {msg}",
-                    "exactError": msg,
+                    "error": "Could not extract readable text from PDF document.",
                     "fileName": filename,
                     "fileExtension": ext
                 }), 422
@@ -374,9 +534,8 @@ def analyze_file():
         return jsonify(result), 200
 
     except Exception as e:
-        app.logger.error(f"[analyze-file] File processing failed with exception: {str(e)}")
-        print(f"[analyze-file ERROR] File processing failed: {str(e)}")
-        return jsonify({"error": f"File processing failed: {str(e)}"}), 500
+        app.logger.exception(f"[analyze-file] File processing failed: {e}")
+        return jsonify({"error": "An internal error occurred while processing the uploaded file. Please try again."}), 500
 
 @app.route('/api/ocr', methods=['POST', 'OPTIONS'])
 @app.route('/api/ocr/', methods=['POST', 'OPTIONS'])
@@ -389,48 +548,56 @@ def perform_ocr():
     if request.method == 'OPTIONS':
         return ('', 200)
 
+    # Rate Limiting Check
+    auth_ctx = get_auth_context()
+    limit = 15 if auth_ctx["is_authenticated"] else 4
+    allowed, retry_after = rate_limiter.is_allowed(auth_ctx["identifier"], "upload", limit, 60)
+    if not allowed:
+        return jsonify({
+            "error": f"OCR rate limit reached ({limit} requests/min). Please wait {retry_after} seconds.",
+            "retryAfter": retry_after
+        }), 429
+
     file = request.files.get('file') or request.files.get('image') or request.files.get('document')
     if file is None and request.files:
         file = next(iter(request.files.values()), None)
 
-    if file is None or not file.filename:
-        return jsonify({
-            "error": "No image file part provided. Expected 'file' form data."
-        }), 400
-
-    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ""
-    if ext not in ('jpg', 'jpeg', 'png'):
-        return jsonify({
-            "error": f"OCR requires an image file (JPG, JPEG, PNG). Received .{ext}"
-        }), 400
+    # Validate file type and magic bytes
+    is_valid_f, val_err = validate_uploaded_file(file)
+    if not is_valid_f:
+        return jsonify({"error": val_err}), 400
 
     filename = secure_filename(file.filename)
     save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(save_path)
 
     app.logger.info(f"[api/ocr] Running OCR preview for: {filename}")
-    extracted_text, success, msg, details = extract_text_from_image(save_path, return_details=True)
+    try:
+        extracted_text, success, msg, details = extract_text_from_image(save_path, return_details=True)
 
-    if not success:
+        if not success:
+            return jsonify({
+                "error": f"OCR failed: {msg}",
+                "exactError": msg,
+                "fileName": filename
+            }), 422
+
         return jsonify({
-            "error": f"OCR failed: {msg}",
-            "exactError": msg,
-            "fileName": filename
-        }), 422
-
-    return jsonify({
-        "success": True,
-        "fileName": filename,
-        "fileExtension": ext,
-        "extractedText": extracted_text,
-        "previewText": details.get("previewText", extracted_text[:500]),
-        "confidence": details.get("confidence", 0.0),
-        "isLowConfidence": details.get("isLowConfidence", False),
-        "warning": details.get("warning", ""),
-        "qualityWarning": details.get("qualityWarning", ""),
-        "wordCount": details.get("wordCount", 0),
-        "message": msg
-    }), 200
+            "success": True,
+            "fileName": filename,
+            "fileExtension": filename.rsplit('.', 1)[1].lower(),
+            "extractedText": extracted_text,
+            "previewText": details.get("previewText", extracted_text[:500]),
+            "confidence": details.get("confidence", 0.0),
+            "isLowConfidence": details.get("isLowConfidence", False),
+            "warning": details.get("warning", ""),
+            "qualityWarning": details.get("qualityWarning", ""),
+            "wordCount": details.get("wordCount", 0),
+            "message": msg
+        }), 200
+    except Exception as e:
+        app.logger.exception(f"[api/ocr] Error during OCR: {e}")
+        return jsonify({"error": "An internal error occurred during text extraction."}), 500
 
 @app.route('/api/analyze-url', methods=['POST'])
 @app.route('/api/analyze-url/', methods=['POST'])
@@ -442,42 +609,72 @@ def analyze_url():
     HTTP 400 with: 'Could not read this page. Paste the article text instead.'
     Strictly enforces 10s timeout, browser User-Agent, and SSRF prevention.
     """
+    auth_ctx = get_auth_context()
+    limit = 30 if auth_ctx["is_authenticated"] else 8
+    allowed, retry_after = rate_limiter.is_allowed(auth_ctx["identifier"], "verify", limit, 60)
+    if not allowed:
+        return jsonify({
+            "error": f"Rate limit reached ({limit} requests/min). Please wait {retry_after} seconds before submitting another verification.",
+            "retryAfter": retry_after
+        }), 429
+
     data = request.get_json(force=True, silent=True) or {}
     raw_input = data.get("url", "").strip()
 
     if not raw_input:
         return jsonify({"error": "Missing URL parameter"}), 400
 
-    # Auto-detect whether input is actually a URL or raw text/claim
-    is_url = bool(re.match(r'^https?://', raw_input, re.I)) or ('.' in raw_input and ' ' not in raw_input and len(raw_input.split('\n')) == 1)
+    if len(raw_input) > 2048:
+        return jsonify({"error": "URL exceeds maximum allowed length of 2,048 characters."}), 400
 
-    if not is_url:
+    try:
+        # Auto-detect whether input is actually a URL or raw text/claim
+        is_url = bool(re.match(r'^https?://', raw_input, re.I)) or ('.' in raw_input and ' ' not in raw_input and len(raw_input.split('\n')) == 1)
+
+        if not is_url:
+            result = run_shared_verification_pipeline(
+                text=raw_input,
+                input_type="text"
+            )
+            result["extractedText"] = raw_input
+            result["articleTitle"] = result.get("articleTitle") or raw_input[:100]
+            return jsonify(result), 200
+
+        extraction = fetch_and_extract_article(raw_input)
+        if not extraction.get("success"):
+            return jsonify({
+                "error": extraction.get("error", "Could not read this page. Paste the article text instead.")
+            }), 400
+
         result = run_shared_verification_pipeline(
-            text=raw_input,
-            input_type="text"
+            text=extraction["text"],
+            source_hint=extraction["domain"],
+            url=extraction["url"],
+            title=extraction["title"],
+            input_type="url"
         )
-        result["extractedText"] = raw_input
-        result["articleTitle"] = result.get("articleTitle") or raw_input[:100]
+        result["extractedText"] = extraction["text"]
+        result["sourceDomain"] = extraction["domain"]
+        result["articleTitle"] = extraction["title"] or result.get("articleTitle", "")
+
         return jsonify(result), 200
+    except Exception as e:
+        app.logger.exception(f"[analyze-url] Error verifying URL: {e}")
+        return jsonify({"error": "Could not read this page. Paste the article text instead."}), 500
 
-    extraction = fetch_and_extract_article(raw_input)
-    if not extraction.get("success"):
-        return jsonify({
-            "error": extraction.get("error", "Could not read this page. Paste the article text instead.")
-        }), 400
+@app.errorhandler(429)
+def handle_429(e):
+    return jsonify({"error": "Too many requests. Please slow down and try again later."}), 429
 
-    result = run_shared_verification_pipeline(
-        text=extraction["text"],
-        source_hint=extraction["domain"],
-        url=extraction["url"],
-        title=extraction["title"],
-        input_type="url"
-    )
-    result["extractedText"] = extraction["text"]
-    result["sourceDomain"] = extraction["domain"]
-    result["articleTitle"] = extraction["title"] or result.get("articleTitle", "")
+@app.errorhandler(500)
+def handle_500(e):
+    app.logger.exception(f"Internal 500 error: {e}")
+    return jsonify({"error": "An internal server error occurred. Please try again later."}), 500
 
-    return jsonify(result), 200
+@app.errorhandler(Exception)
+def handle_general_exception(e):
+    app.logger.exception(f"Unhandled server exception: {e}")
+    return jsonify({"error": "An unexpected error occurred. Please try again later."}), 500
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

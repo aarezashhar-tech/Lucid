@@ -2,7 +2,7 @@ import ipaddress
 import logging
 import re
 import socket
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import requests
 from bs4 import BeautifulSoup
 from typing import Dict, Any, Tuple
@@ -22,7 +22,9 @@ BLOCKED_IP_NETWORKS = [
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("::/128"),
     ipaddress.ip_network("fe80::/10"),
     ipaddress.ip_network("fc00::/7"),
 ]
@@ -34,6 +36,7 @@ BROWSER_USER_AGENT = (
 )
 
 REQUEST_TIMEOUT = 10  # 10 second timeout required by Task A
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB maximum response size (SSRF & resource exhaustion protection)
 
 
 def is_ssrf_blocked_ip(ip_str: str) -> bool:
@@ -124,33 +127,63 @@ def fetch_and_extract_article(url_input: str) -> Dict[str, Any]:
     }
 
     try:
-        logger.info(f"Fetching URL: {url} (Timeout: {REQUEST_TIMEOUT}s)")
-        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+        logger.info(f"Fetching URL: {url} (Timeout: {REQUEST_TIMEOUT}s, MaxSize: {MAX_RESPONSE_BYTES}B)")
+        curr_url = url
+        resp = None
 
-        # Check final redirected URL for SSRF as well
-        resp_history = getattr(resp, 'history', None)
-        if resp_history and isinstance(resp_history, (list, tuple)):
-            for r in resp_history:
-                r_url = getattr(r, 'url', None)
-                if r_url and isinstance(r_url, str):
-                    r_valid, r_err, _ = validate_url_security(r_url)
-                    if not r_valid:
-                        return {"success": False, "error": r_err, "url": url}
-        final_url = getattr(resp, 'url', None)
-        if final_url and isinstance(final_url, str):
-            final_valid, final_err, _ = validate_url_security(final_url)
-            if not final_valid:
-                return {"success": False, "error": final_err, "url": url}
+        # Safely follow up to 5 redirects, strictly validating destination host IP before each request
+        for hop in range(6):
+            is_sec, sec_err, valid_hop_url = validate_url_security(curr_url)
+            if not is_sec:
+                logger.warning(f"SSRF blocked during redirect hop {hop}: {sec_err}")
+                return {"success": False, "error": "Access to private or internal network addresses is blocked.", "url": curr_url}
 
-        if resp.status_code >= 400:
-            logger.warning(f"Failed to fetch {url} - HTTP status {resp.status_code}")
+            resp = requests.get(
+                valid_hop_url,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+                allow_redirects=False,
+                stream=True
+            )
+
+            if resp.status_code in (301, 302, 303, 307, 308):
+                redirect_target = resp.headers.get("Location")
+                if not redirect_target:
+                    break
+                curr_url = urljoin(valid_hop_url, redirect_target)
+                continue
+            else:
+                break
+
+        if resp is None or resp.status_code >= 400:
+            status = resp.status_code if resp else 500
+            logger.warning(f"Failed to fetch {url} - HTTP status {status}")
             return {
                 "success": False,
                 "error": "Could not read this page. Paste the article text instead.",
-                "statusCode": resp.status_code
+                "statusCode": status
             }
 
-        soup = BeautifulSoup(resp.text, 'html.parser')
+        # Check content-length header if provided
+        cl_header = resp.headers.get("Content-Length")
+        if cl_header and cl_header.isdigit() and int(cl_header) > MAX_RESPONSE_BYTES:
+            return {
+                "success": False,
+                "error": "Page content exceeds maximum allowed size of 5MB."
+            }
+
+        # Stream response chunks up to MAX_RESPONSE_BYTES
+        content_chunks = bytearray()
+        for chunk in resp.iter_content(chunk_size=16384):
+            content_chunks.extend(chunk)
+            if len(content_chunks) > MAX_RESPONSE_BYTES:
+                return {
+                    "success": False,
+                    "error": "Page content exceeds maximum allowed size of 5MB."
+                }
+
+        html_text = content_chunks.decode(resp.encoding or "utf-8", errors="replace")
+        soup = BeautifulSoup(html_text, 'html.parser')
 
         # 1. Extract title (og:title, twitter:title, h1, or title tag)
         title = ""

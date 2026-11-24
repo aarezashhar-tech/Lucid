@@ -13,7 +13,7 @@
   --color-on-surface-variant: #434655;
   --color-inverse-surface: #283044;
   --color-inverse-on-surface: #eef0ff;
-  --color-outline: #737686;
+  --color-outline: #5f6272;
   --color-outline-variant: #c3c6d7;
   --color-surface-tint: #0053db;
   --color-primary: #004ac6;
@@ -87,10 +87,21 @@
     background-color: var(--color-surface);
     color: var(--color-on-surface);
     -webkit-font-smoothing: antialiased;
+    background-image: 
+      radial-gradient(at 15% 15%, rgba(0, 74, 198, 0.045) 0px, transparent 55%),
+      radial-gradient(at 85% 85%, rgba(107, 56, 212, 0.045) 0px, transparent 55%);
+    background-attachment: fixed;
   }
   * {
     box-sizing: border-box;
   }
+}
+
+.dark html, .dark body, .dark #root {
+  background-image: 
+    radial-gradient(at 15% 15%, rgba(30, 58, 138, 0.16) 0px, transparent 55%),
+    radial-gradient(at 85% 85%, rgba(107, 56, 212, 0.12) 0px, transparent 55%);
+  background-attachment: fixed;
 }
 
 .dark {
@@ -106,7 +117,7 @@
   --color-on-surface-variant: #94a3b8;
   --color-background: #0a0f1d;
   --color-on-background: #f1f5f9;
-  --color-outline: #475569;
+  --color-outline: #94a3b8;
   --color-outline-variant: #334155;
   --color-primary-fixed: #1e3a8a;
   --color-tertiary-fixed: #064e3b;
@@ -210,10 +221,19 @@
 
 .font-label-xs {
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+/* Enforce minimum font size of 12px throughout UI */
+.text-2xs,
+.text-\[10px\],
+.text-\[11px\],
+.font-label-xs {
+  font-size: 12px !important;
+  line-height: 16px !important;
 }
 
 /* Animations */
@@ -441,5 +461,107 @@ select {
   [data-card] {
     transition: none !important;
     transform: none !important;
+  }
+}
+
+/* ==========================================================================
+   Glassmorphism (Main Cards: Login card, Claim input card, Verdict banner)
+   ========================================================================== */
+.glass-card {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(218, 226, 253, 0.75) !important;
+}
+
+.dark .glass-card {
+  background: rgba(13, 21, 39, 0.82) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+  .glass-card {
+    background: #ffffff !important;
+    border: 1px solid #dae2fd !important;
+  }
+  .dark .glass-card {
+    background: #0d1527 !important;
+    border: 1px solid #23345c !important;
+  }
+}
+
+/* ==========================================================================
+   Hover Light Spotlight + Elevation (200ms transition, translateY -4px)
+   ========================================================================== */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 200ms ease;
+  will-change: transform, box-shadow;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .spotlight-card:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 20px 38px -8px rgba(0, 74, 198, 0.16), 0 10px 18px -4px rgba(0, 0, 0, 0.08) !important;
+    position: relative;
+    z-index: 20;
+  }
+  .dark .spotlight-card:hover {
+    box-shadow: 0 22px 42px -8px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+  }
+  .spotlight-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    background: radial-gradient(
+      550px circle at var(--mx, -1000px) var(--my, -1000px),
+      rgba(0, 74, 198, 0.08),
+      transparent 70%
+    );
+    z-index: 1;
+  }
+  .dark .spotlight-card::before {
+    background: radial-gradient(
+      550px circle at var(--mx, -1000px) var(--my, -1000px),
+      rgba(180, 197, 255, 0.08),
+      transparent 70%
+    );
+  }
+  .spotlight-card:hover::before {
+    opacity: 1;
+  }
+}
+
+/* Touch devices: disable spotlight effect */
+@media (hover: none) or (pointer: coarse) {
+  .spotlight-card::before {
+    display: none !important;
+  }
+  .spotlight-card:hover {
+    transform: none !important;
+  }
+}
+
+/* Reduced motion preference respect */
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-card {
+    transition: none !important;
+    transform: none !important;
+  }
+  .spotlight-card:hover {
+    transform: none !important;
+  }
+  .spotlight-card::before {
+    display: none !important;
   }
 }

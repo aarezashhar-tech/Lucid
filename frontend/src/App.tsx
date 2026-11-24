@@ -1,5 +1,6 @@
-import React, { FormEvent, useEffect, useRef, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
+  auth,
   signInWithGoogle,
   signOutFirebase,
   isFirebaseConfigured,
@@ -38,11 +39,47 @@ export const API_BASE_URL: string = (import.meta.env.VITE_API_URL || "").trim().
 
 /**
  * Executes a fetch request to the backend using getApiUrl.
+ * Automatically attaches Firebase ID Token when an authenticated session exists.
  */
 export async function fetchApi(path: string, init?: RequestInit): Promise<Response> {
   const url = getApiUrl(path);
-  return fetch(url, init);
+  const options: RequestInit = { ...init };
+  const headers = new Headers(options.headers || {});
+
+  try {
+    if (auth?.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      if (token && !headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+    }
+  } catch (err) {
+    console.warn("Could not retrieve Firebase token:", err);
+  }
+
+  options.headers = headers;
+  return fetch(url, options);
 }
+
+/**
+ * Lightweight mouse spotlight tracker using CSS variables --mx, --my
+ * and requestAnimationFrame for smooth 60fps rendering.
+ * Disabled on touch screens and prefers-reduced-motion.
+ */
+export const handleCardPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+  if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return;
+  }
+  if (e.pointerType === "touch") return;
+  const target = e.currentTarget;
+  const clientX = e.clientX;
+  const clientY = e.clientY;
+  requestAnimationFrame(() => {
+    const rect = target.getBoundingClientRect();
+    target.style.setProperty("--mx", `${clientX - rect.left}px`);
+    target.style.setProperty("--my", `${clientY - rect.top}px`);
+  });
+};
 
 // ==========================================
 // 1. DATA TYPES & INTERFACES
@@ -482,7 +519,7 @@ function SharePopover({
     <>
       <div className="fixed inset-0 z-40 bg-transparent" onClick={onClose} />
       <div className="absolute right-0 top-10 z-50 w-52 bg-surface-container-lowest/95 backdrop-blur-xl border border-surface-container-high rounded-xl shadow-xl py-1.5 flex flex-col animate-scale-up text-on-surface">
-        <div className="px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-outline border-b border-surface-container-high/40">
+        <div className="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-outline border-b border-surface-container-high/40">
           Share Investigation
         </div>
         {shareOptions.map((opt, i) => (
@@ -503,6 +540,358 @@ function SharePopover({
         ))}
       </div>
     </>
+  );
+}
+
+// ==========================================
+// OFFLINE 404 NOT FOUND & ENDLESS RUNNER MINI-GAME
+// ==========================================
+
+function DinoRunnerGame({ isDarkMode }: { isDarkMode: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">("idle");
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(() => {
+    try {
+      return parseInt(localStorage.getItem("lucid_dino_high_score") || "0", 10) || 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
+  const scoreRef = useRef(score);
+  scoreRef.current = score;
+  const highScoreRef = useRef(highScore);
+  highScoreRef.current = highScore;
+
+  const playerRef = useRef({
+    x: 45,
+    y: 114,
+    width: 22,
+    height: 22,
+    vy: 0,
+    jumpForce: -10.5,
+    gravity: 0.62,
+    groundY: 114,
+    isGrounded: true,
+  });
+
+  const obstaclesRef = useRef<Array<{ x: number; y: number; width: number; height: number }>>([]);
+  const animFrameIdRef = useRef<number | null>(null);
+  const groundOffsetRef = useRef(0);
+  const frameCountRef = useRef(0);
+  const speedRef = useRef(4.6);
+
+  const jump = useCallback(() => {
+    if (gameStateRef.current === "idle" || gameStateRef.current === "gameover") {
+      obstaclesRef.current = [];
+      scoreRef.current = 0;
+      setScore(0);
+      speedRef.current = 4.8;
+      frameCountRef.current = 0;
+      playerRef.current.y = playerRef.current.groundY;
+      playerRef.current.vy = playerRef.current.jumpForce;
+      playerRef.current.isGrounded = false;
+      gameStateRef.current = "playing";
+      setGameState("playing");
+    } else if (gameStateRef.current === "playing") {
+      if (playerRef.current.isGrounded) {
+        playerRef.current.vy = playerRef.current.jumpForce;
+        playerRef.current.isGrounded = false;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        jump();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [jump]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let lastObstacleSpawn = 0;
+
+    const loop = () => {
+      const currentCanvas = canvasRef.current;
+      if (!currentCanvas) return;
+      const width = currentCanvas.width;
+      const height = currentCanvas.height;
+      const groundY = 136;
+
+      ctx.clearRect(0, 0, width, height);
+
+      const groundColor = isDarkMode ? "#334155" : "#c3c6d7";
+      const groundDotColor = isDarkMode ? "#64748b" : "#94a3b8";
+      const playerColor = isDarkMode ? "#38bdf8" : "#004ac6";
+      const playerGlow = isDarkMode ? "rgba(56, 189, 248, 0.45)" : "rgba(0, 74, 198, 0.25)";
+      const obstacleColor = isDarkMode ? "#f87171" : "#ba1a1a";
+
+      if (gameStateRef.current === "playing") {
+        frameCountRef.current += 1;
+        if (frameCountRef.current % 5 === 0) {
+          scoreRef.current += 1;
+          setScore(scoreRef.current);
+          if (scoreRef.current > highScoreRef.current) {
+            highScoreRef.current = scoreRef.current;
+            setHighScore(scoreRef.current);
+            try {
+              localStorage.setItem("lucid_dino_high_score", String(scoreRef.current));
+            } catch {}
+          }
+          speedRef.current = 4.8 + Math.min(scoreRef.current / 250, 4.5);
+        }
+
+        const player = playerRef.current;
+        player.vy += player.gravity;
+        player.y += player.vy;
+        if (player.y >= player.groundY) {
+          player.y = player.groundY;
+          player.vy = 0;
+          player.isGrounded = true;
+        }
+
+        const timeSinceLastSpawn = frameCountRef.current - lastObstacleSpawn;
+        const minGapFrames = Math.max(50, Math.floor(125 - speedRef.current * 7));
+        if (timeSinceLastSpawn > minGapFrames && Math.random() < 0.035) {
+          const obsHeight = 20 + Math.floor(Math.random() * 20);
+          const obsWidth = 14 + Math.floor(Math.random() * 12);
+          obstaclesRef.current.push({
+            x: width + 20,
+            y: groundY - obsHeight,
+            width: obsWidth,
+            height: obsHeight,
+          });
+          lastObstacleSpawn = frameCountRef.current;
+        }
+
+        const currentSpeed = speedRef.current;
+        obstaclesRef.current.forEach((obs) => {
+          obs.x -= currentSpeed;
+        });
+
+        obstaclesRef.current = obstaclesRef.current.filter((obs) => obs.x + obs.width > -20);
+        groundOffsetRef.current = (groundOffsetRef.current + currentSpeed) % 24;
+
+        const pLeft = player.x + 3;
+        const pRight = player.x + player.width - 3;
+        const pTop = player.y + 3;
+        const pBottom = player.y + player.height - 1;
+
+        for (const obs of obstaclesRef.current) {
+          const oLeft = obs.x + 2;
+          const oRight = obs.x + obs.width - 2;
+          const oTop = obs.y + 2;
+          const oBottom = obs.y + obs.height;
+
+          if (pRight > oLeft && pLeft < oRight && pBottom > oTop && pTop < oBottom) {
+            gameStateRef.current = "gameover";
+            setGameState("gameover");
+            break;
+          }
+        }
+      }
+
+      // Draw ground line
+      ctx.beginPath();
+      ctx.strokeStyle = groundColor;
+      ctx.lineWidth = 2;
+      ctx.moveTo(0, groundY);
+      ctx.lineTo(width, groundY);
+      ctx.stroke();
+
+      // Ground dash dots
+      ctx.fillStyle = groundDotColor;
+      const dotSpacing = 24;
+      for (let x = -groundOffsetRef.current; x < width; x += dotSpacing) {
+        ctx.fillRect(x, groundY + 4, 6, 2);
+        if ((x + 12) % 48 === 0) {
+          ctx.fillRect(x + 10, groundY + 8, 3, 2);
+        }
+      }
+
+      // Draw player box
+      const p = playerRef.current;
+      ctx.save();
+      ctx.shadowColor = playerGlow;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = playerColor;
+      ctx.beginPath();
+      if ("roundRect" in ctx && typeof ctx.roundRect === "function") {
+        ctx.roundRect(p.x, p.y, p.width, p.height, 4);
+      } else {
+        ctx.rect(p.x, p.y, p.width, p.height);
+      }
+      ctx.fill();
+
+      // Eye dot
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(p.x + p.width - 7, p.y + 5, 3, 3);
+      ctx.restore();
+
+      // Draw obstacles
+      obstaclesRef.current.forEach((obs) => {
+        ctx.save();
+        ctx.fillStyle = obstacleColor;
+        ctx.beginPath();
+        if ("roundRect" in ctx && typeof ctx.roundRect === "function") {
+          ctx.roundRect(obs.x, obs.y, obs.width, obs.height, [3, 3, 0, 0]);
+        } else {
+          ctx.rect(obs.x, obs.y, obs.width, obs.height);
+        }
+        ctx.fill();
+        ctx.fillStyle = isDarkMode ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.4)";
+        ctx.fillRect(obs.x + 3, obs.y + 4, 3, obs.height - 6);
+        ctx.restore();
+      });
+
+      // Text prompts
+      if (gameStateRef.current === "idle") {
+        ctx.fillStyle = isDarkMode ? "#f1f5f9" : "#131b2e";
+        ctx.font = "bold 14px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Press Space or Tap to Jump", width / 2, groundY - 50);
+        ctx.fillStyle = isDarkMode ? "#94a3b8" : "#5f6272";
+        ctx.font = "12px Inter, sans-serif";
+        ctx.fillText("Dodge the incoming obstacles!", width / 2, groundY - 28);
+      } else if (gameStateRef.current === "gameover") {
+        ctx.fillStyle = isDarkMode ? "#f87171" : "#ba1a1a";
+        ctx.font = "bold 18px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", width / 2, groundY - 60);
+
+        ctx.fillStyle = isDarkMode ? "#f1f5f9" : "#131b2e";
+        ctx.font = "bold 13px Inter, sans-serif";
+        ctx.fillText(`Score: ${scoreRef.current}  |  Best: ${highScoreRef.current}`, width / 2, groundY - 36);
+
+        ctx.fillStyle = isDarkMode ? "#94a3b8" : "#5f6272";
+        ctx.font = "12px Inter, sans-serif";
+        ctx.fillText("Press Space or Tap to Restart", width / 2, groundY - 14);
+      }
+
+      animFrameIdRef.current = requestAnimationFrame(loop);
+    };
+
+    animFrameIdRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+    };
+  }, [isDarkMode]);
+
+  return (
+    <div className="w-full flex flex-col items-center select-none">
+      <div className="w-full flex items-center justify-between px-2 pb-2 text-xs font-mono font-semibold">
+        <span className="text-on-surface-variant flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+          SCORE: <span className="text-primary font-bold">{score.toString().padStart(5, "0")}</span>
+        </span>
+        <span className="text-outline">
+          HIGH: <span className="font-bold text-on-surface">{highScore.toString().padStart(5, "0")}</span>
+        </span>
+      </div>
+
+      <div
+        onClick={jump}
+        onTouchStart={(e) => {
+          e.preventDefault();
+          jump();
+        }}
+        className="w-full rounded-xl bg-surface-container-low border border-surface-container-high/60 cursor-pointer overflow-hidden touch-none relative"
+        style={{ height: "160px" }}
+        role="button"
+        tabIndex={0}
+        aria-label="Offline Mini Game: Tap or press space to jump"
+      >
+        <canvas
+          ref={canvasRef}
+          width={580}
+          height={160}
+          className="w-full h-full block"
+        />
+      </div>
+      <p className="mt-2 text-xs text-outline text-center">
+        Controls: <kbd className="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono">Space</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono">↑</kbd> to jump · Tap on mobile
+      </p>
+    </div>
+  );
+}
+
+function Offline404Overlay({
+  onRetry,
+  onDismiss,
+  isChecking,
+  isDarkMode,
+}: {
+  onRetry: () => void;
+  onDismiss: () => void;
+  isChecking: boolean;
+  isDarkMode: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto flex flex-col items-center justify-center p-4 sm:p-6 bg-surface/95 backdrop-blur-md transition-all animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Offline 404 Notice"
+    >
+      <div className="max-w-xl w-full mx-auto flex flex-col items-center text-center">
+        <div className="mb-2">
+          <LucidBrandLogo size="md" showText={false} />
+        </div>
+
+        <h1 className="font-display-hero text-6xl sm:text-7xl md:text-8xl font-black text-primary tracking-tight leading-none mb-1">
+          404
+        </h1>
+
+        <h2 className="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight mt-1">
+          Oops, You Are Offline!
+        </h2>
+
+        <p className="font-body-md text-xs sm:text-sm text-on-surface-variant max-w-md mt-2 mb-5 leading-relaxed">
+          The internet connection was lost. Play the mini-game below while waiting for connection.
+        </p>
+
+        <div className="w-full lucid-card bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-high/50 p-4 sm:p-5 mb-5 transition-all">
+          <DinoRunnerGame isDarkMode={isDarkMode} />
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={onRetry}
+            disabled={isChecking}
+            className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 rounded-full bg-primary text-on-primary font-semibold text-sm hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-60"
+            type="button"
+            aria-label="Retry network connection"
+          >
+            <MatIcon name="refresh" size={18} className={isChecking ? "animate-spin" : ""} />
+            <span>{isChecking ? "Checking Connection..." : "Retry Connection"}</span>
+          </button>
+
+          <button
+            onClick={onDismiss}
+            className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-surface-container-high/40"
+            type="button"
+            aria-label="Dismiss offline screen and view cached page"
+          >
+            <MatIcon name="visibility" size={18} />
+            <span>Dismiss / View Cached Page</span>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -545,7 +934,10 @@ function WelcomeScreen({
 
   return (
     <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-16 animate-fade-in">
-      <div className="w-full max-w-[420px] lucid-card bg-surface-container-lowest border border-surface-container-high/60 rounded-2xl shadow-xl p-6 sm:p-8 flex flex-col items-center gap-5 text-center transition-all">
+      <div
+        onPointerMove={handleCardPointerMove}
+        className="w-full max-w-[420px] lucid-card glass-card spotlight-card rounded-2xl shadow-xl p-6 sm:p-8 flex flex-col items-center gap-5 text-center transition-all"
+      >
         {/* Brand Icon */}
         <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mt-1 shadow-xs">
           <LucidBrandLogo size="hero" showText={false} />
@@ -613,6 +1005,8 @@ function WelcomeScreen({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your email address"
+            aria-label="Email address"
+            id="welcome-email-input"
             className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high text-on-surface text-base sm:text-sm placeholder:text-outline focus:outline-none focus:border-primary transition-all"
             required
           />
@@ -641,7 +1035,7 @@ function WelcomeScreen({
           <span>Continue as Guest (Temporary Access)</span>
         </button>
 
-        <p className="text-[11px] text-outline max-w-xs leading-relaxed">
+        <p className="text-xs text-outline max-w-xs leading-relaxed">
           By continuing, you agree to our Terms of Service and Privacy Policy. Guest investigations are active in this browser session only.
         </p>
       </div>
@@ -697,7 +1091,7 @@ function AuthModal({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
           type="button"
           aria-label="Close"
         >
@@ -767,6 +1161,8 @@ function AuthModal({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your email address"
+            aria-label="Email address"
+            id="welcome-email-input"
             className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high text-on-surface text-base sm:text-sm placeholder:text-outline focus:outline-none focus:border-primary transition-all"
             required
           />
@@ -790,6 +1186,10 @@ function AppHeader({
   currentUser,
   onOpenAuth,
   onSignOut,
+  voiceGuideEnabled,
+  onToggleVoiceGuide,
+  isSpeaking,
+  onStopSpeaking,
 }: {
   onNavigateHome: () => void;
   darkMode: boolean;
@@ -797,6 +1197,10 @@ function AppHeader({
   currentUser: UserAccount | null;
   onOpenAuth: () => void;
   onSignOut: () => void;
+  voiceGuideEnabled?: boolean;
+  onToggleVoiceGuide?: () => void;
+  isSpeaking?: boolean;
+  onStopSpeaking?: () => void;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -807,21 +1211,53 @@ function AppHeader({
           {/* Brand Logo */}
           <LucidBrandLogo size="md" showText onClick={() => { onNavigateHome(); setMobileMenuOpen(false); }} />
 
-          {/* Desktop Navigation: User Profile, Sign In/Out, Theme Toggle */}
-          <div className="hidden sm:flex items-center gap-3">
+          {/* Desktop Navigation: User Profile, Voice Guide, Theme Toggle */}
+          <div className="hidden sm:flex items-center gap-2.5">
+            {/* Audio Voice Guide Toggle */}
+            {onToggleVoiceGuide && (
+              <button
+                onClick={onToggleVoiceGuide}
+                className={`min-h-[44px] px-3.5 py-1.5 rounded-full flex items-center gap-1.5 font-label-sm text-xs font-semibold border transition-all cursor-pointer ${
+                  voiceGuideEnabled
+                    ? "bg-primary text-on-primary border-primary shadow-xs ring-2 ring-primary/20"
+                    : "bg-surface-container hover:bg-surface-container-high text-on-surface border-surface-container-high/60"
+                }`}
+                type="button"
+                aria-label={voiceGuideEnabled ? "Turn audio voice guide off" : "Turn audio voice guide on"}
+                title={voiceGuideEnabled ? "Voice Guide is ON" : "Turn ON Voice Guide"}
+              >
+                <MatIcon name={voiceGuideEnabled ? "volume_up" : "volume_off"} size={16} />
+                <span>Voice Guide {voiceGuideEnabled ? "ON" : "OFF"}</span>
+              </button>
+            )}
+
+            {/* Active Speech Stop Button */}
+            {isSpeaking && onStopSpeaking && (
+              <button
+                onClick={onStopSpeaking}
+                className="min-h-[44px] px-3 py-1.5 rounded-full flex items-center gap-1.5 font-label-sm text-xs font-semibold bg-error text-on-error hover:opacity-95 transition-all cursor-pointer shadow-xs animate-pulse"
+                type="button"
+                aria-label="Stop audio voice speech"
+                title="Stop speaking"
+              >
+                <MatIcon name="stop_circle" size={16} />
+                <span>Stop</span>
+              </button>
+            )}
+
             {currentUser ? (
               <div className="flex items-center gap-2">
                 {currentUser.isGuest ? (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40 flex items-center gap-1">
                     <MatIcon name="person" size={13} />
                     <span>Guest</span>
                   </span>
                 ) : (
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container border border-surface-container-high text-xs font-medium text-on-surface">
                     {currentUser.avatar ? (
-                      <img src={currentUser.avatar} alt={currentUser.name} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                      <img src={currentUser.avatar} alt={currentUser.name || "User Avatar"} className="w-5 h-5 rounded-full object-cover shrink-0" />
                     ) : (
-                      <span className="w-5 h-5 rounded-full bg-primary text-on-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-primary text-on-primary text-xs font-bold flex items-center justify-center shrink-0">
                         {(currentUser.name || currentUser.email)[0].toUpperCase()}
                       </span>
                     )}
@@ -831,16 +1267,18 @@ function AppHeader({
                 {currentUser.isGuest && (
                   <button
                     onClick={onOpenAuth}
-                    className="text-xs text-primary hover:underline font-semibold cursor-pointer"
+                    className="min-h-[44px] px-2 text-xs text-primary hover:underline font-semibold cursor-pointer inline-flex items-center"
                     type="button"
+                    aria-label="Sign In to save investigations"
                   >
                     Sign In
                   </button>
                 )}
                 <button
                   onClick={onSignOut}
-                  className="text-xs text-on-surface-variant hover:text-error font-medium underline cursor-pointer ml-1"
+                  className="min-h-[44px] px-2 text-xs text-on-surface-variant hover:text-error font-medium underline cursor-pointer ml-1 inline-flex items-center"
                   type="button"
+                  aria-label={currentUser.isGuest ? "Exit Guest Mode" : "Sign Out"}
                 >
                   {currentUser.isGuest ? "Exit Guest" : "Sign Out"}
                 </button>
@@ -848,7 +1286,7 @@ function AppHeader({
             ) : (
               <button
                 onClick={onOpenAuth}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 min-h-[40px] rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold transition-all border border-surface-container-high shadow-2xs cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 min-h-[44px] rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold transition-all border border-surface-container-high shadow-2xs cursor-pointer"
                 type="button"
               >
                 <MatIcon name="account_circle" size={16} />
@@ -859,7 +1297,7 @@ function AppHeader({
             <button
               aria-label="Toggle theme"
               onClick={onToggleDarkMode}
-              className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all cursor-pointer"
+              className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all cursor-pointer"
               type="button"
               title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
@@ -867,8 +1305,32 @@ function AppHeader({
             </button>
           </div>
 
-          {/* Mobile Actions: Theme Toggle + Hamburger Menu */}
+          {/* Mobile Actions: Voice Guide + Theme Toggle + Hamburger Menu */}
           <div className="flex sm:hidden items-center gap-1">
+            {onToggleVoiceGuide && (
+              <button
+                onClick={onToggleVoiceGuide}
+                className={`p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-all cursor-pointer ${
+                  voiceGuideEnabled ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container"
+                }`}
+                type="button"
+                aria-label={voiceGuideEnabled ? "Voice Guide is ON" : "Turn ON Voice Guide"}
+                title="Voice Guide"
+              >
+                <MatIcon name={voiceGuideEnabled ? "volume_up" : "volume_off"} size={20} />
+              </button>
+            )}
+            {isSpeaking && onStopSpeaking && (
+              <button
+                onClick={onStopSpeaking}
+                className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-error text-on-error cursor-pointer animate-pulse"
+                type="button"
+                aria-label="Stop speaking"
+                title="Stop speaking"
+              >
+                <MatIcon name="stop_circle" size={20} />
+              </button>
+            )}
             <button
               aria-label="Toggle theme"
               onClick={onToggleDarkMode}
@@ -921,7 +1383,7 @@ function AppHeader({
                   <>
                     <div className="flex items-center gap-2.5">
                       {currentUser.avatar ? (
-                        <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                        <img src={currentUser.avatar} alt={currentUser.name || "User Avatar"} className="w-9 h-9 rounded-full object-cover shrink-0" />
                       ) : (
                         <span className="w-9 h-9 rounded-full bg-primary text-on-primary text-sm font-bold flex items-center justify-center shrink-0">
                           {(currentUser.name || currentUser.email)[0].toUpperCase()}
@@ -938,19 +1400,20 @@ function AppHeader({
                     </div>
                     <div className="flex items-center justify-between pt-1">
                       {currentUser.isGuest ? (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40">
                           Guest Session
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                           Verified Account
                         </span>
                       )}
                       {currentUser.isGuest && (
                         <button
                           onClick={() => { setMobileMenuOpen(false); onOpenAuth(); }}
-                          className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+                          className="min-h-[44px] px-2 text-xs font-semibold text-primary hover:underline cursor-pointer inline-flex items-center"
                           type="button"
+                          aria-label="Sign In to account"
                         >
                           Sign In
                         </button>
@@ -1010,7 +1473,7 @@ function AppHeader({
                   <span>{currentUser.isGuest ? "Exit Guest Mode" : "Sign Out"}</span>
                 </button>
               )}
-              <div className="text-[11px] text-center text-outline">
+              <div className="text-xs text-center text-outline">
                 Lucid AI Fact Verification Platform
               </div>
             </div>
@@ -1044,19 +1507,123 @@ function HomeScreen({
   isExtractingOcr,
   history,
   onSelectHistory,
+  onClearHistory,
+  verifyError,
+  onClearError,
+  initialInput,
+  onInputChange,
 }: {
   onVerify: (payload: { mode: "url" | "text" | "upload"; content: string; file?: File }) => void;
   onOcrExtract: (file: File) => void;
   isExtractingOcr: boolean;
   history: HistoryItem[];
   onSelectHistory: (item: HistoryItem) => void;
+  onClearHistory?: () => void;
+  verifyError?: string | null;
+  onClearError?: () => void;
+  initialInput?: { mode: "url" | "text" | "image" | "pdf"; query: string; selectedFile: File | null };
+  onInputChange?: (state: { mode: "url" | "text" | "image" | "pdf"; query: string; selectedFile: File | null }) => void;
 }) {
-  const [mode, setMode] = useState<"url" | "text" | "image" | "pdf">("url");
-  const [query, setQuery] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [mode, setMode] = useState<"url" | "text" | "image" | "pdf">(initialInput?.mode || "url");
+  const [query, setQuery] = useState(initialInput?.query || "");
+  const [selectedFile, setSelectedFile] = useState<File | null>(initialInput?.selectedFile || null);
   const [isDragging, setIsDragging] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Voice Input States & Web Speech API integration
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
+  const [voiceLanguage, setVoiceLanguage] = useState<"en-IN" | "ta-IN" | "hi-IN">("en-IN");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      setSpeechSupported(false);
+    }
+  }, []);
+
+  const toggleVoiceInput = () => {
+    setVoiceError(null);
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      setSpeechSupported(false);
+      return;
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRec();
+      recognition.lang = voiceLanguage;
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setVoiceError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let liveTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          liveTranscript += event.results[i][0].transcript;
+        }
+        if (liveTranscript) {
+          updateQuery(liveTranscript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        setIsListening(false);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setVoiceError("Microphone access was denied. Please allow microphone permissions in your browser.");
+        } else if (event.error === "no-speech") {
+          setVoiceError("No speech detected. Please speak into your microphone and try again.");
+        } else {
+          setVoiceError(`Voice input error (${event.error}). Please try again.`);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Speech recognition initialization error:", err);
+      setIsListening(false);
+      setVoiceError("Could not initialize voice input on this browser.");
+    }
+  };
+
+  const updateMode = (newMode: "url" | "text" | "image" | "pdf") => {
+    setMode(newMode);
+    onInputChange?.({ mode: newMode, query, selectedFile });
+  };
+
+  const updateQuery = (newQuery: string) => {
+    setQuery(newQuery);
+    onInputChange?.({ mode, query: newQuery, selectedFile });
+  };
+
+  const updateFile = (newFile: File | null, newMode?: "url" | "text" | "image" | "pdf") => {
+    setSelectedFile(newFile);
+    const m = newMode || mode;
+    if (newMode) setMode(newMode);
+    onInputChange?.({ mode: m, query, selectedFile: newFile });
+  };
 
   const handleSubmit = (e?: FormEvent) => {
     if (e) e.preventDefault();
@@ -1090,9 +1657,7 @@ function HomeScreen({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setSelectedFile(file);
-      if (file.type.includes("pdf")) setMode("pdf");
-      else setMode("image");
+      updateFile(file, file.type.includes("pdf") ? "pdf" : "image");
     }
   };
 
@@ -1101,9 +1666,7 @@ function HomeScreen({
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      setSelectedFile(file);
-      if (file.type.includes("pdf")) setMode("pdf");
-      else setMode("image");
+      updateFile(file, file.type.includes("pdf") ? "pdf" : "image");
     }
   };
 
@@ -1116,6 +1679,8 @@ function HomeScreen({
         accept="image/*,.pdf,.doc,.docx,.txt"
         className="hidden"
         onChange={handleFileChange}
+        aria-label="Upload document, image or PDF file"
+        id="file-upload-input"
       />
 
       {/* Logo */}
@@ -1133,12 +1698,53 @@ function HomeScreen({
         </p>
       </div>
 
+      {/* Verification Inline Error Card */}
+      {verifyError && (
+        <div
+          className="w-full mb-4 p-4 rounded-xl bg-error-container/40 border border-error/30 text-on-error-container flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-xs"
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="flex items-start sm:items-center gap-3">
+            <MatIcon name="error" size={22} className="text-error shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <p className="font-semibold text-xs sm:text-sm text-error leading-snug">Verification Failed</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">{verifyError}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <button
+              onClick={() => handleSubmit()}
+              className="min-h-[44px] px-4 py-2 rounded-full bg-error text-on-error font-semibold text-xs hover:opacity-95 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              type="button"
+              aria-label="Try verification again"
+            >
+              <MatIcon name="refresh" size={16} />
+              <span>Try again</span>
+            </button>
+            {onClearError && (
+              <button
+                onClick={onClearError}
+                className="min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+                type="button"
+                aria-label="Dismiss error message"
+              >
+                <MatIcon name="close" size={18} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Card */}
-      <div className="w-full lucid-card bg-surface-container-lowest rounded-2xl shadow-md border border-surface-container-high/40 p-3 sm:p-5 flex flex-col gap-3 transition-all duration-300">
+      <div
+        onPointerMove={handleCardPointerMove}
+        className="w-full lucid-card glass-card spotlight-card rounded-2xl shadow-md p-3 sm:p-5 flex flex-col gap-3 transition-all duration-300"
+      >
         {/* Input Tabs: URL, Text, Image, PDF (Mobile-Friendly Scrollable Container) */}
         <div className="flex items-center gap-1.5 pb-2 border-b border-surface-container-high/20 overflow-x-auto no-scrollbar scroll-smooth w-full">
           <button
-            onClick={() => setMode("url")}
+            onClick={() => updateMode("url")}
             className={`min-h-[44px] px-4 py-2 rounded-full font-label-md text-label-md transition-all cursor-pointer shrink-0 ${
               mode === "url"
                 ? "bg-primary text-on-primary font-semibold shadow-xs"
@@ -1150,7 +1756,7 @@ function HomeScreen({
           </button>
 
           <button
-            onClick={() => setMode("text")}
+            onClick={() => updateMode("text")}
             className={`min-h-[44px] px-4 py-2 rounded-full font-label-md text-label-md transition-all cursor-pointer shrink-0 ${
               mode === "text"
                 ? "bg-primary text-on-primary font-semibold shadow-xs"
@@ -1163,7 +1769,7 @@ function HomeScreen({
 
           <button
             onClick={() => {
-              setMode("image");
+              updateMode("image");
               fileInputRef.current?.click();
             }}
             className={`min-h-[44px] px-4 py-2 rounded-full font-label-md text-label-md transition-all cursor-pointer shrink-0 ${
@@ -1178,7 +1784,7 @@ function HomeScreen({
 
           <button
             onClick={() => {
-              setMode("pdf");
+              updateMode("pdf");
               fileInputRef.current?.click();
             }}
             className={`min-h-[44px] px-4 py-2 rounded-full font-label-md text-label-md transition-all cursor-pointer shrink-0 ${
@@ -1192,18 +1798,77 @@ function HomeScreen({
           </button>
         </div>
 
+        {/* Voice Input Active State Indicator */}
+        {isListening && (
+          <div className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-semibold animate-pulse" role="status">
+            <span className="w-2.5 h-2.5 rounded-full bg-error animate-ping shrink-0" />
+            <span>Listening in {voiceLanguage === "en-IN" ? "English (India)" : voiceLanguage === "ta-IN" ? "Tamil" : "Hindi"}... Speak clearly. Your transcript populates the input live.</span>
+          </div>
+        )}
+
+        {/* Voice Error Notification (In-UI Banner, No alert()) */}
+        {voiceError && (
+          <div className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-error-container/40 border border-error/30 text-error text-xs font-medium" role="alert">
+            <div className="flex items-center gap-2">
+              <MatIcon name="mic_off" size={16} />
+              <span>{voiceError}</span>
+            </div>
+            <button onClick={() => setVoiceError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-error hover:opacity-80 cursor-pointer" aria-label="Dismiss voice error">
+              <MatIcon name="close" size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Input Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-2.5 w-full">
           {mode === "text" ? (
             <div className="relative flex flex-col w-full bg-surface-container-low rounded-xl p-2.5 border border-surface-container-high/40 focus-within:bg-surface-container-lowest focus-within:shadow-[0_0_0_2px_rgba(0,74,198,0.2)] transition-all">
               <textarea
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => updateQuery(e.target.value)}
                 placeholder="Paste news article content, statement, or text to verify..."
+                aria-label="News article content to verify"
+                id="verification-text-query"
                 rows={4}
                 className="w-full bg-transparent border-none outline-none font-body-md text-base sm:text-sm text-on-surface placeholder:text-outline p-2 resize-y min-h-[110px]"
               />
-              <div className="flex justify-end pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-surface-container-high/30 mt-1">
+                {/* Voice Input Controls */}
+                {speechSupported ? (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <select
+                      value={voiceLanguage}
+                      onChange={(e) => setVoiceLanguage(e.target.value as any)}
+                      className="min-h-[44px] px-2.5 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high border border-surface-container-high/60 text-xs font-semibold text-on-surface cursor-pointer outline-none focus:ring-2 focus:ring-primary/40 transition-colors"
+                      aria-label="Select voice recognition language"
+                      title="Voice recognition language"
+                    >
+                      <option value="en-IN">English (India)</option>
+                      <option value="ta-IN">Tamil (தமிழ்)</option>
+                      <option value="hi-IN">Hindi (हिन्दी)</option>
+                    </select>
+
+                    <button
+                      onClick={toggleVoiceInput}
+                      type="button"
+                      aria-label={isListening ? "Stop listening to voice input" : "Start voice input"}
+                      className={`min-h-[44px] min-w-[44px] px-3.5 py-2 rounded-full flex items-center justify-center gap-1.5 transition-all cursor-pointer font-label-md text-xs font-semibold ${
+                        isListening
+                          ? "bg-error text-on-error animate-pulse shadow-md ring-2 ring-error/50"
+                          : "bg-surface-container hover:bg-surface-container-high text-on-surface border border-surface-container-high/60 shadow-2xs"
+                      }`}
+                      title={isListening ? "Listening... click to stop" : "Speak into microphone"}
+                    >
+                      <MatIcon name={isListening ? "mic" : "mic_none"} size={18} className={isListening ? "animate-bounce" : "text-primary"} />
+                      <span>{isListening ? "Listening..." : "Voice Input"}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-[12px] text-outline px-2.5 py-1 rounded-full bg-surface-container-low shrink-0" title="Voice input not supported in this browser">
+                    Voice input unavailable
+                  </span>
+                )}
+
                 <button
                   type="submit"
                   disabled={!query.trim()}
@@ -1222,9 +1887,11 @@ function HomeScreen({
                   autoComplete="off"
                   value={selectedFile ? selectedFile.name : query}
                   onChange={(e) => {
-                    if (selectedFile) setSelectedFile(null);
-                    setQuery(e.target.value);
+                    if (selectedFile) updateFile(null);
+                    updateQuery(e.target.value);
                   }}
+                  aria-label="Article URL, statement, or search query"
+                  id="verification-url-input"
                   className="w-full bg-transparent border-none outline-none font-body-md text-base sm:text-lg text-on-surface placeholder:text-outline px-3 py-2 min-h-[44px]"
                   placeholder={
                     selectedFile
@@ -1238,17 +1905,51 @@ function HomeScreen({
                 {(query || selectedFile) && (
                   <button
                     onClick={() => {
-                      setQuery("");
-                      setSelectedFile(null);
+                      updateFile(null);
+                      updateQuery("");
                     }}
-                    className="p-2 mr-1 min-w-[40px] min-h-[40px] flex items-center justify-center text-outline hover:text-on-surface rounded-full transition-colors cursor-pointer shrink-0"
+                    className="p-2 mr-1 min-w-[44px] min-h-[44px] flex items-center justify-center text-outline hover:text-on-surface rounded-full transition-colors cursor-pointer shrink-0"
                     title="Clear input"
                     type="button"
+                    aria-label="Clear input query"
                   >
                     <MatIcon name="close" size={18} />
                   </button>
                 )}
               </div>
+
+              {/* Voice Input Controls in URL / Search Bar */}
+              {speechSupported ? (
+                <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
+                  <select
+                    value={voiceLanguage}
+                    onChange={(e) => setVoiceLanguage(e.target.value as any)}
+                    className="min-h-[44px] px-2 py-1 rounded-full bg-surface-container hover:bg-surface-container-high border border-surface-container-high/60 text-xs font-semibold text-on-surface cursor-pointer outline-none focus:ring-2 focus:ring-primary/40 transition-colors"
+                    aria-label="Select voice recognition language"
+                    title="Voice recognition language"
+                  >
+                    <option value="en-IN">EN (IN)</option>
+                    <option value="ta-IN">TA (தமிழ்)</option>
+                    <option value="hi-IN">HI (हिन्दी)</option>
+                  </select>
+
+                  <button
+                    onClick={toggleVoiceInput}
+                    type="button"
+                    aria-label={isListening ? "Stop listening to voice input" : "Start voice input"}
+                    className={`min-h-[44px] min-w-[44px] px-2.5 py-1.5 rounded-full flex items-center justify-center gap-1 transition-all cursor-pointer text-xs font-semibold ${
+                      isListening
+                        ? "bg-error text-on-error animate-pulse shadow-md ring-2 ring-error/50"
+                        : "bg-surface-container hover:bg-surface-container-high text-on-surface border border-surface-container-high/60"
+                    }`}
+                    title={isListening ? "Listening... click to stop" : "Speak into microphone"}
+                  >
+                    <MatIcon name={isListening ? "mic" : "mic_none"} size={18} className={isListening ? "animate-bounce" : "text-primary"} />
+                    <span className="hidden md:inline">{isListening ? "Listening" : "Speak"}</span>
+                  </button>
+                </div>
+              ) : null}
+
               {/* Verify Button */}
               <button
                 type="submit"
@@ -1339,18 +2040,42 @@ function HomeScreen({
                         <span className="font-label-xs text-label-xs text-outline">{item.time}</span>
                       </div>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full font-label-xs text-label-xs font-semibold ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-xs text-xs font-semibold ${
                           item.verdict === "VERIFIED" || item.verdict === "LIKELY TRUE"
                             ? "bg-tertiary/10 text-tertiary"
                             : item.verdict === "KNOWN FALSE" || item.verdict === "LIKELY FALSE"
                             ? "bg-error/10 text-error"
-                            : "bg-surface-container text-on-surface-variant"
+                            : "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
                         }`}
                       >
-                        {item.verdict}
+                        <MatIcon
+                          name={
+                            item.verdict === "VERIFIED" || item.verdict === "LIKELY TRUE"
+                              ? "check_circle"
+                              : item.verdict === "KNOWN FALSE" || item.verdict === "LIKELY FALSE"
+                              ? "cancel"
+                              : item.verdict === "Satire"
+                              ? "theater_comedy"
+                              : "help"
+                          }
+                          size={14}
+                        />
+                        <span>{item.verdict}</span>
                       </span>
                     </div>
                   ))}
+                  {history.length > 0 && onClearHistory && (
+                    <div className="flex justify-end pt-2">
+                      <button
+                        onClick={onClearHistory}
+                        className="min-h-[44px] px-3 py-2 text-xs text-on-surface-variant hover:text-error font-medium underline cursor-pointer inline-flex items-center"
+                        type="button"
+                        aria-label="Clear all investigations history"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1426,8 +2151,9 @@ function OcrPreviewScreen({
 
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface font-label-xs text-label-xs font-medium transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface font-label-xs text-xs font-semibold transition-colors cursor-pointer"
               type="button"
+              aria-label="Copy extracted text to clipboard"
               title="Copy extracted text to clipboard"
             >
               <MatIcon name={copied ? "check" : "content_copy"} size={14} className={copied ? "text-tertiary" : ""} />
@@ -1454,15 +2180,17 @@ function OcrPreviewScreen({
         {/* Text Review Box */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="font-label-xs text-label-xs text-on-surface-variant font-medium">
+            <label htmlFor="ocr-preview-textarea" className="font-label-xs text-xs text-on-surface-variant font-medium">
               Review text before verification:
             </label>
-            <span className="font-label-xs text-label-xs text-outline">
+            <span className="font-label-xs text-xs text-outline">
               Showing first 500 characters ({previewSnippet.length}/500)
             </span>
           </div>
 
           <textarea
+            id="ocr-preview-textarea"
+            aria-label="Review and edit extracted OCR text"
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={8}
@@ -1605,10 +2333,18 @@ function ReportScreen({
   result,
   subject,
   onNewSearch,
+  voiceGuideEnabled,
+  speakVoiceGuidance,
+  isSpeaking,
+  onStopSpeaking,
 }: {
   result: VerificationResult;
   subject: string;
   onNewSearch: () => void;
+  voiceGuideEnabled?: boolean;
+  speakVoiceGuidance?: (text: string) => void;
+  isSpeaking?: boolean;
+  onStopSpeaking?: () => void;
 }) {
   const [techDetailsOpen, setTechDetailsOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -1633,6 +2369,16 @@ function ReportScreen({
     tldr: result.summaryReason || result.articleTitle || subject,
     provider: "Extractive NLP Engine",
   };
+
+  // Voice Guidance: Automatically announce verdict and one-line reason when report renders (if user turned on Voice Guide)
+  useEffect(() => {
+    if (voiceGuideEnabled && result && speakVoiceGuidance) {
+      const v = result.ragGroundedVerdict?.verdict || result.overallVerdict || result.verdict || "Unverified";
+      const reason = result.summaryReason || result.explanation?.[0] || summary.executiveSummary || "";
+      const firstSentence = reason.split(/(?<=[.!?])\s+/)[0] || "";
+      speakVoiceGuidance(`Result: ${v}. ${firstSentence}`);
+    }
+  }, [result, voiceGuideEnabled, speakVoiceGuidance]);
 
   // Title derivation: Always prioritize OCR-derived article headline; avoid generic labels or file names
   const rawTitle = result.articleTitle || result.articleSummary?.title || "";
@@ -1847,8 +2593,9 @@ function ReportScreen({
                     setCopiedOcr(true);
                     setTimeout(() => setCopiedOcr(false), 2000);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container hover:bg-surface-container-high text-primary font-label-xs text-label-xs font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-full bg-surface-container hover:bg-surface-container-high text-primary font-label-xs text-xs font-semibold transition-colors cursor-pointer"
                   type="button"
+                  aria-label="Copy OCR preview text"
                 >
                   <MatIcon name={copiedOcr ? "check" : "content_copy"} size={14} />
                   <span>{copiedOcr ? "Copied" : "Copy Text"}</span>
@@ -1881,7 +2628,10 @@ function ReportScreen({
         )}
 
         {/* 2. OVERVIEW (1-2 simple sentences in plain English, at-a-glance insight) */}
-        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-3">
+        <section
+          onPointerMove={handleCardPointerMove}
+          className="lucid-card spotlight-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-3"
+        >
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -1903,7 +2653,10 @@ function ReportScreen({
         </section>
 
         {/* 3. ARTICLE SUMMARY */}
-        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+        <section
+          onPointerMove={handleCardPointerMove}
+          className="lucid-card spotlight-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4"
+        >
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -2001,20 +2754,24 @@ function ReportScreen({
                       </div>
                       <div className="flex items-center gap-2">
                         <span
-                          className={`px-2.5 py-0.5 rounded-full font-label-xs text-label-xs font-bold uppercase ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-xs text-xs font-bold uppercase ${
                             isSupp
                               ? "bg-tertiary/15 text-tertiary"
                               : isContra
                               ? "bg-error/15 text-error"
                               : isOp
                               ? "bg-orange-500/15 text-orange-700 dark:text-orange-300"
-                              : "bg-surface-container text-on-surface-variant"
+                              : "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
                           }`}
                         >
-                          {row.status}
+                          <MatIcon
+                            name={isSupp ? "check_circle" : isContra ? "cancel" : isOp ? "rate_review" : "help"}
+                            size={13}
+                          />
+                          <span>{row.status}</span>
                         </span>
                         {!isOp && (
-                          <span className="font-label-xs text-label-xs font-semibold text-primary">
+                          <span className="font-label-xs text-xs font-semibold text-primary">
                             {row.confidence}% Confidence
                           </span>
                         )}
@@ -2053,10 +2810,10 @@ function ReportScreen({
                                       <span className="px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary font-label-xs shrink-0">
                                         {cleanSnippetText(ev.publisher) || "Verified Wire"}
                                       </span>
-                                      <span className="text-outline text-2xs truncate">{ev.publicationDate}</span>
+                                      <span className="text-outline text-xs truncate">{ev.publicationDate}</span>
                                     </span>
                                     {ev.relevanceScore !== undefined && (
-                                      <span className="text-tertiary font-mono font-semibold text-2xs shrink-0">
+                                      <span className="text-tertiary font-mono font-semibold text-xs shrink-0">
                                         {ev.relevanceScore}% Semantic Match
                                       </span>
                                     )}
@@ -2069,7 +2826,7 @@ function ReportScreen({
                                       href={ev.url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-primary hover:underline block truncate font-mono text-2xs"
+                                      className="text-primary hover:underline block truncate font-mono text-xs"
                                     >
                                       {cleanSnippetText(ev.articleTitle) || ev.url}
                                     </a>
@@ -2098,10 +2855,10 @@ function ReportScreen({
                                       <span className="px-1.5 py-0.5 rounded bg-error/10 text-error font-label-xs shrink-0">
                                         {cleanSnippetText(ev.publisher) || "Refutation Wire"}
                                       </span>
-                                      <span className="text-outline text-2xs truncate">{ev.publicationDate}</span>
+                                      <span className="text-outline text-xs truncate">{ev.publicationDate}</span>
                                     </span>
                                     {ev.relevanceScore !== undefined && (
-                                      <span className="text-error font-mono font-semibold text-2xs shrink-0">
+                                      <span className="text-error font-mono font-semibold text-xs shrink-0">
                                         {ev.relevanceScore}% Debunk Match
                                       </span>
                                     )}
@@ -2114,7 +2871,7 @@ function ReportScreen({
                                       href={ev.url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-error hover:underline block truncate font-mono text-2xs"
+                                      className="text-error hover:underline block truncate font-mono text-xs"
                                     >
                                       {cleanSnippetText(ev.articleTitle) || ev.url}
                                     </a>
@@ -2128,7 +2885,7 @@ function ReportScreen({
                         {/* If no evidence was found for this specific claim */}
                         {(!row.supportingEvidence || row.supportingEvidence.length === 0) &&
                           (!row.contradictingEvidence || row.contradictingEvidence.length === 0) && (
-                            <span className="font-label-xs text-label-xs text-amber-500 font-medium block">
+                            <span className="font-label-xs text-label-xs text-[#9A5B00] dark:text-amber-400 font-medium block">
                               Corroboration: NO SUPPORTING EVIDENCE FOUND (Unverified)
                             </span>
                           )}
@@ -2156,28 +2913,29 @@ function ReportScreen({
                       <span className="font-label-xs font-bold text-outline">CLAIM 0{idx + 1}</span>
                       <div className="flex items-center gap-2">
                         <span
-                          className={`px-2.5 py-0.5 rounded-full font-label-xs text-label-xs font-semibold ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-xs text-xs font-semibold ${
                             isSupp
                               ? "bg-tertiary/15 text-tertiary"
                               : isContra
                               ? "bg-error/15 text-error"
-                              : "bg-surface-container text-on-surface-variant"
+                              : "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
                           }`}
                         >
-                          {claim.status || "Verified"}
+                          <MatIcon name={isSupp ? "check_circle" : isContra ? "cancel" : "help"} size={13} />
+                          <span>{claim.status || "Verified"}</span>
                         </span>
-                        <span className="font-label-xs text-label-xs font-semibold text-primary">
+                        <span className="font-label-xs text-xs font-semibold text-primary">
                           {claim.confidence || claim.score || 90}% Confidence
                         </span>
                       </div>
                     </div>
                     <p className="font-body-md text-body-md font-medium text-on-surface">“{claim.claim}”</p>
                     {claim.supportingSources && claim.supportingSources.length > 0 ? (
-                      <span className="font-label-xs text-label-xs text-on-surface-variant">
+                      <span className="font-label-xs text-xs text-on-surface-variant">
                         Supporting citations: {claim.supportingSources.join(", ")}
                       </span>
                     ) : (
-                      <span className="font-label-xs text-label-xs text-amber-500 font-medium">
+                      <span className="font-label-xs text-xs text-[#9A5B00] dark:text-amber-400 font-medium">
                         Supporting citations: NO SUPPORTING EVIDENCE FOUND
                       </span>
                     )}
@@ -2185,7 +2943,15 @@ function ReportScreen({
                 );
               })
             ) : (
-              <p className="text-on-surface-variant font-body-sm">No testable factual claims detected.</p>
+              <div className="py-8 px-4 rounded-xl bg-surface-container-low border border-surface-container-high/30 flex flex-col items-center justify-center text-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-outline">
+                  <MatIcon name="fact_check" size={20} />
+                </div>
+                <h4 className="font-headline-sm text-sm font-semibold text-on-surface">No claims extracted</h4>
+                <p className="font-body-sm text-xs text-on-surface-variant max-w-md">
+                  No verifiable factual claims or assertions were extracted from this content.
+                </p>
+              </div>
             )}
           </div>
         </section>
@@ -2228,16 +2994,29 @@ function ReportScreen({
               </span>
             </div>
             <div className="sm:text-right">
-              <small className="font-label-xs text-label-xs text-outline uppercase tracking-wider block font-bold">
+              <small className="font-label-xs text-xs text-outline uppercase tracking-wider block font-bold">
                 Domain Trust Score
               </small>
-              <b
-                className={`font-headline-lg text-headline-lg ${
-                  sourceTrust >= 80 ? "text-tertiary" : sourceTrust >= 60 ? "text-amber-500" : "text-error"
-                }`}
-              >
-                {sourceTrust}/100
-              </b>
+              <div className="flex items-center sm:justify-end gap-2 mt-0.5">
+                <b
+                  className={`font-headline-lg text-headline-lg ${
+                    sourceTrust >= 80 ? "text-tertiary" : sourceTrust >= 60 ? "text-[#9A5B00] dark:text-amber-400" : "text-error"
+                  }`}
+                >
+                  {sourceTrust}/100
+                </b>
+                <span
+                  className={`px-2 py-0.5 rounded-full font-label-xs text-xs font-bold uppercase tracking-wider ${
+                    sourceTrust >= 80
+                      ? "bg-tertiary/10 text-tertiary"
+                      : sourceTrust >= 60
+                      ? "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
+                      : "bg-error/10 text-error"
+                  }`}
+                >
+                  {sourceTrust >= 80 ? "High" : sourceTrust >= 60 ? "Medium" : "Low"}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -2311,7 +3090,7 @@ function ReportScreen({
                           {cleanSnippetText(src.publisher) || "Verified Wire"}
                         </span>
                         {src.relevanceScore !== undefined && (
-                          <span className="text-tertiary font-mono text-2xs font-semibold shrink-0">
+                          <span className="text-tertiary font-mono text-xs font-semibold shrink-0">
                             {src.relevanceScore}% Semantic Match
                           </span>
                         )}
@@ -2328,7 +3107,7 @@ function ReportScreen({
                         "{cleanSnippetText(src.evidenceSnippet)}"
                       </p>
                     </div>
-                    <div className="flex items-center justify-between text-2xs text-outline pt-1 border-t border-surface-container-high/30">
+                    <div className="flex items-center justify-between text-xs text-outline pt-1 border-t border-surface-container-high/30">
                       <span>{src.publicationDate}</span>
                       <a
                         href={src.url}
@@ -2367,7 +3146,7 @@ function ReportScreen({
                           {cleanSnippetText(src.publisher) || "Refutation Wire"}
                         </span>
                         {src.relevanceScore !== undefined && (
-                          <span className="text-error font-mono text-2xs font-semibold shrink-0">
+                          <span className="text-error font-mono text-xs font-semibold shrink-0">
                             {src.relevanceScore}% Debunk Match
                           </span>
                         )}
@@ -2384,7 +3163,7 @@ function ReportScreen({
                         "{cleanSnippetText(src.evidenceSnippet)}"
                       </p>
                     </div>
-                    <div className="flex items-center justify-between text-2xs text-outline pt-1 border-t border-surface-container-high/30">
+                    <div className="flex items-center justify-between text-xs text-outline pt-1 border-t border-surface-container-high/30">
                       <span>{src.publicationDate}</span>
                       <a
                         href={src.url}
@@ -2449,10 +3228,27 @@ function ReportScreen({
               </div>
             </div>
           )}
+
+          {(!result.topSupportingSources || result.topSupportingSources.length === 0) &&
+            (!result.topContradictingSources || result.topContradictingSources.length === 0) &&
+            (!result.factCheckResults || result.factCheckResults.length === 0) && (
+              <div className="py-8 px-4 rounded-xl bg-surface-container-low border border-surface-container-high/30 flex flex-col items-center justify-center text-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-outline">
+                  <MatIcon name="source" size={20} />
+                </div>
+                <h4 className="font-headline-sm text-sm font-semibold text-on-surface">No sources found</h4>
+                <p className="font-body-sm text-xs text-on-surface-variant max-w-md">
+                  No corroborating or refuting external sources were retrieved for this investigation.
+                </p>
+              </div>
+            )}
         </section>
 
         {/* 7. GROUNDED VERDICT & REASONING */}
-        <section className="lucid-card bg-surface-container-lowest rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4">
+        <section
+          onPointerMove={handleCardPointerMove}
+          className="lucid-card glass-card spotlight-card rounded-xl p-6 shadow-xs border border-surface-container-high/40 space-y-4"
+        >
           <div className="flex items-center justify-between border-b border-surface-container-high/30 pb-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-xs font-bold">
@@ -2468,7 +3264,7 @@ function ReportScreen({
                   ? "bg-tertiary/15 text-tertiary"
                   : result.riskLevel === "HIGH" || result.riskLevel === "CRITICAL"
                   ? "bg-error/15 text-error"
-                  : "bg-amber-500/15 text-amber-600"
+                  : "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
               }`}
             >
               Risk: {result.riskLevel}
@@ -2487,7 +3283,7 @@ function ReportScreen({
                     ? "bg-tertiary text-on-tertiary"
                     : verdict === "KNOWN FALSE" || verdict === "LIKELY FALSE" || verdict === "FALSE"
                     ? "bg-error text-on-error"
-                    : "bg-amber-500 text-white"
+                    : "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/40"
                 }`}
               >
                 <MatIcon
@@ -2527,18 +3323,31 @@ function ReportScreen({
                   {result.trustScore}
                 </span>
               ) : (
-                <b
-                  className={`font-headline-lg text-headline-lg ${
-                    Number(result.trustScore) >= 75
-                      ? "text-tertiary"
-                      : Number(result.trustScore) >= 50
-                      ? "text-amber-500"
-                      : "text-error"
-                  }`}
-                >
-                  {result.trustScore}
-                  <small className="text-sm font-normal text-outline">/100</small>
-                </b>
+                <div className="flex items-center sm:justify-end gap-2 mt-0.5">
+                  <b
+                    className={`font-headline-lg text-headline-lg ${
+                      Number(result.trustScore) >= 75
+                        ? "text-tertiary"
+                        : Number(result.trustScore) >= 50
+                        ? "text-[#9A5B00] dark:text-amber-400"
+                        : "text-error"
+                    }`}
+                  >
+                    {result.trustScore}
+                    <small className="text-sm font-normal text-outline">/100</small>
+                  </b>
+                  <span
+                    className={`px-2 py-0.5 rounded-full font-label-xs text-xs font-bold uppercase tracking-wider ${
+                      Number(result.trustScore) >= 75
+                        ? "bg-tertiary/10 text-tertiary"
+                        : Number(result.trustScore) >= 50
+                        ? "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
+                        : "bg-error/10 text-error"
+                    }`}
+                  >
+                    {Number(result.trustScore) >= 75 ? "High Credibility" : Number(result.trustScore) >= 50 ? "Medium Credibility" : "Low Credibility"}
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -2635,9 +3444,9 @@ function ReportScreen({
                         {isNotScored ? "N/A" : `${factor.score}/100`}
                       </span>
                     </div>
-                    <p className="text-[11px] text-outline mb-2">{desc}</p>
+                    <p className="text-xs text-outline mb-2">{desc}</p>
                   </div>
-                  <div className="pt-2 border-t border-surface-container-high/20 flex items-center justify-between text-[11px]">
+                  <div className="pt-2 border-t border-surface-container-high/20 flex items-center justify-between text-xs">
                     <span className="text-on-surface-variant">Contribution:</span>
                     <span className="font-mono font-bold text-primary">
                       {isNotScored ? "N/A" : `+${factor.contribution} pts`}
@@ -2721,52 +3530,200 @@ export default function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Route Guards: enforce /welcome on fresh visit or refresh if unauthenticated
+  // Verification Error & Workspace preservation state
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [workspaceInput, setWorkspaceInput] = useState<{
+    mode: "url" | "text" | "image" | "pdf";
+    query: string;
+    selectedFile: File | null;
+  }>({
+    mode: "url",
+    query: "",
+    selectedFile: null,
+  });
+
+  // Offline 404 Detection & Mini-Game State
+  const [isOffline, setIsOffline] = useState(() => {
+    return typeof navigator !== "undefined" ? !navigator.onLine : false;
+  });
+  const [dismissedOffline, setDismissedOffline] = useState(false);
+  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
+  const [connectionToast, setConnectionToast] = useState<string | null>(null);
+
   useEffect(() => {
-    const handleRouteSync = () => {
-      const hash = window.location.hash.toLowerCase().replace(/^#\/?/, "");
-
-      // 1. Unauthenticated Route Guard: force welcome screen (Guest data/session reset on refresh)
-      if (!currentUser) {
-        if (hash !== "welcome" && hash !== "login") {
-          window.location.hash = "#/welcome";
-        }
-        setScreen("welcome");
-        return;
-      }
-
-      // 2. Authenticated Route Mapping
-      if (hash === "welcome" || hash === "login" || hash === "" || hash === "verify" || hash === "history") {
-        setScreen("home");
-      } else if (hash === "report") {
-        if (currentResultRef.current || currentResult) {
-          if (!currentResult && currentResultRef.current) {
-            setCurrentResult(currentResultRef.current);
-          }
-          setScreen("report");
-        } else {
-          setScreen("home");
-          window.location.hash = "#/verify";
-        }
-      } else if (hash === "ocr-preview") {
-        if (ocrPreviewDataRef.current || ocrPreviewData) {
-          if (!ocrPreviewData && ocrPreviewDataRef.current) {
-            setOcrPreviewData(ocrPreviewDataRef.current);
-          }
-          setScreen("ocr-preview");
-        } else {
-          setScreen("home");
-          window.location.hash = "#/verify";
-        }
-      } else if (hash === "analysis") {
-        setScreen("live-analysis");
-      }
+    const handleOnline = () => {
+      setIsOffline(false);
+      setDismissedOffline(false);
+      setConnectionToast("Connection restored");
+      const t = setTimeout(() => setConnectionToast(null), 3500);
+      return () => clearTimeout(t);
     };
 
-    handleRouteSync();
-    window.addEventListener("hashchange", handleRouteSync);
-    return () => window.removeEventListener("hashchange", handleRouteSync);
-  }, [currentUser]);
+    const handleOffline = () => {
+      setIsOffline(true);
+      setDismissedOffline(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const handleRetryConnection = async () => {
+    setIsCheckingConnection(true);
+    try {
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        await fetch(getApiUrl("/api/health"), { cache: "no-store", mode: "no-cors" }).catch(() => null);
+        setIsOffline(false);
+        setDismissedOffline(false);
+        setConnectionToast("Connection restored");
+        setTimeout(() => setConnectionToast(null), 3500);
+      } else {
+        setConnectionToast("Still offline. Please check your internet connection.");
+        setTimeout(() => setConnectionToast(null), 3000);
+      }
+    } catch {
+      setConnectionToast("Still offline. Please check your internet connection.");
+      setTimeout(() => setConnectionToast(null), 3000);
+    } finally {
+      setIsCheckingConnection(false);
+    }
+  };
+
+  const handleClearHistory = () => {
+    setHistory([]);
+    try {
+      localStorage.removeItem("lucid_history");
+    } catch {}
+  };
+
+  // Voice Guidance State & Web Speech Synthesis
+  const [voiceGuideEnabled, setVoiceGuideEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const speakVoiceGuidance = useCallback((text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn("Speech synthesis error:", err);
+      setIsSpeaking(false);
+    }
+  }, []);
+
+  const stopSpeaking = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+      setIsSpeaking(false);
+    }
+  }, []);
+
+  const toggleVoiceGuide = () => {
+    if (voiceGuideEnabled) {
+      stopSpeaking();
+      setVoiceGuideEnabled(false);
+    } else {
+      setVoiceGuideEnabled(true);
+      speakVoiceGuidance("Voice guide enabled. Paste a link, type a claim, or press the mic to speak.");
+    }
+  };
+
+  // Path-Based Navigation & Route Controller (HTML5 History API)
+  const syncRouteToScreen = useCallback((targetPath?: string) => {
+    if (typeof window === "undefined") return;
+
+    // 1. Strip and migrate legacy hash if present (e.g. /#/welcome, /verify#/welcome, /#/verify)
+    if (window.location.hash) {
+      const legacy = window.location.hash.toLowerCase().replace(/^#\/?/, "");
+      const cleanTarget = (legacy === "verify" || legacy === "report" || legacy === "ocr-preview" || legacy === "analysis" || legacy === "history")
+        ? `/${legacy}`
+        : "/";
+      window.history.replaceState(null, "", cleanTarget);
+    }
+
+    const currentPath = (targetPath || window.location.pathname).toLowerCase().replace(/\/+$/, "") || "/";
+
+    // 2. Unauthenticated Route Guard: Force exactly "/" (Welcome / Login screen)
+    if (!currentUser) {
+      if (currentPath !== "/") {
+        window.history.replaceState(null, "", "/");
+      }
+      setScreen("welcome");
+      return;
+    }
+
+    // 3. Authenticated Route Mapping
+    if (currentPath === "/" || currentPath === "/welcome" || currentPath === "/login") {
+      // Logged-in users who land on / are routed to /verify
+      window.history.replaceState(null, "", "/verify");
+      setScreen("home");
+    } else if (currentPath === "/verify" || currentPath === "/history") {
+      setScreen("home");
+    } else if (currentPath === "/report") {
+      if (currentResultRef.current || currentResult) {
+        if (!currentResult && currentResultRef.current) {
+          setCurrentResult(currentResultRef.current);
+        }
+        setScreen("report");
+      } else {
+        window.history.replaceState(null, "", "/verify");
+        setScreen("home");
+      }
+    } else if (currentPath === "/ocr-preview") {
+      if (ocrPreviewDataRef.current || ocrPreviewData) {
+        if (!ocrPreviewData && ocrPreviewDataRef.current) {
+          setOcrPreviewData(ocrPreviewDataRef.current);
+        }
+        setScreen("ocr-preview");
+      } else {
+        window.history.replaceState(null, "", "/verify");
+        setScreen("home");
+      }
+    } else if (currentPath === "/analysis") {
+      setScreen("live-analysis");
+    } else {
+      // Fallback unrecognized routes to /verify
+      window.history.replaceState(null, "", "/verify");
+      setScreen("home");
+    }
+  }, [currentUser, currentResult]);
+
+  const navigate = useCallback((path: string, replace = false) => {
+    if (typeof window === "undefined") return;
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    if (window.location.pathname === cleanPath && !window.location.hash) {
+      syncRouteToScreen(cleanPath);
+      return;
+    }
+    if (replace) {
+      window.history.replaceState(null, "", cleanPath);
+    } else {
+      window.history.pushState(null, "", cleanPath);
+    }
+    syncRouteToScreen(cleanPath);
+  }, [syncRouteToScreen]);
+
+  useEffect(() => {
+    syncRouteToScreen();
+    const onPop = () => syncRouteToScreen();
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+    };
+  }, [syncRouteToScreen]);
 
   const handleLogin = (user: UserAccount) => {
     setCurrentUser(user);
@@ -2787,7 +3744,7 @@ export default function App() {
     }
     setIsAuthModalOpen(false);
     setScreen("home");
-    window.location.hash = "#/verify";
+    navigate("/verify");
   };
 
   const handleSignOut = () => {
@@ -2799,9 +3756,10 @@ export default function App() {
     ocrPreviewDataRef.current = null;
     setCurrentResult(null);
     currentResultRef.current = null;
+    stopSpeaking();
     signOutFirebase();
     setScreen("welcome");
-    window.location.hash = "#/welcome";
+    navigate("/", true);
   };
 
   useEffect(() => {
@@ -2853,10 +3811,10 @@ export default function App() {
       ocrPreviewDataRef.current = previewPayload;
       setOcrPreviewData(previewPayload);
       setScreen("ocr-preview");
-      window.location.hash = "#/ocr-preview";
+      navigate("/ocr-preview");
     } catch (err) {
       console.error("[OCR Diagnostics] Image text extraction failed:", err);
-      alert("Text could not be extracted from this image.");
+      setVerifyError("Text could not be extracted from this image. Please try a clearer screenshot or upload text directly.");
     } finally {
       setIsExtractingOcr(false);
     }
@@ -2875,11 +3833,12 @@ export default function App() {
     textOverride?: string;
     ocrData?: OcrPreviewData | null;
   }) => {
+    setVerifyError(null);
     setActiveSubject(content);
     setAnalysisProgress(15);
     setAnalysisStep(1);
     setScreen("live-analysis");
-    window.location.hash = "#/analysis";
+    navigate("/analysis");
 
     const timer1 = setTimeout(() => {
       setAnalysisProgress(38);
@@ -2969,15 +3928,17 @@ export default function App() {
       };
       setHistory((prev) => [newHistoryItem, ...prev]);
       setScreen("report");
-      window.location.hash = "#/report";
-    } catch (err) {
+      navigate("/report");
+    } catch (err: any) {
       console.error("Verification error:", err);
       clearTimeout(timer1);
       clearTimeout(timer2);
       clearTimeout(timer3);
-      alert("Verification could not be completed. Please ensure the backend verification server is reachable.");
+      setVerifyError(
+        err?.message || "Verification could not be completed. Please ensure the backend verification server is reachable and try again."
+      );
       setScreen("home");
-      window.location.hash = "#/verify";
+      navigate("/verify");
     }
   };
 
@@ -2998,10 +3959,10 @@ export default function App() {
         onNavigateHome={() => {
           if (currentUser) {
             setScreen("home");
-            window.location.hash = "#/verify";
+            navigate("/verify");
           } else {
             setScreen("welcome");
-            window.location.hash = "#/welcome";
+            navigate("/", true);
           }
         }}
         darkMode={darkMode}
@@ -3009,6 +3970,10 @@ export default function App() {
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onSignOut={handleSignOut}
+        voiceGuideEnabled={voiceGuideEnabled}
+        onToggleVoiceGuide={toggleVoiceGuide}
+        isSpeaking={isSpeaking}
+        onStopSpeaking={stopSpeaking}
       />
 
       <main className="w-full pt-16 bg-surface min-h-[calc(100vh-140px)] flex-1 flex flex-col">
@@ -3024,12 +3989,17 @@ export default function App() {
             onOcrExtract={handleOcrExtract}
             isExtractingOcr={isExtractingOcr}
             history={history}
+            onClearHistory={handleClearHistory}
+            verifyError={verifyError}
+            onClearError={() => setVerifyError(null)}
+            initialInput={workspaceInput}
+            onInputChange={setWorkspaceInput}
             onSelectHistory={(item) => {
               currentResultRef.current = item.data;
               setCurrentResult(item.data);
               setActiveSubject(item.title);
               setScreen("report");
-              window.location.hash = "#/report";
+              navigate("/report");
             }}
           />
         )}
@@ -3042,7 +4012,7 @@ export default function App() {
             onCancel={() => {
               setOcrPreviewData(null);
               setScreen("home");
-              window.location.hash = "#/verify";
+              navigate("/verify");
             }}
           />
         )}
@@ -3055,7 +4025,7 @@ export default function App() {
             activeStep={analysisStep}
             onCancel={() => {
               setScreen("home");
-              window.location.hash = "#/verify";
+              navigate("/verify");
             }}
           />
         )}
@@ -3068,8 +4038,12 @@ export default function App() {
               subject={activeSubject}
               onNewSearch={() => {
                 setScreen("home");
-                window.location.hash = "#/verify";
+                navigate("/verify");
               }}
+              voiceGuideEnabled={voiceGuideEnabled}
+              speakVoiceGuidance={speakVoiceGuidance}
+              isSpeaking={isSpeaking}
+              onStopSpeaking={stopSpeaking}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center py-20 text-center gap-4">
@@ -3077,7 +4051,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setScreen("home");
-                  window.location.hash = "#/verify";
+                  navigate("/verify");
                 }}
                 className="px-5 py-2.5 min-h-[44px] rounded-full bg-primary text-on-primary font-label-md cursor-pointer"
               >
@@ -3094,6 +4068,49 @@ export default function App() {
         onClose={() => setIsAuthModalOpen(false)}
         onLogin={handleLogin}
       />
+
+      {/* Offline 404 Overlay with Endless Runner Mini-Game */}
+      {isOffline && !dismissedOffline && (
+        <Offline404Overlay
+          onRetry={handleRetryConnection}
+          onDismiss={() => setDismissedOffline(true)}
+          isChecking={isCheckingConnection}
+          isDarkMode={darkMode}
+        />
+      )}
+
+      {/* Cached Offline Banner if user dismissed overlay */}
+      {isOffline && dismissedOffline && (
+        <div className="bg-amber-950/90 text-amber-200 border-b border-amber-800/50 px-4 py-2 text-xs flex items-center justify-between z-40 sticky top-0" role="status">
+          <div className="flex items-center gap-2">
+            <MatIcon name="wifi_off" size={16} />
+            <span>You are currently offline (viewing cached page)</span>
+          </div>
+          <button
+            onClick={() => setDismissedOffline(false)}
+            className="underline hover:text-white font-medium ml-2 min-h-[44px] px-2 flex items-center cursor-pointer"
+            type="button"
+          >
+            Play Mini-Game
+          </button>
+        </div>
+      )}
+
+      {/* Reconnection / Offline Notification Toast */}
+      {connectionToast && (
+        <div
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container-high border border-surface-container-highest shadow-xl text-sm font-semibold text-on-surface animate-fade-in"
+          role="status"
+          aria-live="polite"
+        >
+          <MatIcon
+            name={connectionToast.includes("restored") ? "check_circle" : "wifi_off"}
+            size={18}
+            className={connectionToast.includes("restored") ? "text-tertiary" : "text-error"}
+          />
+          <span>{connectionToast}</span>
+        </div>
+      )}
 
       <AppFooter />
     </div>
