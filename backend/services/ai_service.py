@@ -21,6 +21,7 @@ from services.rag_retriever import get_rag_retriever
 from services.evidence_ranker import get_evidence_ranker
 from services.grounded_reasoner import get_grounded_reasoner
 from services.wikipedia_service import get_wikipedia_service
+from services.evidence_availability import evidence_tracker
 from utils.url_extractor import is_real_article_url
 
 logger = logging.getLogger("lucid.ai_service")
@@ -127,6 +128,8 @@ class VerificationEngine:
         ↓
         Final Trust Score
         """
+        evidence_tracker.reset()
+
         if not is_image:
             import re
             is_image = (
@@ -163,6 +166,8 @@ class VerificationEngine:
                 "articleType": "News Report",
                 "sourceQualityAssessment": None,
                 "emptyEvidenceAudit": None,
+                "evidenceUnavailable": False,
+                "evidenceUnavailableSources": {},
                 "ragEnabled": True,
                 "sourcesSearched": [],
                 "resultsFound": {"supporting": 0, "contradicting": 0, "total": 0},
@@ -273,7 +278,9 @@ class VerificationEngine:
         factual_claims = [c for c in extracted_claims if not (c.get("isOpinion") or c.get("claimType") == "Opinion / Perspective Assertion")]
         try:
             gnews_map = gnews_service.search_gnews_for_claims(factual_claims)
-        except Exception:
+        except Exception as e:
+            evidence_tracker.mark_failure("GNews", e)
+            logger.warning(f"[Evidence] GNews lookup failed: {e}")
             gnews_map = {}
 
         for claim_obj in extracted_claims:
@@ -424,6 +431,33 @@ class VerificationEngine:
             fact_check_results = all_api_factchecks
 
         logger.info(f"Evidence verified: {supp_count} supporting, {contra_count} contradicting, Evidence Score: {evidence_score}/100")
+
+        # A failed external lookup is NOT the same as "no evidence found".
+        unavailable_sources = evidence_tracker.snapshot()
+        evidence_unavailable = bool(unavailable_sources)
+        if evidence_unavailable:
+            logger.warning(
+                f"[Evidence] Lookup unavailable for: {unavailable_sources}. Results are incomplete."
+            )
+            evidence_results["evidenceUnavailable"] = True
+            evidence_results["evidenceUnavailableSources"] = unavailable_sources
+            if supp_count == 0 and contra_count == 0:
+                for claim in evidence_results.get("claims", []):
+                    if claim.get("status") == "Unverified":
+                        claim["analysisNotes"] = (
+                            "Evidence lookup unavailable for: "
+                            + ", ".join(sorted(unavailable_sources))
+                            + ". Verification is incomplete; this is not evidence of absence."
+                        )
+                calculation = evidence_results.get("evidenceCalculation")
+                if isinstance(calculation, dict):
+                    calculation["supportingEvidenceStatus"] = "EVIDENCE UNAVAILABLE"
+                    calculation["explanation"] = (
+                        "Evidence lookup failed for: "
+                        + ", ".join(sorted(unavailable_sources))
+                        + ". Verification is incomplete; absence of results is not evidence of absence."
+                    )
+                evidence_results["supportingEvidenceStatus"] = "EVIDENCE UNAVAILABLE"
 
         # -------------------------------------------------------------
         # STEP 5: ML Classification
@@ -606,15 +640,34 @@ class VerificationEngine:
             explanation.append("Linguistic analysis: Attributable, objective journalistic phrasing detected.")
         
         if supp_count == 0 and contra_count == 0:
-            explanation.append("Confidence Assessment: Low confidence — no independent evidence found to corroborate or contradict the claims.")
+            if evidence_unavailable:
+                explanation.append(
+                    "Confidence Assessment: Evidence lookup was unavailable for "
+                    + ", ".join(sorted(unavailable_sources))
+                    + "; verification is incomplete and this is not evidence of absence."
+                )
+            else:
+                explanation.append("Confidence Assessment: Low confidence — no independent evidence found to corroborate or contradict the claims.")
 
-        empty_audit_data = {
-            "sourcesSearched": sources_searched,
-            "resultsFound": f"{supp_count} supporting, {contra_count} contradicting",
-            "reason": (
-                f"Contradicted by {contra_count} source(s)." if contra_count > 0 else "No sufficiently relevant corroborating sources were found."
-            )
-        } if supp_count == 0 else None
+        if evidence_unavailable and supp_count == 0 and contra_count == 0:
+            empty_audit_data = {
+                "sourcesSearched": sources_searched,
+                "resultsFound": f"{supp_count} supporting, {contra_count} contradicting",
+                "reason": (
+                    "Evidence lookup unavailable for: "
+                    + ", ".join(sorted(unavailable_sources))
+                    + ". Results are incomplete; this is not evidence of absence."
+                ),
+                "unavailableSources": unavailable_sources
+            }
+        else:
+            empty_audit_data = {
+                "sourcesSearched": sources_searched,
+                "resultsFound": f"{supp_count} supporting, {contra_count} contradicting",
+                "reason": (
+                    f"Contradicted by {contra_count} source(s)." if contra_count > 0 else "No sufficiently relevant corroborating sources were found."
+                )
+            } if supp_count == 0 else None
 
         return {
             "verdict": final_verdict,
@@ -629,6 +682,8 @@ class VerificationEngine:
             
             # RAG (Retrieval-Augmented Generation) Architecture
             "ragEnabled": True,
+            "evidenceUnavailable": evidence_unavailable,
+            "evidenceUnavailableSources": unavailable_sources,
             "sourcesSearched": sources_searched,
             "resultsFound": f"{supp_count} supporting, {contra_count} contradicting",
             "topSupportingSources": top_supporting[:6],
@@ -712,7 +767,12 @@ class VerificationEngine:
                 "supportingCount": supp_count,
                 "contradictingCount": contra_count,
                 "evidenceScore": evidence_score,
-                "supportingEvidenceStatus": "NO SUPPORTING EVIDENCE FOUND" if supp_count == 0 else "CORROBORATED",
+                "supportingEvidenceStatus": (
+                    "EVIDENCE UNAVAILABLE" if (evidence_unavailable and supp_count == 0 and contra_count == 0)
+                    else ("NO SUPPORTING EVIDENCE FOUND" if supp_count == 0 else "CORROBORATED")
+                ),
+                "evidenceUnavailable": evidence_unavailable,
+                "evidenceUnavailableSources": unavailable_sources,
                 "calculation": evidence_results.get("evidenceCalculation"),
                 "emptyEvidenceAudit": empty_audit_data
             },
@@ -756,7 +816,7 @@ class VerificationEngine:
 
             "aiIntegrations": {
                 "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
-                "geminiModel": getattr(self.evidence_ranker.gemini_classifier, "active_model", os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")),
+                "geminiModel": getattr(self.evidence_ranker.gemini_classifier, "active_model", os.getenv("GEMINI_MODEL", "gemini-2.5-flash")),
                 "stanceClassifierStatus": getattr(self.evidence_ranker.gemini_classifier, "last_status", "available"),
                 "openAiConfigured": bool(os.getenv("OPENAI_API_KEY")),
                 "factCheckConfigured": bool(os.getenv("FACTCHECK_API_KEY")),

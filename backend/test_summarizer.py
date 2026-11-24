@@ -173,15 +173,22 @@ def test_url_submission_scrapes_title_body_and_summarizes():
       </body>
     </html>
     """
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.text = mock_html
-    mock_resp.raise_for_status = MagicMock()
+    article_url = "https://www.reuters.com/business/clean-energy-surge"
+    mock_fetch_result = {
+        "status_code": 200,
+        "headers": {},
+        "content": mock_html.encode("utf-8"),
+        "encoding": "utf-8",
+        "apparent_encoding": "utf-8",
+        "final_url": article_url,
+        "url": article_url,
+    }
 
     client = app.test_client()
 
-    with patch("requests.get", return_value=mock_resp):
-        resp = client.post("/api/analyze-url", json={"url": "https://www.reuters.com/business/clean-energy-surge"})
+    with patch("utils.url_extractor.validate_url_security", return_value=(True, "", article_url)), \
+         patch("utils.url_extractor.safe_get", return_value=mock_fetch_result):
+        resp = client.post("/api/analyze-url", json={"url": article_url})
         assert resp.status_code == 200
         data = resp.get_json()
 

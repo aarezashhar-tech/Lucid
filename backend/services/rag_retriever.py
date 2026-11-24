@@ -27,12 +27,13 @@ import re
 import html
 import logging
 import urllib.parse
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 import requests
 import services.factcheck_service as factcheck_service
+from services.evidence_availability import evidence_tracker
 from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
 from utils.url_extractor import is_real_article_url, resolve_google_news_url
 
@@ -380,8 +381,9 @@ class RAGRetrievalEngine:
             self.session_queried_sources["Wikipedia (Official REST API)"] = self.session_queried_sources.get("Wikipedia (Official REST API)", 0) + len(wiki_items)
             add_candidates(wiki_items)
         except Exception as e:
+            evidence_tracker.mark_failure("Wikipedia", e)
             self.session_queried_sources["Wikipedia (Official REST API)"] = self.session_queried_sources.get("Wikipedia (Official REST API)", 0)
-            logger.debug(f"Wikipedia retrieval error: {e}")
+            logger.warning(f"Wikipedia retrieval error: {e}")
 
         # 1. Fact-check API query (only queried if API key configured)
         if os.getenv("FACTCHECK_API_KEY", "").strip():

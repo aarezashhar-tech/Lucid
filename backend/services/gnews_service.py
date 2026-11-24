@@ -22,9 +22,10 @@ import logging
 from typing import List, Dict, Any
 from difflib import SequenceMatcher
 import urllib.parse
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 
 import requests
+from services.evidence_availability import evidence_tracker
 from utils.url_extractor import is_real_article_url, resolve_google_news_url
 
 logger = logging.getLogger("lucid.gnews")
@@ -181,7 +182,7 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
     """
     clean_query = re.sub(r'[^\w\s.-]', '', claim_text).strip('. ')
     if not clean_query:
-        return []
+        return [], None
 
     # Trim subordinate clauses or cut cleanly at word boundary
     m = re.search(r'^(.*?)\s+(?:following|according to|amid|after|as|during)\b', clean_query, re.I)
@@ -198,6 +199,7 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
     }
 
     results = []
+    error = None
     try:
         logger.info(f"Querying Google News RSS for claim: '{clean_query[:50]}...'")
         resp = requests.get(url, headers=headers, timeout=GNEWS_TIMEOUT)
@@ -251,9 +253,10 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
                 })
 
     except Exception as e:
+        error = str(e)
         logger.warning(f"Google News RSS query fallback encountered: {e}")
 
-    return results
+    return results, error
 
 
 def search_gnews(claim_text: str, max_articles: int = 5) -> List[Dict[str, Any]]:
@@ -277,6 +280,9 @@ def search_gnews(claim_text: str, max_articles: int = 5) -> List[Dict[str, Any]]
 
     api_key = os.getenv("GNEWS_API_KEY")
     results: List[Dict[str, Any]] = []
+    api_ok = False
+    api_error = None
+    rss_error = None
 
     # 1. Try GNews.io API if API key is provided
     if api_key:
@@ -292,6 +298,7 @@ def search_gnews(claim_text: str, max_articles: int = 5) -> List[Dict[str, Any]]
             logger.info(f"Querying GNews.io API: '{query[:50]}...'")
             response = requests.get(GNEWS_API_ENDPOINT, params=params, timeout=GNEWS_TIMEOUT)
             if response.status_code == 200:
+                api_ok = True
                 data = response.json()
                 for article in data.get("articles", []):
                     title = article.get("title", "")
@@ -321,12 +328,24 @@ def search_gnews(claim_text: str, max_articles: int = 5) -> List[Dict[str, Any]]
                         "description": description[:200] if description else "",
                         "isTrustedSource": is_trusted
                     })
+            else:
+                api_error = f"GNews API HTTP {response.status_code}"
+                logger.warning(f"GNews.io API returned HTTP {response.status_code}, falling back to Google News RSS.")
         except Exception as e:
+            api_error = str(e)
             logger.warning(f"GNews.io API error, falling back to Google News RSS: {e}")
 
     # 2. Fall back to Google News RSS if GNews.io yielded no articles
     if not results:
-        results = _fetch_from_google_news_rss(claim_text, max_articles=max_articles)
+        results, rss_error = _fetch_from_google_news_rss(claim_text, max_articles=max_articles)
+        if rss_error:
+            logger.warning(f"Google News RSS fallback failed: {rss_error}")
+    else:
+        api_ok = True
+
+    if not api_ok and rss_error:
+        evidence_tracker.mark_failure("GNews", api_error or rss_error)
+        logger.warning(f"[GNews] Evidence unavailable: {api_error or rss_error}")
 
     # Filter live results to ensure only real article URLs are kept (Requirement 3)
     results = [it for it in results if is_real_article_url(it.get("url", ""))]

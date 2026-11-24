@@ -5,6 +5,7 @@ import re
 import socket
 from urllib.parse import urlparse, urljoin
 import requests
+from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
 from typing import Dict, Any, Tuple
 
@@ -54,14 +55,14 @@ def is_ssrf_blocked_ip(ip_str: str) -> bool:
         return True
 
 
-def validate_url_security(url: str) -> Tuple[bool, str, str]:
+def resolve_and_validate_url(url: str) -> Tuple[bool, str, str, str, str, int]:
     """
-    Validates the URL protocol and ensures target host does not resolve
-    to internal or private network IP addresses (SSRF protection).
-    Returns (is_valid, error_message, normalized_url).
+    Validates the URL protocol, resolves the hostname, and ensures every
+    resolved address is public. Returns:
+    (is_valid, error_message, normalized_url, validated_ip, hostname, port)
     """
     if not url:
-        return False, "Missing URL parameter.", ""
+        return False, "Missing URL parameter.", "", "", "", 0
 
     url_clean = url.strip()
     if not re.match(r'^https?://', url_clean, re.IGNORECASE):
@@ -71,39 +72,176 @@ def validate_url_security(url: str) -> Tuple[bool, str, str]:
         parsed = urlparse(url_clean)
         scheme = parsed.scheme.lower()
         if scheme not in ('http', 'https'):
-            return False, "Only HTTP and HTTPS URLs are supported.", ""
+            return False, "Only HTTP and HTTPS URLs are supported.", "", "", "", 0
 
         hostname = parsed.hostname
         if not hostname:
-            return False, "Invalid URL hostname.", ""
+            return False, "Invalid URL hostname.", "", "", "", 0
 
+        port = parsed.port or (443 if scheme == 'https' else 80)
         hostname_lower = hostname.lower()
         if hostname_lower in ('localhost', '127.0.0.1', '0.0.0.0', '::1') or hostname_lower.endswith('.local') or hostname_lower.endswith('.internal'):
-            return False, "Access to private or local network resources is forbidden.", ""
+            return False, "Access to private or local network resources is forbidden.", "", "", "", port
 
         try:
             ip_obj = ipaddress.ip_address(hostname_lower)
             if is_ssrf_blocked_ip(str(ip_obj)):
-                return False, "Access to private or internal IP addresses is forbidden.", ""
+                return False, "Access to private or internal IP addresses is forbidden.", "", "", "", port
+            return True, "", url_clean, str(ip_obj), hostname_lower, port
         except ValueError:
             pass
 
         try:
-            addr_info = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
-            for entry in addr_info:
-                ip_addr = entry[4][0]
-                if is_ssrf_blocked_ip(ip_addr):
-                    logger.warning(f"SSRF blocked: {hostname} resolved to private/restricted IP: {ip_addr}")
-                    return False, "Target host resolves to a private or restricted network address.", ""
+            addr_info = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
         except socket.gaierror as e:
             logger.warning(f"DNS resolution failure for host {hostname}: {e}")
-            return False, "Could not resolve hostname.", ""
+            return False, "Could not resolve hostname.", "", "", "", port
 
-        return True, "", url_clean
+        resolved_ips = []
+        for entry in addr_info:
+            ip_addr = entry[4][0]
+            if is_ssrf_blocked_ip(ip_addr):
+                logger.warning(f"SSRF blocked: {hostname} resolved to private/restricted IP: {ip_addr}")
+                return False, "Target host resolves to a private or restricted network address.", "", "", "", port
+            if ip_addr not in resolved_ips:
+                resolved_ips.append(ip_addr)
+
+        if not resolved_ips:
+            return False, "Could not resolve hostname.", "", "", "", port
+
+        # Prefer IPv4 for maximum compatibility, while still supporting IPv6.
+        resolved_ips.sort(key=lambda ip: 0 if ':' not in ip else 1)
+        return True, "", url_clean, resolved_ips[0], hostname_lower, port
 
     except Exception as e:
         logger.error(f"URL validation error: {e}")
-        return False, "Malformed or invalid URL.", ""
+        return False, "Malformed or invalid URL.", "", "", "", 0
+
+
+def validate_url_security(url: str) -> Tuple[bool, str, str]:
+    """
+    Backwards-compatible wrapper around resolve_and_validate_url().
+    Returns (is_valid, error_message, normalized_url).
+    """
+    ok, err, normalized_url, _ip, _hostname, _port = resolve_and_validate_url(url)
+    return ok, err, normalized_url
+
+
+class SSRFBlockedError(Exception):
+    """Raised when a URL or redirect resolves to a blocked/private address."""
+
+
+class TooManyRedirectsError(Exception):
+    """Raised when a URL exceeds the maximum number of manual redirects."""
+
+
+class _PinnedHTTPAdapter(HTTPAdapter):
+    """
+    Requests adapter that connects to an already-validated IP address while
+    preserving the original Host header and TLS SNI/certificate hostname.
+    This prevents DNS rebinding between validation and connection.
+    """
+
+    def __init__(self, ip: str, hostname: str, scheme: str, **kwargs):
+        self._pinned_ip = ip
+        self._pinned_hostname = hostname
+        self._pinned_scheme = scheme.lower()
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        if self._pinned_scheme == 'https':
+            pool_kwargs.setdefault('assert_hostname', self._pinned_hostname)
+            pool_kwargs.setdefault('server_hostname', self._pinned_hostname)
+        return super().init_poolmanager(connections, maxsize, block, **pool_kwargs)
+
+    def send(self, request, **kwargs):
+        parsed = urlparse(request.url)
+        ip_host = f"[{self._pinned_ip}]" if ':' in self._pinned_ip else self._pinned_ip
+        ip_netloc = ip_host
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        if port and port not in (80, 443):
+            ip_netloc = f"{ip_host}:{port}"
+        request.url = parsed._replace(netloc=ip_netloc).geturl()
+        request.headers['Host'] = parsed.netloc
+        return super().send(request, **kwargs)
+
+
+def _fetch_once(url: str, headers: Dict[str, str], timeout: float, max_bytes: int) -> Dict[str, Any]:
+    """
+    Performs exactly one HTTP request with redirects disabled. The hostname is
+    resolved and validated immediately before connecting, and the connection is
+    pinned to that validated IP.
+    """
+    ok, err, normalized_url, validated_ip, hostname, _port = resolve_and_validate_url(url)
+    if not ok:
+        raise SSRFBlockedError(err)
+
+    scheme = urlparse(normalized_url).scheme.lower()
+    adapter = _PinnedHTTPAdapter(validated_ip, hostname, scheme)
+    session = requests.Session()
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+
+    try:
+        response = session.get(
+            normalized_url,
+            headers=headers,
+            timeout=timeout,
+            stream=True,
+            allow_redirects=False
+        )
+
+        content_bytes = bytearray()
+        for chunk in response.iter_content(chunk_size=16384):
+            content_bytes.extend(chunk)
+            if len(content_bytes) > max_bytes:
+                logger.warning(f"Response size exceeded {max_bytes} bytes. Truncating.")
+                break
+
+        return {
+            'status_code': response.status_code,
+            'headers': dict(response.headers),
+            'content': bytes(content_bytes),
+            'encoding': response.encoding,
+            'apparent_encoding': response.apparent_encoding,
+            'url': normalized_url,
+        }
+    finally:
+        session.close()
+
+
+def safe_get(
+    url: str,
+    headers: Dict[str, str],
+    timeout: float,
+    max_redirects: int = 5,
+    max_bytes: int = MAX_RESPONSE_BYTES
+) -> Dict[str, Any]:
+    """
+    Follows redirects manually (max 5). Every hop is re-resolved, re-validated,
+    and connected to its validated IP. Redirects are never followed automatically.
+    """
+    current_url = url
+    for attempt in range(max_redirects + 1):
+        result = _fetch_once(current_url, headers, timeout, max_bytes)
+        status = result['status_code']
+        location = result['headers'].get('Location') or result['headers'].get('location')
+
+        if status in (301, 302, 303, 307, 308) and location:
+            if attempt >= max_redirects:
+                raise TooManyRedirectsError(f"Exceeded maximum of {max_redirects} redirects.")
+            current_url = urljoin(current_url, location)
+            logger.info(f"Following redirect ({attempt + 1}/{max_redirects}) to {current_url}")
+            continue
+
+        result['final_url'] = current_url
+        result['redirect_count'] = attempt
+        return result
+
+    raise TooManyRedirectsError(f"Exceeded maximum of {max_redirects} redirects.")
 
 
 def is_real_article_url(url: str) -> bool:
@@ -222,21 +360,24 @@ def resolve_google_news_url(url: str, timeout: float = 2.5) -> Tuple[str, str]:
         cand_domain = urlparse(resolved_url).netloc.lower().replace("www.", "")
         return resolved_url, cand_domain
 
-    # Method 2: HTTP GET with redirects followed
+    # Method 2: HTTP GET with manual, SSRF-validated redirect following
     try:
-        resp = requests.get(
+        result = safe_get(
             url_clean,
             headers={"User-Agent": BROWSER_USER_AGENT},
             timeout=timeout,
-            allow_redirects=True
+            max_redirects=5,
+            max_bytes=200 * 1024
         )
-        if resp.url and "news.google.com" not in resp.url and is_real_article_url(resp.url):
-            resolved_domain = urlparse(resp.url).netloc.lower().replace("www.", "")
-            return resp.url, resolved_domain
+        final_url = result.get("final_url", url_clean)
+        if final_url and "news.google.com" not in final_url and is_real_article_url(final_url):
+            resolved_domain = urlparse(final_url).netloc.lower().replace("www.", "")
+            return final_url, resolved_domain
 
         # Check HTML for meta refresh or anchor redirect
-        if resp.content:
-            soup = BeautifulSoup(resp.content[:10000], "html.parser")
+        content = result.get("content") or b""
+        if content:
+            soup = BeautifulSoup(content[:10000], "html.parser")
             meta_refresh = soup.find("meta", attrs={"http-equiv": re.compile(r"^refresh$", re.I)})
             if meta_refresh and meta_refresh.get("content"):
                 m = re.search(r'url=(https?://[^\s"\']+)', meta_refresh["content"], re.I)
@@ -288,31 +429,16 @@ def fetch_and_extract_article(url_input: str) -> Dict[str, Any]:
 
     try:
         logger.info(f"Fetching URL with 10s timeout: {url}")
-        response = requests.get(
+        result = safe_get(
             url,
             headers=headers,
             timeout=REQUEST_TIMEOUT,
-            stream=True,
-            allow_redirects=True
+            max_redirects=5,
+            max_bytes=MAX_RESPONSE_BYTES
         )
 
-        final_url = response.url
-        final_valid, final_err, _ = validate_url_security(final_url)
-        if not final_valid:
-            logger.warning(f"Redirected to disallowed URL ({final_url}): {final_err}")
-            return {
-                "success": False,
-                "error": "Redirected to forbidden or internal address.",
-                "reason": "SSRF protection blocked redirect."
-            }
-
-        content_bytes = bytearray()
-        for chunk in response.iter_content(chunk_size=16384):
-            content_bytes.extend(chunk)
-            if len(content_bytes) > MAX_RESPONSE_BYTES:
-                logger.warning(f"Response size exceeded {MAX_RESPONSE_BYTES} bytes. Truncating.")
-                break
-
+        final_url = result.get("final_url", url)
+        content_bytes = result.get("content") or b""
         if not content_bytes:
             return {
                 "success": False,
@@ -320,7 +446,7 @@ def fetch_and_extract_article(url_input: str) -> Dict[str, Any]:
                 "reason": "Empty HTTP response received."
             }
 
-        encoding = response.encoding or response.apparent_encoding or 'utf-8'
+        encoding = result.get("encoding") or result.get("apparent_encoding") or 'utf-8'
         html_content = content_bytes.decode(encoding, errors='replace')
 
         soup = BeautifulSoup(html_content, 'html.parser')
@@ -407,6 +533,20 @@ def fetch_and_extract_article(url_input: str) -> Dict[str, Any]:
             "charCount": len(full_content)
         }
 
+    except SSRFBlockedError as e:
+        logger.warning(f"SSRF protection blocked request/redirect for {url}: {e}")
+        return {
+            "success": False,
+            "error": "Redirected to forbidden or internal address.",
+            "reason": "SSRF protection blocked request."
+        }
+    except TooManyRedirectsError as e:
+        logger.warning(f"Too many redirects fetching {url}: {e}")
+        return {
+            "success": False,
+            "error": "Could not read this page. Paste the article text instead.",
+            "reason": str(e)
+        }
     except requests.exceptions.Timeout:
         logger.warning(f"Request timeout fetching URL: {url}")
         return {

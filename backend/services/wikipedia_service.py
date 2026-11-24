@@ -18,6 +18,7 @@ import re
 import urllib.parse
 from typing import Dict, Any, List, Optional, Tuple
 import requests
+from services.evidence_availability import evidence_tracker
 
 logger = logging.getLogger("lucid.wikipedia")
 if not logger.handlers:
@@ -135,7 +136,11 @@ class WikipediaService:
                 results = [item["title"] for item in data.get("query", {}).get("search", [])]
                 self.cache.set(cache_key, results)
                 return results
+            if resp.status_code >= 500 or resp.status_code == 429:
+                evidence_tracker.mark_failure("Wikipedia", f"search API HTTP {resp.status_code}")
+                logger.warning(f"Wikipedia search API unavailable for '{query}': HTTP {resp.status_code}")
         except Exception as e:
+            evidence_tracker.mark_failure("Wikipedia", e)
             logger.warning(f"Wikipedia search API error for '{query}': {e}")
 
         return []
@@ -172,7 +177,11 @@ class WikipediaService:
                 }
                 self.cache.set(cache_key, result)
                 return result
+            if resp.status_code >= 500 or resp.status_code == 429:
+                evidence_tracker.mark_failure("Wikipedia", f"summary API HTTP {resp.status_code}")
+                logger.warning(f"Wikipedia REST API unavailable for title '{title}': HTTP {resp.status_code}")
         except Exception as e:
+            evidence_tracker.mark_failure("Wikipedia", e)
             logger.warning(f"Wikipedia REST API error for title '{title}': {e}")
 
         return None
@@ -229,7 +238,11 @@ class WikipediaService:
                 }
                 self.cache.set(cache_key, info)
                 return info
+            if resp.status_code >= 500 or resp.status_code == 429:
+                evidence_tracker.mark_failure("Wikipedia", f"Wikidata API HTTP {resp.status_code}")
+                logger.warning(f"Wikidata API unavailable for QID '{qid}': HTTP {resp.status_code}")
         except Exception as e:
+            evidence_tracker.mark_failure("Wikipedia", e)
             logger.warning(f"Wikidata API error for QID '{qid}': {e}")
 
         return None

@@ -26,6 +26,8 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+
 STOP_WORDS = {
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are",
     "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but",
@@ -415,7 +417,8 @@ class ArticleSummarizer:
     def _query_gemini(self, text: str, title: str) -> Optional[Dict[str, Any]]:
         """Queries Gemini for objective article summarization."""
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}"
+            model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             prompt = (
                 "You are an objective article summarizer for the Lucid news verification platform.\n"
                 "Your task is to explain what this article is about in neutral, clear, and informative prose.\n"
@@ -443,7 +446,11 @@ class ArticleSummarizer:
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"response_mime_type": "application/json"}
             }
-            res = requests.post(url, json=payload, timeout=8)
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.gemini_key
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=8)
             if res.status_code == 200:
                 body = res.json()
                 raw_text = body["candidates"][0]["content"]["parts"][0]["text"]

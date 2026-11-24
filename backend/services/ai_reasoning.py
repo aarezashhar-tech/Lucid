@@ -15,6 +15,7 @@ from typing import Dict, Any, List
 import requests
 
 TRANSPARENCY_WARNING = "This verdict is generated using machine learning and evidence scoring. It does not guarantee factual accuracy."
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
 class AIReasoningEngine:
     """
@@ -158,9 +159,10 @@ class AIReasoningEngine:
         source_data: Dict[str, Any],
         verdict_data: Dict[str, Any]
     ) -> Any:
-        """Invokes Gemini 1.5/2.0 API to generate reasoned analysis points."""
+        """Invokes the configured Gemini model to generate reasoned analysis points."""
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}"
+            model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             prompt = (
                 "You are an evidence-based fact-checking reasoning assistant for Lucid.\n"
                 "IMPORTANT: You DO NOT decide the verdict. The platform has already computed the multi-factor score.\n"
@@ -180,7 +182,11 @@ class AIReasoningEngine:
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"response_mime_type": "application/json"}
             }
-            res = requests.post(url, json=payload, timeout=8)
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.gemini_key
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=8)
             if res.status_code == 200:
                 body = res.json()
                 raw_text = body["candidates"][0]["content"]["parts"][0]["text"]

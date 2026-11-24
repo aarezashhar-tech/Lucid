@@ -12,6 +12,8 @@ from app import app
 
 @pytest.fixture
 def client():
+    from app import rate_limiter
+    rate_limiter.requests.clear()
     return app.test_client()
 
 
