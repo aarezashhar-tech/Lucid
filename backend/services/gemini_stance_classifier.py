@@ -35,6 +35,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+
 # Try importing google.genai
 try:
     from google import genai
@@ -55,7 +57,7 @@ class GeminiStanceClassifier:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.client = None
-        self.preferred_model = os.getenv("GEMINI_MODEL", os.getenv("GEMINI_STANCE_MODEL", "gemini-3.5-flash-lite")).strip()
+        self.preferred_model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
         self.active_model = self.preferred_model
         self._disabled = False
         self.last_status = "available" if (GENAI_AVAILABLE and self.api_key) else "stance classifier unavailable"
@@ -147,9 +149,10 @@ class GeminiStanceClassifier:
             "- reason: exactly 1 clear sentence explaining why the evidence supports, contradicts, or is neutral towards the claim."
         )
 
-        # Try active model, then fallback models if 404 (model retired) or temporary error
+        # Try the configured GEMINI_MODEL first, then stable fallbacks if it is
+        # retired or temporarily unavailable.
         models_to_try = [self.active_model]
-        for fallback in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.6-flash"]:
+        for fallback in [DEFAULT_GEMINI_MODEL, "gemini-1.5-flash"]:
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 

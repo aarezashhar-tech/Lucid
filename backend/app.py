@@ -1,18 +1,29 @@
 import os
 import re
+import json
 import time
-import socket
+import uuid
 import logging
 import threading
 from collections import defaultdict
 from typing import Tuple, Dict, Any, Optional
-from urllib.parse import urlparse
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-import requests
-from bs4 import BeautifulSoup
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.exceptions import HTTPException
 from dotenv import load_dotenv
+
+try:
+    import firebase_admin
+    from firebase_admin import auth as firebase_auth
+    from firebase_admin import credentials as firebase_credentials
+    FIREBASE_ADMIN_AVAILABLE = True
+except ImportError:
+    firebase_admin = None
+    firebase_auth = None
+    firebase_credentials = None
+    FIREBASE_ADMIN_AVAILABLE = False
 
 # Load environment variables from backend/.env or root .env
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -31,6 +42,10 @@ app = Flask(
     static_folder=FRONTEND_DIST if os.path.exists(FRONTEND_DIST) else None,
     static_url_path=""
 )
+
+# Trust exactly one proxy hop (e.g. Render's load balancer) so request.remote_addr
+# reflects the real client IP without trusting raw client-supplied X-Forwarded-For.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 # Production / Environment CORS Configuration
 is_production = os.getenv("FLASK_ENV") == "production" or os.getenv("ENV") == "production"
@@ -98,11 +113,19 @@ class SlidingWindowRateLimiter:
         key = f"{identifier}:{endpoint_category}"
         with self.lock:
             cutoff = now - window_seconds
-            self.requests[key] = [t for t in self.requests[key] if t > cutoff]
-            if len(self.requests[key]) >= max_requests:
-                retry_after = int(self.requests[key][0] + window_seconds - now) + 1
+            recent = [t for t in self.requests.get(key, []) if t > cutoff]
+            if recent:
+                self.requests[key] = recent
+            else:
+                # Delete empty keys instead of leaving stale buckets behind.
+                self.requests.pop(key, None)
+            if max_requests <= 0:
+                return False, max(window_seconds, 1)
+            if len(recent) >= max_requests:
+                retry_after = int(recent[0] + window_seconds - now) + 1
                 return False, max(retry_after, 1)
-            self.requests[key].append(now)
+            recent.append(now)
+            self.requests[key] = recent
             return True, 0
 
 rate_limiter = SlidingWindowRateLimiter()
@@ -111,68 +134,58 @@ rate_limiter = SlidingWindowRateLimiter()
 TOKEN_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
 TOKEN_CACHE_LOCK = threading.Lock()
 
-def get_auth_context() -> Dict[str, Any]:
-    """
-    Extracts and verifies Firebase ID token from Authorization: Bearer <token>.
-    Returns dict:
-      {
-        "is_authenticated": bool,
-        "user_id": str or None,
-        "email": str or None,
-        "is_guest": bool,
-        "identifier": str (user_id for auth users, client IP for guests)
-      }
-    """
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "127.0.0.1").split(",")[0].strip()
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return {
-            "is_authenticated": False,
-            "user_id": None,
-            "email": None,
-            "is_guest": True,
-            "identifier": ip
-        }
+FIREBASE_SERVICE_ACCOUNT_ENV = "FIREBASE_SERVICE_ACCOUNT_JSON"
+_firebase_app = None
+_firebase_project_id: Optional[str] = None
+_firebase_init_lock = threading.Lock()
+_firebase_init_attempted = False
 
-    token = auth_header.split(" ", 1)[1].strip()
-    if not token:
-        return {
-            "is_authenticated": False,
-            "user_id": None,
-            "email": None,
-            "is_guest": True,
-            "identifier": ip
-        }
 
-    now = time.time()
+def _get_firebase_app():
+    """Initializes and returns the Firebase Admin app from the service-account JSON env var."""
+    global _firebase_app, _firebase_project_id, _firebase_init_attempted
+
+    if not FIREBASE_ADMIN_AVAILABLE:
+        return None
+
+    with _firebase_init_lock:
+        if _firebase_init_attempted:
+            return _firebase_app
+        _firebase_init_attempted = True
+
+        raw_service_account = os.getenv(FIREBASE_SERVICE_ACCOUNT_ENV, "").strip()
+        if not raw_service_account:
+            app.logger.warning(
+                f"{FIREBASE_SERVICE_ACCOUNT_ENV} is not configured; Firebase tokens will be rejected."
+            )
+            return None
+
+        try:
+            service_account_info = json.loads(raw_service_account)
+            project_id = str(service_account_info.get("project_id", "")).strip()
+            if not project_id:
+                raise ValueError("service account JSON is missing project_id")
+            credential = firebase_credentials.Certificate(service_account_info)
+            _firebase_app = firebase_admin.initialize_app(credential, {"projectId": project_id})
+            _firebase_project_id = project_id
+            app.logger.info(f"Firebase Admin initialized for project '{project_id}'.")
+        except Exception as err:
+            _firebase_app = None
+            _firebase_project_id = None
+            app.logger.error(f"Failed to initialize Firebase Admin from {FIREBASE_SERVICE_ACCOUNT_ENV}: {err}")
+
+        return _firebase_app
+
+
+def _purge_expired_tokens(now: float) -> None:
+    """Removes expired token cache entries so empty/expired keys never accumulate."""
     with TOKEN_CACHE_LOCK:
-        if token in TOKEN_CACHE:
-            info, expiry = TOKEN_CACHE[token]
-            if now < expiry:
-                return info
+        expired = [tok for tok, (_, expiry) in TOKEN_CACHE.items() if now >= expiry]
+        for tok in expired:
+            TOKEN_CACHE.pop(tok, None)
 
-    try:
-        # Validate Firebase ID token with Google's public tokeninfo endpoint
-        resp = requests.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}", timeout=4)
-        if resp.status_code == 200:
-            data = resp.json()
-            user_id = data.get("sub") or data.get("user_id")
-            email = data.get("email", "")
-            exp = float(data.get("exp", now + 300))
-            info = {
-                "is_authenticated": True,
-                "user_id": user_id,
-                "email": email,
-                "is_guest": False,
-                "identifier": user_id or email or ip
-            }
-            with TOKEN_CACHE_LOCK:
-                TOKEN_CACHE[token] = (info, min(exp, now + 300))
-            return info
-    except Exception as err:
-        app.logger.warning(f"Failed to verify Firebase token: {err}")
 
-    # Fall back to unauthenticated / guest with client IP identifier
+def _guest_auth_context(ip: str) -> Dict[str, Any]:
     return {
         "is_authenticated": False,
         "user_id": None,
@@ -180,6 +193,66 @@ def get_auth_context() -> Dict[str, Any]:
         "is_guest": True,
         "identifier": ip
     }
+
+
+def get_auth_context() -> Dict[str, Any]:
+    """
+    Extracts and verifies a Firebase ID token from Authorization: Bearer <token>
+    using firebase-admin verify_id_token(). Tokens issued for a different Firebase
+    project are rejected. Guests are identified by request.remote_addr only.
+    """
+    ip = request.remote_addr or "127.0.0.1"
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return _guest_auth_context(ip)
+
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return _guest_auth_context(ip)
+
+    now = time.time()
+    _purge_expired_tokens(now)
+    with TOKEN_CACHE_LOCK:
+        cached = TOKEN_CACHE.get(token)
+        if cached:
+            info, expiry = cached
+            if now < expiry:
+                return info
+            TOKEN_CACHE.pop(token, None)
+
+    firebase_app = _get_firebase_app()
+    if firebase_app is None or firebase_auth is None:
+        app.logger.warning("Firebase Admin is unavailable; treating request as unauthenticated.")
+        return _guest_auth_context(ip)
+
+    try:
+        decoded = firebase_auth.verify_id_token(token, app=firebase_app)
+        audience = str(decoded.get("aud", "")).strip()
+        if not _firebase_project_id or audience != _firebase_project_id:
+            app.logger.warning(
+                f"Rejected Firebase token for unexpected project audience '{audience}' "
+                f"(expected '{_firebase_project_id}')."
+            )
+            return _guest_auth_context(ip)
+
+        user_id = decoded.get("uid") or decoded.get("sub") or decoded.get("user_id")
+        email = decoded.get("email", "")
+        exp = float(decoded.get("exp", now + 300))
+        info = {
+            "is_authenticated": True,
+            "user_id": user_id,
+            "email": email,
+            "is_guest": False,
+            "identifier": user_id or email or ip
+        }
+        with TOKEN_CACHE_LOCK:
+            TOKEN_CACHE[token] = (info, min(exp, now + 300))
+        return info
+    except Exception as err:
+        app.logger.warning(f"Failed to verify Firebase token: {err}")
+
+    # Fall back to unauthenticated / guest with client IP identifier
+    return _guest_auth_context(ip)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'pdf', 'txt'}
@@ -435,11 +508,12 @@ def analyze_file():
         return jsonify({"error": val_err}), 400
 
     filename = secure_filename(file.filename)
-    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ""
+    stored_filename = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], stored_filename)
     file.save(save_path)
 
-    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ""
-    app.logger.info(f"[analyze-file] Received file: {filename} (Ext: {ext})")
+    app.logger.info(f"[analyze-file] Received file: {filename} (Ext: {ext}) stored as {stored_filename}")
 
     extracted_text = ""
     extraction_note = ""
@@ -536,6 +610,11 @@ def analyze_file():
     except Exception as e:
         app.logger.exception(f"[analyze-file] File processing failed: {e}")
         return jsonify({"error": "An internal error occurred while processing the uploaded file. Please try again."}), 500
+    finally:
+        try:
+            os.remove(save_path)
+        except OSError:
+            pass
 
 @app.route('/api/ocr', methods=['POST', 'OPTIONS'])
 @app.route('/api/ocr/', methods=['POST', 'OPTIONS'])
@@ -568,10 +647,12 @@ def perform_ocr():
         return jsonify({"error": val_err}), 400
 
     filename = secure_filename(file.filename)
-    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ""
+    stored_filename = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], stored_filename)
     file.save(save_path)
 
-    app.logger.info(f"[api/ocr] Running OCR preview for: {filename}")
+    app.logger.info(f"[api/ocr] Running OCR preview for: {filename} (stored as {stored_filename})")
     try:
         extracted_text, success, msg, details = extract_text_from_image(save_path, return_details=True)
 
@@ -598,6 +679,11 @@ def perform_ocr():
     except Exception as e:
         app.logger.exception(f"[api/ocr] Error during OCR: {e}")
         return jsonify({"error": "An internal error occurred during text extraction."}), 500
+    finally:
+        try:
+            os.remove(save_path)
+        except OSError:
+            pass
 
 @app.route('/api/analyze-url', methods=['POST'])
 @app.route('/api/analyze-url/', methods=['POST'])
@@ -673,6 +759,9 @@ def handle_500(e):
 
 @app.errorhandler(Exception)
 def handle_general_exception(e):
+    # Let Flask/Werkzeug preserve HTTP semantics (404, 413, 405, etc.).
+    if isinstance(e, HTTPException):
+        return e
     app.logger.exception(f"Unhandled server exception: {e}")
     return jsonify({"error": "An unexpected error occurred. Please try again later."}), 500
 

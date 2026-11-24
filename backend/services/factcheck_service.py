@@ -7,6 +7,7 @@ import os
 import logging
 from typing import List, Dict, Any
 import requests
+from services.evidence_availability import evidence_tracker
 
 logger = logging.getLogger("lucid.factcheck")
 if not logger.handlers:
@@ -65,6 +66,7 @@ def query_google_factcheck(query: str) -> List[Dict[str, Any]]:
         logger.info(f"Google Fact Check API response status code: {response.status_code}")
 
         if response.status_code != 200:
+            evidence_tracker.mark_failure("FactCheck", f"HTTP {response.status_code}")
             logger.warning(
                 f"Google Fact Check API returned error status {response.status_code}: {response.text[:200]}"
             )
@@ -102,11 +104,14 @@ def query_google_factcheck(query: str) -> List[Dict[str, Any]]:
         return results
 
     except requests.exceptions.Timeout:
+        evidence_tracker.mark_failure("FactCheck", "request timed out")
         logger.error(f"Google Fact Check API timed out after 6 seconds for query: '{clean_query}'")
         return []
     except requests.exceptions.RequestException as e:
+        evidence_tracker.mark_failure("FactCheck", e)
         logger.error(f"Google Fact Check API request failed: {e}")
         return []
     except Exception as e:
+        evidence_tracker.mark_failure("FactCheck", e)
         logger.error(f"Unexpected error parsing Google Fact Check API response: {e}")
         return []
