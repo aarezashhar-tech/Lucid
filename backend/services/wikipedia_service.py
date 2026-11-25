@@ -15,6 +15,7 @@ Capabilities:
 import time
 import logging
 import re
+import threading
 import urllib.parse
 from typing import Dict, Any, List, Optional, Tuple
 import requests
@@ -86,18 +87,20 @@ class WikipediaCache:
     def __init__(self, ttl: int = CACHE_TTL_SECONDS):
         self.ttl = ttl
         self._cache: Dict[str, Tuple[float, Any]] = {}
+        self._lock = threading.Lock()
 
     def get(self, key: str) -> Optional[Any]:
-        if key in self._cache:
-            timestamp, data = self._cache[key]
-            if time.time() - timestamp < self.ttl:
-                return data
-            else:
+        with self._lock:
+            if key in self._cache:
+                timestamp, data = self._cache[key]
+                if time.time() - timestamp < self.ttl:
+                    return data
                 del self._cache[key]
         return None
 
     def set(self, key: str, value: Any) -> None:
-        self._cache[key] = (time.time(), value)
+        with self._lock:
+            self._cache[key] = (time.time(), value)
 
 
 class WikipediaService:

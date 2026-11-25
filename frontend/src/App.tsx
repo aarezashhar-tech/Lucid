@@ -2416,11 +2416,11 @@ function ReportScreen({
     : derivedFromText || "Verified Article";
 
   const scoring = result.scoringFactors || {
-    evidenceStrength: { weight: 0.45, score: result.evidence?.evidenceScore ?? 80, contribution: 36.0, label: "Evidence Strength (45%)" },
-    mlPrediction: { weight: 0.20, score: result.prediction === "REAL" ? 82 : 28, contribution: 16.4, label: "ML Text Pattern Classifier (20%)" },
-    languageQuality: { weight: 0.15, score: result.languageIntegrity ?? 88, contribution: 13.2, label: "Journalistic Language Integrity (15%)" },
+    evidenceStrength: { weight: 0.70, score: result.evidence?.evidenceScore ?? 80, contribution: 56.0, label: "Evidence Strength (70%)" },
     sourceReputation: { weight: 0.10, score: result.sourceReputation?.trustScore ?? 85, contribution: 8.5, label: "Domain & Source Authority (10%)" },
     claimConsistency: { weight: 0.10, score: 92, contribution: 9.2, label: "Factual Claim Consistency (10%)" },
+    mlPrediction: { weight: 0.05, score: result.prediction === "REAL" ? 82 : 28, contribution: 4.1, label: "ML Text Pattern Classifier (5%)" },
+    languageQuality: { weight: 0.05, score: result.languageIntegrity ?? 88, contribution: 4.4, label: "Journalistic Language Integrity (5%)" },
   };
 
   const suppCount = result.evidence?.supportingCount ?? result.claims?.filter((c) => c.status === "Supported").length ?? 3;
@@ -3418,20 +3418,22 @@ function ReportScreen({
               </h3>
             </div>
             <span className="font-label-xs text-label-xs text-outline font-medium">
-              Domain weight capped at 10% · Evidence-led evaluation
+              80% Evidence &amp; Source led · ML &amp; Style capped at 10%
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {[
-              { key: "evidenceStrength", factor: scoring.evidenceStrength, icon: "fact_check", desc: "45% weight · Corroborating citations" },
-              { key: "mlPrediction", factor: scoring.mlPrediction, icon: "psychology", desc: "20% weight · Linguistic pattern classifier" },
-              { key: "languageQuality", factor: scoring.languageQuality, icon: "article", desc: "15% weight · Journalistic tone integrity" },
-              { key: "sourceReputation", factor: scoring.sourceReputation, icon: "domain", desc: "10% weight · Publisher & domain authority" },
-              { key: "claimConsistency", factor: scoring.claimConsistency, icon: "balance", desc: "10% weight · Internal claim coherence" },
-            ].map(({ key, factor, icon, desc }) => {
+              { key: "evidenceStrength", factor: scoring.evidenceStrength, icon: "fact_check", descSuffix: "Corroborating citations", defaultPct: 70 },
+              { key: "sourceReputation", factor: scoring.sourceReputation, icon: "domain", descSuffix: "Publisher & domain authority", defaultPct: 10 },
+              { key: "claimConsistency", factor: scoring.claimConsistency, icon: "balance", descSuffix: "Internal claim coherence", defaultPct: 10 },
+              { key: "mlPrediction", factor: scoring.mlPrediction, icon: "psychology", descSuffix: "Linguistic pattern classifier", defaultPct: 5 },
+              { key: "languageQuality", factor: scoring.languageQuality, icon: "article", descSuffix: "Journalistic tone integrity", defaultPct: 5 },
+            ].map(({ key, factor, icon, descSuffix, defaultPct }) => {
               if (!factor) return null;
               const isNotScored = factor.score === "Not scored" || typeof factor.score === "string";
+              const weightPct = typeof factor.weight === "number" ? Math.round(factor.weight * 100) : defaultPct;
+              const desc = `${weightPct}% weight · ${descSuffix}`;
               return (
                 <div key={key} className="lucid-card-sub p-3.5 rounded-lg bg-surface-container-low border border-surface-container-high/30 flex flex-col justify-between">
                   <div>
@@ -3725,21 +3727,75 @@ export default function App() {
     };
   }, [syncRouteToScreen]);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const resetSession = useCallback(() => {
+    // 1. Abort any active in-flight fetch request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    // 2. Stop ongoing speech synthesis
+    stopSpeaking();
+
+    // 3. Clear all per-user React states
+    setWorkspaceInput({ mode: "url", query: "", selectedFile: null });
+    setOcrPreviewData(null);
+    ocrPreviewDataRef.current = null;
+    setCurrentResult(null);
+    currentResultRef.current = null;
+    setActiveSubject("");
+    setVerifyError(null);
+    setAnalysisProgress(0);
+    setAnalysisStep(1);
+    setIsExtractingOcr(false);
+    setIsAuthModalOpen(false);
+    setHistory([]);
+
+    // 4. Clear per-user localStorage & sessionStorage (keep theme, voice guide preference, and dino high score)
+    try {
+      const keepKeys = new Set(["lucid_theme", "lucid_voice_guide", "lucid_dino_high_score", "dinoHighScore"]);
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && !keepKeys.has(k)) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+      sessionStorage.clear();
+    } catch {}
+
+    // 5. Navigate to / with history replace
+    navigate("/", true);
+  }, [stopSpeaking, navigate]);
+
+  // Reset session whenever the Firebase auth user ID changes
+  useEffect(() => {
+    if (!auth) return;
+    let prevUid: string | null = auth.currentUser?.uid || null;
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      const currentUid = user?.uid || null;
+      if (prevUid !== null && prevUid !== currentUid) {
+        resetSession();
+      }
+      prevUid = currentUid;
+    });
+    return () => unsubscribe();
+  }, [resetSession]);
+
   const handleLogin = (user: UserAccount) => {
+    resetSession();
     setCurrentUser(user);
     if (!user.isGuest) {
       localStorage.setItem("lucid_user", JSON.stringify(user));
-      sessionStorage.removeItem("lucid_guest_session");
       try {
         const savedHistory = localStorage.getItem("lucid_history");
         if (savedHistory) setHistory(JSON.parse(savedHistory));
       } catch {}
     } else {
-      // Guest session: in-memory ONLY.
-      // Do NOT persist guest session or history to localStorage or sessionStorage.
-      // On page refresh, guest account and all guest data are completely gone.
       localStorage.removeItem("lucid_user");
-      sessionStorage.removeItem("lucid_guest_session");
       setHistory([]);
     }
     setIsAuthModalOpen(false);
@@ -3748,18 +3804,10 @@ export default function App() {
   };
 
   const handleSignOut = () => {
+    resetSession();
     setCurrentUser(null);
-    localStorage.removeItem("lucid_user");
-    sessionStorage.removeItem("lucid_guest_session");
-    setHistory([]);
-    setOcrPreviewData(null);
-    ocrPreviewDataRef.current = null;
-    setCurrentResult(null);
-    currentResultRef.current = null;
-    stopSpeaking();
     signOutFirebase();
     setScreen("welcome");
-    navigate("/", true);
   };
 
   useEffect(() => {
@@ -3855,6 +3903,12 @@ export default function App() {
       setAnalysisStep(4);
     }, 2400);
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       let response: Response;
       if (mode === "upload" && file) {
@@ -3867,18 +3921,21 @@ export default function App() {
         response = await fetchApi("/api/analyze-file", {
           method: "POST",
           body: formData,
+          signal: controller.signal,
         });
       } else if (mode === "url") {
         response = await fetchApi("/api/analyze-url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: content }),
+          signal: controller.signal,
         });
       } else {
         response = await fetchApi("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: content }),
+          signal: controller.signal,
         });
       }
 

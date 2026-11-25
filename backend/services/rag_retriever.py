@@ -26,6 +26,8 @@ import os
 import re
 import html
 import logging
+import threading
+import contextvars
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from defusedxml import ElementTree as ET
@@ -36,6 +38,7 @@ import requests
 import services.factcheck_service as factcheck_service
 from services.evidence_availability import evidence_tracker
 from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
+from services.gnews_service import fetch_bing_news_rss
 from utils.url_extractor import is_real_article_url, resolve_google_news_url, batch_resolve_google_news_urls
 
 logger = logging.getLogger("lucid.rag_retriever")
@@ -46,7 +49,7 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-REQUEST_TIMEOUT = 4
+REQUEST_TIMEOUT = 3.5
 GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 
 def clean_text_snippet(raw_text: str) -> str:
@@ -87,15 +90,23 @@ PUBLISHER_TRUST_REGISTRY = {
     "reuters": {"score": 96, "publisher": "Reuters", "category": "Wire Service"},
     "ap news": {"score": 95, "publisher": "AP News", "category": "Wire Service"},
     "associated press": {"score": 95, "publisher": "Associated Press (AP)", "category": "Wire Service"},
+    "ap": {"score": 95, "publisher": "Associated Press (AP)", "category": "Wire Service"},
     "bbc": {"score": 94, "publisher": "BBC", "category": "Public Broadcaster"},
     "al jazeera": {"score": 91, "publisher": "Al Jazeera", "category": "International News"},
+    "dpa": {"score": 93, "publisher": "DPA", "category": "Wire Service"},
+    "deutsche presse-agentur": {"score": 93, "publisher": "DPA", "category": "Wire Service"},
+    "dw": {"score": 90, "publisher": "Deutsche Welle (DW)", "category": "Public Broadcaster"},
+    "deutsche welle": {"score": 90, "publisher": "Deutsche Welle (DW)", "category": "Public Broadcaster"},
     "the guardian": {"score": 90, "publisher": "The Guardian", "category": "Independent News"},
     "afp": {"score": 95, "publisher": "Agence France-Presse (AFP)", "category": "Wire Service"},
     "agence france-presse": {"score": 95, "publisher": "Agence France-Presse (AFP)", "category": "Wire Service"},
     "bloomberg": {"score": 94, "publisher": "Bloomberg", "category": "Financial News"},
     "financial times": {"score": 94, "publisher": "Financial Times", "category": "Financial News"},
+    "the economist": {"score": 93, "publisher": "The Economist", "category": "Financial News"},
     # National Newspapers & Major Broadcasters
     "the hindu": {"score": 89, "publisher": "The Hindu", "category": "National Newspaper"},
+    "the indian express": {"score": 88, "publisher": "The Indian Express", "category": "National Newspaper"},
+    "indian express": {"score": 88, "publisher": "The Indian Express", "category": "National Newspaper"},
     "the times of india": {"score": 82, "publisher": "The Times of India", "category": "National Newspaper"},
     "times of india": {"score": 82, "publisher": "The Times of India", "category": "National Newspaper"},
     "ndtv": {"score": 83, "publisher": "NDTV", "category": "Broadcast News"},
@@ -104,9 +115,13 @@ PUBLISHER_TRUST_REGISTRY = {
     # IFCN & Accredited Fact Checkers
     "politifact": {"score": 95, "publisher": "PolitiFact", "category": "IFCN Fact Checker"},
     "factcheck.org": {"score": 96, "publisher": "FactCheck.org", "category": "IFCN Fact Checker"},
-    "snopes": {"score": 95, "publisher": "Snopes", "category": "Fact Checker"},
+    "snopes": {"score": 95, "publisher": "Snopes", "category": "IFCN Fact Checker"},
     "lead stories": {"score": 94, "publisher": "Lead Stories", "category": "IFCN Fact Checker"},
     "full fact": {"score": 95, "publisher": "Full Fact", "category": "IFCN Fact Checker"},
+    "alt news": {"score": 94, "publisher": "Alt News", "category": "IFCN Fact Checker"},
+    "boom live": {"score": 94, "publisher": "BOOM Live", "category": "IFCN Fact Checker"},
+    "factly": {"score": 94, "publisher": "Factly", "category": "IFCN Fact Checker"},
+    "vishvas news": {"score": 94, "publisher": "Vishvas News", "category": "IFCN Fact Checker"},
 
     # International Institutions & Scientific Bodies
     "world health organization": {"score": 99, "publisher": "World Health Organization (WHO)", "category": "International Institution"},
@@ -144,19 +159,29 @@ class RAGRetrievalEngine:
         self.wikipedia_service = get_wikipedia_service()
         self.session_queried_sources: Dict[str, int] = {}
         self._claim_factcheck_records: Dict[str, List[Dict[str, Any]]] = {}
+        self._lock = threading.Lock()
 
     def reset_session_audit(self):
         """Clears per-session queried sources audit log and cached fact-check records."""
-        self.session_queried_sources = {}
-        self._claim_factcheck_records = {}
+        with self._lock:
+            self.session_queried_sources = {}
+            self._claim_factcheck_records = {}
 
-    def get_factcheck_records_for_claim(self, claim_text: str) -> List[Dict[str, Any]]:
+    def get_factcheck_records_for_claim(self, claim_text: str, allow_fetch: bool = True) -> List[Dict[str, Any]]:
         """Returns fact check API records retrieved during Step 2 RAG retrieval, avoiding duplicate queries."""
-        if claim_text in self._claim_factcheck_records:
-            return self._claim_factcheck_records[claim_text]
-        if os.getenv("FACTCHECK_API_KEY", "").strip():
-            records = factcheck_service.query_google_factcheck(claim_text)
-            self._claim_factcheck_records[claim_text] = records
+        with self._lock:
+            if claim_text in self._claim_factcheck_records:
+                return self._claim_factcheck_records[claim_text]
+        if not allow_fetch:
+            return []
+        if (os.getenv("FACTCHECK_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip():
+            raw_records = factcheck_service.query_google_factcheck(claim_text)
+            records = [
+                fc for fc in raw_records
+                if factcheck_service.is_factcheck_claim_relevant(claim_text, fc.get("claim", ""))
+            ]
+            with self._lock:
+                self._claim_factcheck_records[claim_text] = records
             return records
         return []
 
@@ -237,7 +262,7 @@ class RAGRetrievalEngine:
                 root = ET.fromstring(resp.content)
                 items = root.findall(".//item")[:max_items]
                 raw_urls = [it.findtext("link", "").strip() for it in items if it.findtext("link", "").strip()]
-                resolved_map = batch_resolve_google_news_urls(raw_urls, max_timeout=2.0)
+                resolved_map = batch_resolve_google_news_urls(raw_urls, max_timeout=1.5)
 
                 for item in items:
                     raw_title = item.findtext("title", "").strip()
@@ -298,15 +323,65 @@ class RAGRetrievalEngine:
                         "sourceCategory": meta["category"],
                         "retrievalChannel": "Wire News Search"
                     })
+
+                if not results:
+                    logger.info("Google News RSS returned 0 items in RAG wire search. Falling back to Bing News RSS...")
+                    bing_articles = fetch_bing_news_rss(q_str, max_articles=max_items)
+                    for b in bing_articles:
+                        b_meta = self._match_publisher_metadata(b.get("sourceName", ""), b.get("url", ""))
+                        results.append({
+                            "articleTitle": b.get("articleTitle", ""),
+                            "publisher": b_meta["publisher"],
+                            "publisherDomain": b.get("publisherDomain") or b_meta.get("domain", ""),
+                            "publicationDate": b.get("publicationDate", ""),
+                            "url": b.get("url", ""),
+                            "evidenceSnippet": b.get("description") or b.get("articleTitle", ""),
+                            "sourceTrustScore": b_meta["score"],
+                            "sourceCategory": b_meta["category"],
+                            "retrievalChannel": "Bing News RSS Search"
+                        })
+            elif resp.status_code in (403, 429):
+                logger.info(f"Google News RSS returned HTTP {resp.status_code}. Falling back to Bing News RSS...")
+                bing_articles = fetch_bing_news_rss(q_str, max_articles=max_items)
+                for b in bing_articles:
+                    b_meta = self._match_publisher_metadata(b.get("sourceName", ""), b.get("url", ""))
+                    results.append({
+                        "articleTitle": b.get("articleTitle", ""),
+                        "publisher": b_meta["publisher"],
+                        "publisherDomain": b.get("publisherDomain") or b_meta.get("domain", ""),
+                        "publicationDate": b.get("publicationDate", ""),
+                        "url": b.get("url", ""),
+                        "evidenceSnippet": b.get("description") or b.get("articleTitle", ""),
+                        "sourceTrustScore": b_meta["score"],
+                        "sourceCategory": b_meta["category"],
+                        "retrievalChannel": "Bing News RSS Search"
+                    })
         except Exception as e:
-            logger.debug(f"RSS wire retrieval error: {e}")
+            logger.debug(f"RSS wire retrieval error: {e}. Falling back to Bing News RSS...")
+            try:
+                bing_articles = fetch_bing_news_rss(q_str, max_articles=max_items)
+                for b in bing_articles:
+                    b_meta = self._match_publisher_metadata(b.get("sourceName", ""), b.get("url", ""))
+                    results.append({
+                        "articleTitle": b.get("articleTitle", ""),
+                        "publisher": b_meta["publisher"],
+                        "publisherDomain": b.get("publisherDomain") or b_meta.get("domain", ""),
+                        "publicationDate": b.get("publicationDate", ""),
+                        "url": b.get("url", ""),
+                        "evidenceSnippet": b.get("description") or b.get("articleTitle", ""),
+                        "sourceTrustScore": b_meta["score"],
+                        "sourceCategory": b_meta["category"],
+                        "retrievalChannel": "Bing News RSS Search"
+                    })
+            except Exception:
+                pass
 
         return results
 
     def _fetch_factcheck_evidence(self, claim_text: str) -> List[Dict[str, Any]]:
         """Queries Google Fact Check API & accredited IFCN signatories."""
         fc_records = factcheck_service.query_google_factcheck(claim_text)
-        self._claim_factcheck_records[claim_text] = fc_records
+        relevant_records: List[Dict[str, Any]] = []
         results: List[Dict[str, Any]] = []
 
         for fc in fc_records:
@@ -316,6 +391,10 @@ class RAGRetrievalEngine:
             rating = fc.get("rating", "Unrated")
             claimant = fc.get("claimant", "")
             claim_desc = fc.get("claim", "")
+            if not factcheck_service.is_factcheck_claim_relevant(claim_text, claim_desc):
+                logger.info(f"Skipping off-topic Google Fact Check result ({reviewer}): {claim_desc[:80]!r}")
+                continue
+            relevant_records.append(fc)
 
             snippet = f"Fact Check Verdict: {rating.upper()}. Reviewed claim: \"{claim_desc}\""
             if claimant:
@@ -330,9 +409,12 @@ class RAGRetrievalEngine:
                 "sourceTrustScore": meta["score"],
                 "sourceCategory": "IFCN Fact Checker",
                 "factCheckRating": rating,
+                "reviewedClaim": claim_desc,
                 "retrievalChannel": "Google Fact Check Tools API"
             })
 
+        with self._lock:
+            self._claim_factcheck_records[claim_text] = relevant_records
         return results
 
     def _fetch_institutional_evidence_if_relevant(self, claim_text: str) -> List[Dict[str, Any]]:
@@ -408,7 +490,7 @@ class RAGRetrievalEngine:
                 return "Wikipedia (Official REST API)", []
 
         def _fetch_fc():
-            if os.getenv("FACTCHECK_API_KEY", "").strip():
+            if (os.getenv("FACTCHECK_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip():
                 try:
                     factchecks = self._fetch_factcheck_evidence(claim_text)
                     return "Google Fact Check Tools API", factchecks
@@ -435,16 +517,21 @@ class RAGRetrievalEngine:
         lower = claim_text.lower()
         has_inst = any(k in lower for k in ["vaccine", "covid", "virus", "pandemic", "who", "health", "disease", "treatment", "fda", "cdc", "renewable", "solar", "wind", "energy", "iea", "emissions", "climate", "fossil", "capacity", "un", "united nations", "security council", "treaty", "resolution", "sanctions", "icj", "icc", "genocide", "ceasefire"])
 
+        def _submit(ex, fn):
+            ctx = contextvars.copy_context()
+            return ex.submit(ctx.run, fn)
+
         tasks = []
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            tasks.append(executor.submit(_fetch_wiki))
-            if os.getenv("FACTCHECK_API_KEY", "").strip():
-                tasks.append(executor.submit(_fetch_fc))
+        executor = ThreadPoolExecutor(max_workers=5)
+        try:
+            tasks.append(_submit(executor, _fetch_wiki))
+            if (os.getenv("FACTCHECK_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip():
+                tasks.append(_submit(executor, _fetch_fc))
             if not wire_articles:
-                tasks.append(executor.submit(_fetch_wires))
-            tasks.append(executor.submit(_fetch_targeted_wires))
+                tasks.append(_submit(executor, _fetch_wires))
+            tasks.append(_submit(executor, _fetch_targeted_wires))
             if has_inst:
-                tasks.append(executor.submit(_fetch_inst))
+                tasks.append(_submit(executor, _fetch_inst))
 
             # If wire_articles were passed from GNews batch, convert and add them immediately
             if wire_articles is not None:
@@ -476,25 +563,66 @@ class RAGRetrievalEngine:
                         "retrievalChannel": "Wire News Search"
                     })
                 add_candidates(converted)
-                self.session_queried_sources["Google News RSS Wire Search"] = self.session_queried_sources.get("Google News RSS Wire Search", 0) + len(converted)
+                with self._lock:
+                    self.session_queried_sources["Google News RSS Wire Search"] = self.session_queried_sources.get("Google News RSS Wire Search", 0) + len(converted)
 
             done, _ = wait(tasks, timeout=8.0)
             for fut in done:
                 try:
                     channel_name, items = fut.result()
                     if channel_name:
-                        self.session_queried_sources[channel_name] = self.session_queried_sources.get(channel_name, 0) + len(items)
+                        with self._lock:
+                            self.session_queried_sources[channel_name] = self.session_queried_sources.get(channel_name, 0) + len(items)
                     add_candidates(items)
                 except Exception as e:
                     logger.warning(f"Error in concurrent retrieval channel: {e}")
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
+        # Preserve channel diversity before truncating to max_items so fast RSS results
+        # cannot push Wikidata derived living-person checks or IFCN fact-checks past [:max_items].
+        derived_items: List[Dict[str, Any]] = []
+        factcheck_items: List[Dict[str, Any]] = []
+        wire_items: List[Dict[str, Any]] = []
+        wiki_overview_items: List[Dict[str, Any]] = []
 
-        logger.info(f"RAG Retrieval for claim '{claim_text[:60]}...': found {len(all_candidates)} raw candidate sources.")
-        return all_candidates[:max_items]
+        for item in all_candidates:
+            ch = item.get("retrievalChannel", "")
+            snip = str(item.get("evidenceSnippet", ""))
+            if ch == "Wikidata API" or "[Derived check]" in snip or (ch == "Wikipedia REST API" and item.get("stance") in ("support", "contradict")):
+                derived_items.append(item)
+            elif ch in ("Google Fact Check Tools API", "Google Fact Check API"):
+                factcheck_items.append(item)
+            elif ch == "Wikipedia REST API":
+                wiki_overview_items.append(item)
+            else:
+                wire_items.append(item)
+
+        fc_head = factcheck_items[:3]
+        fc_tail = factcheck_items[3:]
+        wiki_head = wiki_overview_items[:2]
+        wiki_tail = wiki_overview_items[2:]
+        wire_budget = max(6, max_items - len(derived_items) - len(fc_head) - len(wiki_head))
+        wire_head = wire_items[:wire_budget]
+        wire_tail = wire_items[wire_budget:]
+
+        prioritized_candidates = (
+            derived_items
+            + fc_head
+            + wire_head
+            + wiki_head
+            + wire_tail
+            + fc_tail
+            + wiki_tail
+        )
+
+        logger.info(f"RAG Retrieval for claim '{claim_text[:60]}...': found {len(prioritized_candidates)} raw candidate sources.")
+        return prioritized_candidates[:max_items]
 
     def get_sources_searched_list(self) -> List[str]:
         """Returns the formal list of sources actually queried with result counts for user transparency."""
-        filtered_sources = dict(self.session_queried_sources)
+        with self._lock:
+            filtered_sources = dict(self.session_queried_sources)
         if not filtered_sources:
             return [
                 "Google News RSS Wire Search (0 results)",

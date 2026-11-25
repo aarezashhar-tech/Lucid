@@ -17,14 +17,15 @@ if not logger.handlers:
 
 # Configure tesseract_cmd dynamically: support Windows, Linux (Docker/Render), and custom env var
 import shutil
+from typing import Optional
 
-def resolve_tesseract_cmd() -> str:
+def resolve_tesseract_cmd() -> Optional[str]:
     # 1. Explicit environment variable override
     env_cmd = os.getenv("TESSERACT_CMD")
-    if env_cmd and os.path.exists(env_cmd):
+    if env_cmd and (os.path.exists(env_cmd) or shutil.which(env_cmd)):
         return env_cmd
 
-    # 2. Windows standard installations
+    # 2. Windows standard installations (ONLY on Windows)
     if os.name == "nt":
         candidates = [
             r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -34,29 +35,26 @@ def resolve_tesseract_cmd() -> str:
             if os.path.exists(c):
                 return c
 
-    # 3. Linux/Docker/Render standard locations
-    linux_candidates = [
-        "/usr/bin/tesseract",
-        "/usr/local/bin/tesseract",
-    ]
-    for c in linux_candidates:
-        if os.path.exists(c):
-            return c
-
-    # 4. PATH lookup
+    # 3. Linux/Docker/Render: auto-detect via shutil.which("tesseract")
     which_path = shutil.which("tesseract")
     if which_path:
         return which_path
 
-    # Fallback to default
-    return r"C:\Program Files\Tesseract-OCR\tesseract.exe" if os.name == "nt" else "/usr/bin/tesseract"
+    for c in ["/usr/bin/tesseract", "/usr/local/bin/tesseract"]:
+        if os.path.exists(c):
+            return c
+
+    return None
 
 TESSERACT_CMD = resolve_tesseract_cmd()
 
 try:
     import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
-    logger.info(f"Explicitly configured pytesseract.pytesseract.tesseract_cmd = r'{TESSERACT_CMD}'")
+    if TESSERACT_CMD:
+        pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+        logger.info(f"Explicitly configured pytesseract.pytesseract.tesseract_cmd = r'{TESSERACT_CMD}'")
+    else:
+        logger.warning("Tesseract binary not found on host. OCR will fail gracefully if invoked.")
 except ImportError as imp_err:
     pytesseract = None
     logger.error(f"Failed to import pytesseract: {imp_err}")
@@ -115,8 +113,16 @@ def extract_text_from_image(image_path: str, return_details: bool = False):
             return "", False, err_msg, details
         return "", False, err_msg
 
+    tess_cmd = resolve_tesseract_cmd() or TESSERACT_CMD
+    if not tess_cmd or (not os.path.exists(tess_cmd) and not shutil.which(tess_cmd)):
+        err_msg = "Tesseract OCR binary is not installed or available on the host system."
+        logger.warning(f"OCR skipped: {err_msg}")
+        if return_details:
+            return "", False, err_msg, details
+        return "", False, err_msg
+
     # Ensure explicit path is set before execution
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+    pytesseract.pytesseract.tesseract_cmd = tess_cmd
 
     try:
         logger.info(f"OCR started on {file_name}")

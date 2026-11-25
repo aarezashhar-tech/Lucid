@@ -1,7 +1,10 @@
 from __future__ import annotations
 import os
+import contextvars
+import threading
 import joblib
 import logging
+from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Dict, Any, List, Optional
 
 from utils.text_preprocessing import clean_text, analyze_linguistic_signals
@@ -243,56 +246,174 @@ class VerificationEngine:
         was_translated = lang_info.get("wasTranslated", False)
         logger.info(f"Language detected: {detected_lang} ({detected_code}), Translated: {was_translated}")
 
-        # -------------------------------------------------------------
-        # STEP -0.5: Article Classification
-        # -------------------------------------------------------------
-        logger.info("Pipeline Step -0.5: Article Type Classification")
-        classification = self.article_classifier.classify_article_type(analysis_text or text, title=article_title)
-        article_type = classification["articleType"]
-        logger.info(f"Article classified as: {article_type} (Confidence: {classification['confidence']}%)")
+        word_count = len((analysis_text or text).split())
+        is_short_input = (word_count < 25)
+
+        if is_short_input:
+            # -------------------------------------------------------------
+            # Short single-claim input (< 25 words): Skip Gemini LLM calls for
+            # article classification, claim extraction, and summarization.
+            # Only GeminiStanceClassifier runs downstream (1 LLM call total).
+            # -------------------------------------------------------------
+            raw_lower = (analysis_text or text).lower()
+            is_satire_local = bool(re.search(r'\b(satire|satirical|the onion|babylon bee|parody)\b', raw_lower))
+            is_opinion_local = bool(re.search(r'\b(in my view|in my opinion|i believe|i think|my take|op-ed|editorial)\b', raw_lower))
+
+            if is_satire_local:
+                article_type = "Satire"
+                classification = {
+                    "articleType": "Satire",
+                    "confidence": 95,
+                    "genreMarkers": ["Local satire keyword match"],
+                    "explanation": "Detected satire or parody markers in short input."
+                }
+            elif is_opinion_local:
+                article_type = "Opinion Piece"
+                classification = {
+                    "articleType": "Opinion Piece",
+                    "confidence": 90,
+                    "genreMarkers": ["Local opinion keyword match"],
+                    "explanation": "Detected personal opinion markers in short input."
+                }
+            else:
+                article_type = "News Report"
+                classification = {
+                    "articleType": "News Report",
+                    "confidence": 85,
+                    "genreMarkers": ["Short factual assertion"],
+                    "explanation": "Short input (< 25 words) defaulted directly to News Report."
+                }
+            logger.info(f"Short single-claim input ({word_count} words): classified locally as '{article_type}' without Gemini call.")
+
+            claim_clean = (analysis_text or text).strip()
+            extracted_claims = [{
+                "claimNumber": 1,
+                "claim": claim_clean,
+                "claimType": "Factual Proposition" if not is_opinion_local else "Opinion / Perspective Assertion",
+                "isOpinion": is_opinion_local,
+                "isTimeSensitive": False,
+                "status": "Unverified"
+            }]
+            logger.info("Short single-claim input: treated directly as single claim without Gemini call.")
+
+            claim_sentence = claim_clean
+            if claim_sentence and not claim_sentence.endswith((".", "!", "?")):
+                claim_sentence += "."
+            derived_title = (article_title or "").strip() or claim_clean.rstrip(".!?")[:140]
+            article_summary = {
+                "title": derived_title,
+                "executiveSummary": claim_sentence,
+                "keyTakeaways": [claim_sentence],
+                "tldr": claim_sentence,
+                "quickSummary": claim_sentence,
+                "provider": "Direct Claim Summary"
+            }
+            logger.info("Short single-claim input: using direct claim summary without Gemini call.")
+        else:
+            # -------------------------------------------------------------
+            # STEP -0.5: Article Classification
+            # -------------------------------------------------------------
+            logger.info("Pipeline Step -0.5: Article Type Classification")
+            classification = self.article_classifier.classify_article_type(analysis_text or text, title=article_title)
+            article_type = classification["articleType"]
+            logger.info(f"Article classified as: {article_type} (Confidence: {classification['confidence']}%)")
+
+            # -------------------------------------------------------------
+            # STEP 1: Claim Extraction (Distinguishes Factual vs Opinion)
+            # -------------------------------------------------------------
+            logger.info("Pipeline Step 1: Claim Extraction")
+            extracted_claims = self.claim_engine.extract_claims(analysis_text, max_claims=5, article_type=article_type)
+            logger.info(f"Extracted {len(extracted_claims)} claim(s)")
+
+            # -------------------------------------------------------------
+            # STEP 0: Article Summarization (Executive Summary, Key Takeaways, TL;DR)
+            # -------------------------------------------------------------
+            logger.info("Pipeline Step 0: Article Summarization")
+            article_summary = self.summarizer.summarize(analysis_text, title=article_title, url=url_or_domain)
+            logger.info(f"Article summarized: TL;DR: '{article_summary.get('tldr', '')[:80]}...'")
 
         # -------------------------------------------------------------
-        # STEP 0: Article Summarization (Executive Summary, Key Takeaways, TL;DR)
-        # -------------------------------------------------------------
-        logger.info("Pipeline Step 0: Article Summarization")
-        article_summary = self.summarizer.summarize(analysis_text, title=article_title, url=url_or_domain)
-        logger.info(f"Article summarized: TL;DR: '{article_summary.get('tldr', '')[:80]}...'")
-
-        # -------------------------------------------------------------
-        # STEP 1: Claim Extraction (Distinguishes Factual vs Opinion)
-        # -------------------------------------------------------------
-        logger.info("Pipeline Step 1: Claim Extraction")
-        extracted_claims = self.claim_engine.extract_claims(analysis_text, max_claims=5, article_type=article_type)
-        logger.info(f"Extracted {len(extracted_claims)} claim(s)")
-
-        # -------------------------------------------------------------
-        # STEP 2 (RAG): Multi-Source Claim-by-Claim Evidence Retrieval
-        # Searches: Reuters, AP News, BBC, Al Jazeera, The Guardian, AFP,
-        # Google Fact Check API, IFCN signatories, Government, UN/WHO.
-        # Requirement 9: Do not fact-check opinion paragraphs.
+        # STEP 2 & 2b (RAG): Multi-Source Claim-by-Claim Retrieval & Ranking
+        # Runs claim retrieval + ranking concurrently (max_workers=3) with tight timeouts.
         # -------------------------------------------------------------
         logger.info("Pipeline Step 2 (RAG): Multi-Source Claim-by-Claim Evidence Retrieval")
         retrieval_map: Dict[str, List[Dict[str, Any]]] = {}
+        pre_ranked_map: Dict[str, Dict[str, Any]] = {}
         all_rag_candidates: List[Dict[str, Any]] = []
+        retrieval_lock = threading.Lock()
 
         factual_claims = [c for c in extracted_claims if not (c.get("isOpinion") or c.get("claimType") == "Opinion / Perspective Assertion")]
+        gnews_attempted = False
         try:
             gnews_map = gnews_service.search_gnews_for_claims(factual_claims)
+            gnews_attempted = True
         except Exception as e:
             evidence_tracker.mark_failure("GNews", e)
             logger.warning(f"[Evidence] GNews lookup failed: {e}")
             gnews_map = {}
 
+        def _retrieve_and_rank_claim(c_text: str):
+            wire_list = gnews_map.get(c_text, [])
+            candidates = self.rag_retriever.retrieve_evidence_for_claim(c_text, max_items=14, wire_articles=wire_list)
+            with retrieval_lock:
+                retrieval_map[c_text] = candidates
+            ranked = self.evidence_ranker.rank_evidence_for_claim(c_text, candidates)
+            return c_text, candidates, ranked
+
+        claims_to_process: List[str] = []
         for claim_obj in extracted_claims:
             c_text = claim_obj.get("claim", "")
             is_op = claim_obj.get("isOpinion", False) or claim_obj.get("claimType") == "Opinion / Perspective Assertion"
             if c_text and not is_op:
-                wire_list = gnews_map.get(c_text, [])
-                candidates = self.rag_retriever.retrieve_evidence_for_claim(c_text, max_items=14, wire_articles=wire_list)
-                retrieval_map[c_text] = candidates
-                all_rag_candidates.extend(candidates)
+                claims_to_process.append(c_text)
             else:
                 retrieval_map[c_text] = []
+
+        if claims_to_process:
+            executor = ThreadPoolExecutor(max_workers=min(3, len(claims_to_process)))
+            fut_to_claim = {}
+            for c_text in claims_to_process:
+                ctx = contextvars.copy_context()
+                fut_to_claim[executor.submit(ctx.run, _retrieve_and_rank_claim, c_text)] = c_text
+            try:
+                cold_embeddings = not getattr(
+                    getattr(self.evidence_ranker, "semantic_engine", None),
+                    "_model_load_attempted",
+                    True,
+                )
+                claim_wait_timeout = 35.0 if cold_embeddings else 14.5
+                done, not_done = wait(list(fut_to_claim.keys()), timeout=claim_wait_timeout)
+                for fut in done:
+                    c_text = fut_to_claim[fut]
+                    try:
+                        _, candidates, ranked = fut.result()
+                        with retrieval_lock:
+                            retrieval_map[c_text] = candidates
+                        pre_ranked_map[c_text] = ranked
+                        all_rag_candidates.extend(candidates)
+                    except Exception as e:
+                        logger.warning(f"Claim retrieval/ranking failed for '{c_text[:50]}': {e}")
+                        with retrieval_lock:
+                            partial_candidates = retrieval_map.get(c_text, [])
+                            retrieval_map[c_text] = partial_candidates
+                        if partial_candidates:
+                            all_rag_candidates.extend(partial_candidates)
+                            pre_ranked_map[c_text] = self.evidence_ranker.rank_evidence_for_claim(
+                                c_text, partial_candidates, allow_gemini=False
+                            )
+                for fut in not_done:
+                    c_text = fut_to_claim[fut]
+                    logger.warning(f"Claim retrieval/ranking timed out for '{c_text[:50]}'")
+                    with retrieval_lock:
+                        partial_candidates = retrieval_map.get(c_text, [])
+                        retrieval_map[c_text] = partial_candidates
+                    if partial_candidates:
+                        all_rag_candidates.extend(partial_candidates)
+                        pre_ranked_map[c_text] = self.evidence_ranker.rank_evidence_for_claim(
+                            c_text, partial_candidates, allow_gemini=False
+                        )
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
 
         # If zero factual claims were extracted, query the first factual sentence
         if not factual_claims and len(text.strip().split()) > 3 and article_type != "Opinion Piece":
@@ -300,16 +421,18 @@ class VerificationEngine:
             fallback_candidates = self.rag_retriever.retrieve_evidence_for_claim(first_sent, max_items=6)
             all_rag_candidates.extend(fallback_candidates)
             if fallback_candidates and extracted_claims:
-                retrieval_map[extracted_claims[0].get("claim", first_sent)] = fallback_candidates
+                first_claim = extracted_claims[0].get("claim", first_sent)
+                retrieval_map[first_claim] = fallback_candidates
+                pre_ranked_map.pop(first_claim, None)
 
         # -------------------------------------------------------------
-        # STEP 2b (RAG): Semantic Evidence Ranking & Evidence Matrix
-        # Ranks candidates by relevance (embeddings), publisher credibility, recency.
+        # STEP 2b (RAG): Evidence Matrix Construction
         # -------------------------------------------------------------
         logger.info("Pipeline Step 2b (RAG): Semantic Evidence Ranking & Evidence Matrix Construction")
         evidence_matrix = self.evidence_ranker.build_evidence_matrix_for_claims(
             extracted_claims,
-            retrieval_map
+            retrieval_map,
+            pre_ranked_map=pre_ranked_map
         )
 
         raw_supp: List[Dict[str, Any]] = []
@@ -351,11 +474,13 @@ class VerificationEngine:
             claim_text = claim_obj.get("claim", "")
             if claim_text and not claim_obj.get("isOpinion"):
                 # Reuse fact check results already retrieved in Step 2 RAG retriever (no duplicate API call)
-                fc_results = self.rag_retriever.get_factcheck_records_for_claim(claim_text)
+                fc_results = self.rag_retriever.get_factcheck_records_for_claim(
+                    claim_text, allow_fetch=not bool(claims_to_process)
+                )
                 external_factchecks_map[claim_text] = fc_results
                 all_api_factchecks.extend(fc_results)
 
-        if not gnews_map:
+        if not gnews_attempted and not gnews_map:
             gnews_map = {}
             all_gnews_articles = []
             for claim_obj in extracted_claims:
@@ -414,6 +539,30 @@ class VerificationEngine:
         contra_count = len(top_contradicting)
         evidence_results["supportingEvidenceCount"] = supp_count
         evidence_results["contradictingEvidenceCount"] = contra_count
+
+        # Harmonize claim status with RAG evidence_matrix so Claim Consistency reflects ranked evidence
+        matrix_by_claim = {row.get("claim", ""): row for row in evidence_matrix}
+        for claim_item in evidence_results.get("claims", []):
+            if claim_item.get("status") == "Unverified":
+                row = matrix_by_claim.get(claim_item.get("claim", ""))
+                if not row:
+                    continue
+                row_supp = [s for s in row.get("supportingEvidence", []) if is_real_article_url(s.get("url", ""))]
+                row_contra = [c for c in row.get("contradictingEvidence", []) if is_real_article_url(c.get("url", ""))]
+                if row.get("status") in ("Verified", "Supported") and row_supp and not row_contra:
+                    claim_item["status"] = "Supported"
+                    claim_item["confidence"] = max(claim_item.get("confidence", 0), row.get("confidence", 80))
+                    claim_item["supportingSources"] = [s.get("publisher", "") for s in row_supp[:3] if s.get("publisher")]
+                    claim_item["supportingEvidenceCount"] = len(row_supp)
+                    if row.get("evidenceSummary"):
+                        claim_item["analysisNotes"] = row["evidenceSummary"]
+                elif row.get("status") in ("False", "Contradicted") and row_contra:
+                    claim_item["status"] = "Contradicted"
+                    claim_item["confidence"] = max(claim_item.get("confidence", 0), row.get("confidence", 85))
+                    claim_item["contradictingSources"] = [c.get("publisher", "") for c in row_contra[:3] if c.get("publisher")]
+                    claim_item["contradictingEvidenceCount"] = len(row_contra)
+                    if row.get("evidenceSummary"):
+                        claim_item["analysisNotes"] = row["evidenceSummary"]
 
         evidence_score = evidence_results.get("evidenceScore", 50)
         if supp_count >= 2 and contra_count == 0:
@@ -500,7 +649,7 @@ class VerificationEngine:
 
         # -------------------------------------------------------------
         # STEP 6: Final Trust Score (Multi-Factor Scoring)
-        # Weights: Evidence 45%, ML 20%, Language 15%, Source 10%, Consistency 10%
+        # Weights: Evidence 70%, Source 10%, Consistency 10%, ML 5%, Language 5%
         # -------------------------------------------------------------
         logger.info(f"Pipeline Step 6: Final Trust Score & Verdict Calculation (Genre: {article_type})")
         verdict_results = self.scoring_engine.compute_verdict_and_score(
@@ -561,22 +710,40 @@ class VerificationEngine:
 
         log_msg = (
             f"[Lucid Pipeline] Text Length: {len(text)} chars | Final Trust Score: {final_trust_score} | Verdict: {final_verdict} | "
-            f"Score Components: [Evidence(45%): {evi_contrib}, ML(20%): {ml_contrib}, Language(15%): {lan_contrib}, Source(10%): {src_contrib}, Consistency(10%): {con_contrib}]"
+            f"Score Components: [Evidence(70%): {evi_contrib}, Source(10%): {src_contrib}, Consistency(10%): {con_contrib}, ML(5%): {ml_contrib}, Language(5%): {lan_contrib}]"
         )
         logger.info(log_msg)
         print(log_msg)
 
         # -------------------------------------------------------------
         # STEP 7: AI Reasoning & Deliberation
+        # Skip redundant external LLM deliberation for short single claims or when grounded reasoning covers it.
         # -------------------------------------------------------------
-        reasoning_data = self.ai_reasoner.generate_ai_reasoning(
-            article_text=analysis_text,
-            claims=evidence_results["claims"],
-            source_data=source_data,
-            evidence_data=evidence_results,
-            verdict_data=verdict_results,
-            ling_signals=ling_signals
+        grounded_reasoning = rag_verdict_data.get("groundedReasoning") or {}
+        has_grounded_reasoning = bool(
+            grounded_reasoning.get("synthesis")
+            and grounded_reasoning.get("whyAppearsTrue")
+            and grounded_reasoning.get("whyAppearsFalse")
         )
+        if is_short_input or has_grounded_reasoning:
+            reasoning_data = {
+                "synthesis": grounded_reasoning.get("synthesis", "Grounded verification synthesized from retrieved evidence."),
+                "whyAppearsTrue": grounded_reasoning.get("whyAppearsTrue", []),
+                "whyAppearsFalse": grounded_reasoning.get("whyAppearsFalse", []),
+                "evidenceFound": grounded_reasoning.get("evidenceFound", []),
+                "evidenceMissing": grounded_reasoning.get("evidenceMissing", []),
+                "disclaimer": TRANSPARENCY_WARNING,
+                "provider": "Lucid Grounded Reasoning Engine"
+            }
+        else:
+            reasoning_data = self.ai_reasoner.generate_ai_reasoning(
+                article_text=analysis_text,
+                claims=evidence_results["claims"],
+                source_data=source_data,
+                evidence_data=evidence_results,
+                verdict_data=verdict_results,
+                ling_signals=ling_signals
+            )
 
         primary_publisher = source_data.get("publisher", source_data["sourceName"])
         source_type = source_data.get("sourceType", "Uploaded Image" if is_image else "")
@@ -814,16 +981,16 @@ class VerificationEngine:
                 {"step": "GNews API Corroboration", "detail": f"Searched recent trusted news wires ({len(evidence_results.get('gnewsArticles', []))} article matches)", "status": "done"},
                 {"step": "Source Reputation Audit", "detail": f"Evaluated domain authority: {source_data['sourceName']} ({source_data['trustScore']}/100)", "status": "done"},
                 {"step": "Evidence Cross-Referencing", "detail": f"Queried wire archives ({supp_count} supporting, {contra_count} contradicting)", "status": "done"},
-                {"step": "ML Model Inference", "detail": "Executed TF-IDF + Logistic Regression pattern analysis (30% weight)", "status": "done"},
+                {"step": "ML Model Inference", "detail": "Executed TF-IDF + Logistic Regression pattern analysis (5% weight)", "status": "done"},
                 {"step": "Multi-Factor Synthesis", "detail": f"Calculated 5-layer weighted trust score ({final_trust_score}/100) -> {final_verdict}", "status": "done"}
             ],
 
             "aiIntegrations": {
                 "geminiConfigured": bool(os.getenv("GEMINI_API_KEY")),
-                "geminiModel": getattr(self.evidence_ranker.gemini_classifier, "active_model", os.getenv("GEMINI_MODEL", "gemini-2.5-flash")),
+                "geminiModel": getattr(self.evidence_ranker.gemini_classifier, "active_model", os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")),
                 "stanceClassifierStatus": getattr(self.evidence_ranker.gemini_classifier, "last_status", "available"),
                 "openAiConfigured": bool(os.getenv("OPENAI_API_KEY")),
-                "factCheckConfigured": bool(os.getenv("FACTCHECK_API_KEY")),
+                "factCheckConfigured": bool(os.getenv("FACTCHECK_API_KEY") or os.getenv("GOOGLE_API_KEY")),
                 "gnewsConfigured": bool(os.getenv("GNEWS_API_KEY")),
                 "provider": reasoning_data.get("provider", "Lucid Core Multi-Factor Engine")
             }

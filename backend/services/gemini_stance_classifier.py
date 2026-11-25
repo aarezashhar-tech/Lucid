@@ -20,6 +20,8 @@ Handles:
 
 import os
 import json
+import time
+import threading
 import logging
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
@@ -36,7 +38,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
 
 # Try importing google.genai
 try:
@@ -61,11 +63,19 @@ class GeminiStanceClassifier:
         self.preferred_model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
         self.active_model = self.preferred_model
         self._disabled = False
+        self._state_lock = threading.Lock()
+        self._daily_exhausted_until: Dict[str, float] = {}
         self.last_status = "available" if (GENAI_AVAILABLE and self.api_key) else "stance classifier unavailable"
 
         if GENAI_AVAILABLE and self.api_key:
             try:
-                self.client = genai.Client(api_key=self.api_key)
+                self.client = genai.Client(
+                    api_key=self.api_key,
+                    http_options=types.HttpOptions(
+                        timeout=15000,
+                        retry_options=types.HttpRetryOptions(attempts=1),
+                    ),
+                )
                 logger.info(f"Initialized Gemini Client for stance classification (Target Model: {self.preferred_model}).")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini Client: {e}. Falling back to heuristic ranker.")
@@ -155,11 +165,16 @@ class GeminiStanceClassifier:
         )
 
         # Try the configured GEMINI_MODEL first, then stable fallbacks if it is
-        # retired or temporarily unavailable.
-        models_to_try = [self.active_model]
-        for fallback in ["gemini-3.8-flash"]:
-            if fallback not in models_to_try:
-                models_to_try.append(fallback)
+        # retired or temporarily unavailable (including free-tier daily quota exhaustion).
+        with self._state_lock:
+            now = time.time()
+            candidates = [self.active_model]
+            for fallback in ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]:
+                if fallback not in candidates:
+                    candidates.append(fallback)
+            models_to_try = [m for m in candidates if self._daily_exhausted_until.get(m, 0.0) <= now]
+            if not models_to_try:
+                models_to_try = candidates[:1]
 
         for model_name in models_to_try:
             try:
@@ -237,17 +252,27 @@ class GeminiStanceClassifier:
 
             except ClientError as ce:
                 err_str = str(ce)
+                with self._state_lock:
+                    if "PerDay" in err_str or "GenerateRequestsPerDay" in err_str:
+                        self._daily_exhausted_until[model_name] = time.time() + 600.0
+                    else:
+                        self._daily_exhausted_until[model_name] = time.time() + 120.0
                 logger.warning(f"Gemini model '{model_name}' returned ClientError ({err_str[:120]}). Trying next fallback model...")
                 continue
             except Exception as e:
                 err_str = str(e)
+                # Cool down models reporting 503 high demand, 504 timeout, or 429 rate limit
+                if any(k in err_str for k in ("503", "504", "429", "UNAVAILABLE", "DEADLINE_EXCEEDED", "RESOURCE_EXHAUSTED", "high demand")):
+                    with self._state_lock:
+                        self._daily_exhausted_until[model_name] = time.time() + 120.0
                 logger.warning(f"Gemini stance classification error with model '{model_name}': ({err_str[:120]}). Trying next fallback model...")
                 continue
 
         self.last_status = "stance classifier unavailable"
+        failed_list = models_to_try or candidates
         evidence_tracker.mark_failure(
             "Gemini Stance Classifier",
-            f"Stance classification unavailable (models failed: {', '.join(models_to_try)})"
+            f"Stance classification unavailable (models failed: {', '.join(failed_list)})"
         )
         return None
 
