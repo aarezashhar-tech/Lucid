@@ -21,7 +21,7 @@ from difflib import SequenceMatcher
 from typing import List, Dict, Any
 
 from services.source_reputation import SOURCE_DATABASE
-from services.factcheck_service import query_google_factcheck
+from services.factcheck_service import query_google_factcheck, is_factcheck_claim_relevant
 from services.gnews_service import search_gnews, categorize_gnews_articles
 from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
 from utils.url_extractor import is_real_article_url
@@ -247,13 +247,17 @@ class EvidenceVerificationEngine:
         fc_list = external_factchecks if external_factchecks is not None else query_google_factcheck(claim_text)
         
         for fc in fc_list:
+            reviewed_claim = fc.get("claim", claim_text)
+            if not is_factcheck_claim_relevant(claim_text, reviewed_claim):
+                logger.info(f"Ignoring off-topic Google Fact Check match ({fc.get('reviewer')}): {reviewed_claim[:80]!r}")
+                continue
+
             fc_rating_lower = fc.get("rating", "").lower()
             reviewer = fc.get("reviewer", "Independent Fact Checker")
             fact_check_matches.append(fc)
 
             pub_date = (fc.get("review_date") or "2024-01-16")[:10]
             fc_url = fc.get("url") or "https://factchecktools.googleapis.com"
-            reviewed_claim = fc.get("claim", claim_text)
 
             if any(k in fc_rating_lower for k in FALSE_RATING_KEYWORDS):
                 logger.info(f"Google Fact Check directly labeled claim as FALSE: '{fc['rating']}' by {reviewer}")
@@ -476,8 +480,8 @@ class EvidenceVerificationEngine:
         verified_claims = []
         for claim in claims:
             c_text = claim.get("claim", "")
-            fc_list = external_factchecks_map.get(c_text) if external_factchecks_map else None
-            gn_list = gnews_map.get(c_text) if gnews_map else None
+            fc_list = external_factchecks_map.get(c_text, []) if external_factchecks_map is not None else None
+            gn_list = gnews_map.get(c_text, []) if gnews_map is not None else None
 
             res = self.verify_single_claim(
                 claim=claim,

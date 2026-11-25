@@ -510,6 +510,22 @@ SOURCE_DATABASE: Dict[str, Dict[str, Any]] = {
         "category": "International Public Broadcaster",
         "description": "German public broadcaster with dedicated multilingual fact-checking team."
     },
+    "dpa": {
+        "name": "DPA (Deutsche Presse-Agentur)",
+        "domain": "dpa-international.com",
+        "trust": 93,
+        "tier": "High",
+        "category": "Global News Wire",
+        "description": "German news agency providing verified international wire dispatches."
+    },
+    "economist": {
+        "name": "The Economist",
+        "domain": "economist.com",
+        "trust": 93,
+        "tier": "High",
+        "category": "Global Affairs Weekly",
+        "description": "International weekly publication covering world politics, finance, and science."
+    },
     "npr": {
         "name": "National Public Radio (NPR)",
         "domain": "npr.org",
@@ -697,6 +713,46 @@ SOURCE_DATABASE: Dict[str, Dict[str, Any]] = {
         "tier": "Fact Checking Desk",
         "category": "Annenberg Public Policy Center",
         "description": "Nonpartisan consumer advocate for voters verifying political and viral claims."
+    },
+    "full fact": {
+        "name": "Full Fact",
+        "domain": "fullfact.org",
+        "trust": 95,
+        "tier": "Fact Checking Desk",
+        "category": "Independent Fact Checker (IFCN)",
+        "description": "UK independent fact-checking charity signed to the IFCN Code of Principles."
+    },
+    "alt news": {
+        "name": "Alt News",
+        "domain": "altnews.in",
+        "trust": 94,
+        "tier": "Fact Checking Desk",
+        "category": "Independent Fact Checker (IFCN)",
+        "description": "IFCN-certified Indian fact-checking journalism organization."
+    },
+    "boom live": {
+        "name": "BOOM Live",
+        "domain": "boomlive.in",
+        "trust": 94,
+        "tier": "Fact Checking Desk",
+        "category": "Independent Fact Checker (IFCN)",
+        "description": "IFCN-accredited independent digital fact-checking journalism initiative."
+    },
+    "factly": {
+        "name": "Factly",
+        "domain": "factly.in",
+        "trust": 94,
+        "tier": "Fact Checking Desk",
+        "category": "Independent Fact Checker (IFCN)",
+        "description": "IFCN-certified public information and fact-checking organization."
+    },
+    "vishvas news": {
+        "name": "Vishvas News",
+        "domain": "vishvasnews.com",
+        "trust": 94,
+        "tier": "Fact Checking Desk",
+        "category": "Independent Fact Checker (IFCN)",
+        "description": "IFCN-certified multilingual Indian fact-checking verification desk."
     },
 
     # Low Credibility / Disinformation / Tabloids (< 40)

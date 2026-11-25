@@ -13,9 +13,12 @@ Produces:
 """
 import re
 import logging
+import contextvars
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, date
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
+from services.factcheck_service import is_factcheck_claim_relevant
 from services.semantic_embeddings import get_semantic_engine
 from services.gemini_stance_classifier import get_gemini_stance_classifier
 from services.wikipedia_service import claim_refers_to_relative_or_associate
@@ -55,7 +58,12 @@ CONTRADICTION_PATTERNS = [
     r'\b(never\s+happened|did\s+not\s+happen|was\s+not\s+killed|not\s+true)\b',
 
     # Flat Earth refutation
-    r'\b(not\s+flat|earth\s+is\s+not\s+flat|earth\s+isn\'?t\s+flat|earth\s+is\s+spherical|earth\s+is\s+round|oblate\s+spheroid|proves?\s+earth\s+is\s+round)\b'
+    r'\b(not\s+flat|earth\s+is\s+not\s+flat|earth\s+isn\'?t\s+flat|earth\s+is\s+spherical|earth\s+is\s+round|oblate\s+spheroid|proves?\s+earth\s+is\s+round)\b',
+
+    # Medical / causal cure disprovals and serious toxicity warnings
+    r'\b(no\s+cure|not\s+a\s+cure|does\s+not\s+cure|doesn\'?t\s+cure|cannot\s+cure|won\'?t\s+cure|not\s+cure)\b',
+    r'\b(does\s+not\s+treat|does\s+not\s+prevent|no\s+medical\s+benefit|medically\s+unproven|unproven\s+cure)\b',
+    r'\b(poses?\s+serious\s+risks?|severe\s+health\s+risk|dangerous\s+to\s+(?:drink|ingest)|do\s+not\s+drink|never\s+drink|toxic\s+(?:if|when)\s+ingested|bleach\s+poisoning)\b',
 ]
 
 # Negative ratings from IFCN / Fact Check tools
@@ -111,7 +119,10 @@ class EvidenceRanker:
         """
         lower = claim_text.lower()
         has_current_marker = bool(re.search(r'\b(current|currently|latest|now|present|presently|today|as of today|as of now|at present)\b', lower))
-        has_historical_year = bool(re.search(r'\bin\s+(19\d\d|20[0-2][0-4])\b', lower))
+        has_historical_year = bool(re.search(
+            r'\b(?:in|during|on)\s+(?:(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(?:\d{1,2},?\s+)?)?(19\d\d|20[0-2][0-5])\b',
+            lower,
+        ))
         # Claims explicitly pegged to an archival historical past year without temporal cues are closed historical records
         if has_historical_year and not has_current_marker:
             return False
@@ -244,6 +255,12 @@ class EvidenceRanker:
         if sim_score >= 0.40:
             is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
             if not is_specific_match:
+                if (
+                    "conflicting geographic" in match_reason.lower()
+                    and sim_score >= 0.55
+                    and re.search(r'\b(?:located|hosted|held|based|headquartered)\s+in\b|\bcapital\s+of\b', claim_lower)
+                ):
+                    return ("contradict", 90)
                 if "conflicting organization" in match_reason.lower() and sim_score >= 0.35:
                     return ("neutral", 50)
                 # Task 1: Time-sensitive conflicting metric (rates, prices, office holders)
@@ -272,10 +289,63 @@ class EvidenceRanker:
             if "wikipedia" in combined and sim_score >= 0.55:
                 has_affirmative = True
 
-            # If the claim asserts causality ('causes', 'caused', 'linked to') or viral myth,
-            # require explicit confirmation
-            if any(c_term in claim_lower for c_term in ["caused", "causes", "causes of", "responsible for"]):
-                if not any(a in combined for a in ["study proves", "scientists confirm", "medical audit confirms", "evidence shows"]):
+            # Safety guard 1: Subject/object inversion in competition/match claims ("Argentina defeated Spain" vs "Spain Beats Argentina")
+            match_inv = re.search(
+                r'\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\s+(?:defeated|beat|beats|topped|overcame)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\b',
+                claim_text,
+            )
+            if match_inv:
+                winner_lower = match_inv.group(1).lower()
+                loser_lower = match_inv.group(2).lower()
+                if re.search(rf'\b{re.escape(loser_lower)}\b[^.!?]{{0,45}}\b(?:wins?|won|beats?|beat|defeated|victory\s+over|topped)\b[^.!?]{{0,45}}\b{re.escape(winner_lower)}\b', combined):
+                    return ("contradict", 92)
+                if not re.search(r'\b(won|wins|victory|defeated|beat|beats|topped|champion|champions|triumph|title|clinched|1-0|2-0|2-1|3-0)\b', combined):
+                    return ("related", 55)
+
+            # Safety guard 2: Superlative & comparative inversions ("smallest planet" vs "largest in the Solar System")
+            SUPERLATIVE_OPPOSITES = [
+                ("smallest", {"largest", "biggest", "giant", "massive"}),
+                ("tiniest", {"largest", "biggest", "giant"}),
+                ("largest", {"smallest", "tiniest"}),
+                ("biggest", {"smallest", "tiniest"}),
+                ("lowest", {"highest", "tallest"}),
+                ("highest", {"lowest", "shortest"}),
+                ("tallest", {"shortest", "lowest"}),
+                ("fastest", {"slowest"}),
+                ("slowest", {"fastest"}),
+                ("oldest", {"newest", "youngest"}),
+                ("youngest", {"oldest"}),
+                ("hottest", {"coldest"}),
+                ("coldest", {"hottest"}),
+            ]
+            for sup_word, opp_words in SUPERLATIVE_OPPOSITES:
+                if re.search(rf'\b{sup_word}\b', claim_lower) and not re.search(rf'\b{sup_word}\b', combined):
+                    if any(re.search(rf'\b{opp}\b', combined) for opp in opp_words):
+                        return ("contradict", 92)
+
+            # Safety guard 3: Current officeholder vs Former / Retired / Transition markers
+            if re.search(r'\b(currently\s+serving|is\s+currently|currently\s+serves|incumbent|presently\s+serving|still\s+serves)\b', claim_lower):
+                if re.search(r'\b(former\s+(?:cji|chief\s+justice|president|prime\s+minister|governor|ceo|chairman)|ex-(?:cji|president|pm|ceo)|retired|stepped\s+down|demitted\s+office|succeeded\s+by|passing\s+the\s+baton|nominates\s+.*\s+as\s+the\s+next)\b', combined):
+                    return ("contradict", 90)
+                if re.search(r'\bwas\s+(?:the\s+|a\s+|india\'?s\s+)?(?:top\s+judge|chief\s+justice|cji|president|prime\s+minister|ceo|chairman)\b', combined) and not re.search(r'\b(currently|incumbent|presently|remains)\b', combined):
+                    return ("related", 55)
+
+            # Safety guard 4: Subjective comparisons & future predictions cannot be heuristically corroborated
+            if re.search(r'\bwill\s+(?:win|lose|be|become|reach|defeat|surpass)\b', claim_lower):
+                return ("neutral", 50)
+            if re.search(r'\b(?:better|worse|tastier|greater|preferable)\s+than\b|\bfor\s+every\s+project\b', claim_lower):
+                return ("neutral", 50)
+
+            # If the claim asserts causality ('causes', 'caused', 'linked to') or medical cure/efficacy,
+            # require explicit scientific/medical confirmation
+            if any(c_term in claim_lower for c_term in [
+                "caused", "causes", "causes of", "responsible for",
+                "cure", "cures", "cured", "treats", "prevents", "heals", "remedy"
+            ]):
+                if not any(a in combined for a in [
+                    "study proves", "scientists confirm", "medical audit confirms",
+                    "clinical trial confirms", "fda approved", "evidence shows"
+                ]):
                     return ("neutral", 50)
 
             # Requirement 2: Speculative / future-event wording check
@@ -312,24 +382,84 @@ class EvidenceRanker:
         comb_lower = combined_text.lower()
 
         # 1. Geographic / Region alignment
-        REGIONS = [
-            "latin america", "south america", "north america", "europe", "european",
-            "asia", "asian", "middle east", "africa", "african", "india", "indian",
-            "china", "chinese", "uk", "britain", "british", "us", "usa", "america", "american",
-            "russia", "russian", "japan", "japanese", "germany", "german", "france", "french"
+        COUNTRY_GROUPS = [
+            ("european", "europe"),
+            ("latin america", "south america"),
+            ("asian", "asia"),
+            ("african", "africa"),
+            ("american", "us", "usa", "america", "united states"),
+            ("british", "uk", "britain", "united kingdom"),
+            ("french", "france"),
+            ("italian", "italy"),
+            ("german", "germany"),
+            ("spanish", "spain"),
+            ("australian", "australia"),
+            ("russian", "russia"),
+            ("japanese", "japan"),
+            ("chinese", "china"),
+            ("indian", "india"),
+            ("brazilian", "brazil"),
+            ("egyptian", "egypt"),
+            ("canadian", "canada"),
+            ("mexican", "mexico"),
+            ("argentine", "argentina"),
         ]
-        claim_regions = {r for r in REGIONS if re.search(rf'\b{re.escape(r)}\b', claim_lower)}
-        comb_regions = {r for r in REGIONS if re.search(rf'\b{re.escape(r)}\b', comb_lower)}
+        CITY_TO_COUNTRY = {
+            "rome": "italy", "milan": "italy",
+            "paris": "france", "lyon": "france",
+            "berlin": "germany", "munich": "germany",
+            "madrid": "spain", "barcelona": "spain",
+            "sydney": "australia", "canberra": "australia", "melbourne": "australia",
+            "london": "uk", "manchester": "uk",
+            "tokyo": "japan", "osaka": "japan",
+            "moscow": "russia",
+            "beijing": "china", "shanghai": "china",
+            "delhi": "india", "new delhi": "india", "mumbai": "india",
+            "washington": "us", "new york": "us", "los angeles": "us",
+            "cairo": "egypt",
+            "ottawa": "canada", "toronto": "canada",
+        }
+        ALL_LOCS = (
+            ["latin america", "south america", "north america", "middle east", "united states", "united kingdom", "new delhi", "new york", "los angeles"]
+            + [w for grp in COUNTRY_GROUPS for w in grp]
+            + list(CITY_TO_COUNTRY.keys())
+        )
+        claim_locs = {r for r in ALL_LOCS if re.search(rf'\b{re.escape(r)}\b', claim_lower)}
+        comb_locs = {r for r in ALL_LOCS if re.search(rf'\b{re.escape(r)}\b', comb_lower)}
 
-        if claim_regions and comb_regions:
-            def base_reg(r):
-                for pair in [("european", "europe"), ("latin america", "south america"), ("asian", "asia"), ("african", "africa"), ("american", "us"), ("british", "uk")]:
-                    if r in pair: return pair[0]
-                return r
-            base_claim = {base_reg(r) for r in claim_regions}
-            base_comb = {base_reg(r) for r in comb_regions}
-            if not (base_claim & base_comb):
+        def to_country(loc: str) -> str:
+            loc = CITY_TO_COUNTRY.get(loc, loc)
+            for grp in COUNTRY_GROUPS:
+                if loc in grp:
+                    return grp[0]
+            return loc
+
+        if claim_locs and comb_locs:
+            claim_countries = {to_country(l) for l in claim_locs}
+            comb_countries = {to_country(l) for l in comb_locs}
+            if not (claim_countries & comb_countries):
                 return False, "Conflicting geographic regions (claim vs evidence)."
+            claim_cities = claim_locs & set(CITY_TO_COUNTRY.keys())
+            comb_cities = comb_locs & set(CITY_TO_COUNTRY.keys())
+            if claim_cities and comb_cities and not (claim_cities & comb_cities):
+                return False, f"Conflicting geographic cities ({', '.join(sorted(comb_cities))} vs {', '.join(sorted(claim_cities))})."
+
+        # Explicit location predicate requires claimed place to actually appear in evidence
+        explicit_loc = re.search(
+            r'\b(?:located|hosted|held|based|headquartered)\s+in\s+([A-Za-z]+(?:\s+[A-Za-z]+){0,2})|\bcapital\s+of\b',
+            claim_lower,
+        )
+        if explicit_loc and claim_locs:
+            claim_countries = {to_country(l) for l in claim_locs}
+            comb_countries = {to_country(l) for l in comb_locs}
+            if not (claim_locs & comb_locs) and not (claim_countries & comb_countries):
+                return False, "Evidence does not corroborate claimed geographic location."
+            claim_cities = claim_locs & set(CITY_TO_COUNTRY.keys())
+            comb_cities = comb_locs & set(CITY_TO_COUNTRY.keys())
+            if claim_cities and not (claim_cities & comb_locs):
+                return False, f"Evidence does not mention claimed city ({', '.join(sorted(claim_cities))})."
+            if claim_cities and (comb_cities - claim_cities) and not re.search(r'\bborder\b', claim_lower):
+                return False, f"Conflicting geographic city mentioned ({', '.join(sorted(comb_cities - claim_cities))})."
 
         # 2. Acronyms & Named Agencies (e.g. WHO, Reuters, IEA, NASA, UN, CDC, FDA)
         claim_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', claim_text))
@@ -373,6 +503,11 @@ class EvidenceRanker:
         if claim_years and comb_years and not (claim_years & comb_years):
             return False, "Candidate cites conflicting year or date metric."
 
+        # Monetary / large-scale magnitude check (e.g. 'ten trillion dollars' cannot match routine coverage)
+        claim_scales = set(re.findall(r'\b(trillion|billion|million)\b', claim_lower))
+        if claim_scales and not (claim_scales & set(re.findall(r'\b(trillion|billion|million)\b', comb_lower))):
+            return False, "Candidate does not corroborate financial/numeric magnitude in claim."
+
         # Conflicting Organization for Leadership Roles (e.g. 'Alphabet CEO' vs 'Nvidia CEO')
         ROLES_REGEX = r'(?:([A-Z][a-zA-Z0-9]+)\s+(?:CEO|founder|president|prime minister))|(?:(?:CEO|founder|president|prime minister)\s+of\s+([A-Z][a-zA-Z0-9]+))'
         claim_role_orgs = {x[0] or x[1] for x in re.findall(ROLES_REGEX, claim_text, re.I)}
@@ -412,7 +547,8 @@ class EvidenceRanker:
         ROLE_STOPWORDS = {
             "chief executive officer", "chief executive", "executive officer", "ceo",
             "founder", "co-founder", "president", "prime minister", "managing director",
-            "vice president", "chairman", "director general", "spokesperson", "minister", "secretary"
+            "vice president", "chairman", "director general", "spokesperson", "minister",
+            "secretary", "chief justice", "chief justice of india", "justice", "judge"
         }
         KNOWN_ACRONYMS = {
             "reserve bank of india": "rbi",
@@ -428,7 +564,7 @@ class EvidenceRanker:
         raw_ents = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', claim_text)
         ent_phrases = []
         for e in raw_ents:
-            clean_e = re.sub(r'^(The|A|An)\s+', '', e).strip()
+            clean_e = re.sub(r'^(The|A|An|Justice|Judge)\s+', '', e).strip()
             if clean_e and clean_e not in stopwords_pe and clean_e.lower() not in ROLE_STOPWORDS:
                 ent_phrases.append(clean_e)
 
@@ -441,13 +577,17 @@ class EvidenceRanker:
                 return True
             return False
 
-        # In relational claims (e.g. endorsements, meetings, appointments between multiple people/parties),
+        # In relational claims (e.g. endorsements, meetings, acquisitions, sports victories between multiple parties),
         # all named participants must be present in the candidate evidence.
-        is_relational = bool(re.search(r'\b(endorsed|endorses|endorsing|endorsement|sued|suing|met with|married|accused|appointed|nominated)\b', claim_lower))
+        is_relational = bool(re.search(r'\b(endorsed|endorses|endorsing|endorsement|sued|suing|met with|married|accused|appointed|nominated|acquired|bought|merged|defeated|beat|beats)\b', claim_lower))
+        is_officeholder = bool(re.search(r'\b(chief justice|president|prime minister|ceo|chief executive|governor|chairman|chancellor)\b', claim_lower))
         if is_relational and len(ent_phrases) >= 2:
             missing_ents = [e for e in ent_phrases if not entity_in_evidence(e)]
             if missing_ents:
                 return False, f"Evidence does not mention participant entity '{missing_ents[0]}' from claim."
+        elif is_officeholder and ent_phrases:
+            if not entity_in_evidence(ent_phrases[0]):
+                return False, f"Evidence does not mention subject entity '{ent_phrases[0]}' for officeholder claim."
         elif ent_phrases:
             # For non-relational claims, at least one key named entity (or its acronym) must match
             if not any(entity_in_evidence(e) for e in ent_phrases):
@@ -499,7 +639,12 @@ class EvidenceRanker:
 
         return len(matched) >= 1
 
-    def rank_evidence_for_claim(self, claim_text: str, candidate_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def rank_evidence_for_claim(
+        self,
+        claim_text: str,
+        candidate_items: List[Dict[str, Any]],
+        allow_gemini: bool = True,
+    ) -> Dict[str, Any]:
         """
         Ranks all candidate sources for a claim using embeddings, credibility, and recency.
         Returns categorized supporting, contradicting, related, and neutral items.
@@ -519,9 +664,13 @@ class EvidenceRanker:
                 "neutralCount": 0
             }
 
-        # 1. Ask Gemini stance classifier first (if available and API key present)
+        # 1. Ask Gemini stance classifier first (if available, allowed, and API key present)
         # Batches candidate items for this single claim to minimize latency
-        gemini_stances = self.gemini_classifier.classify_candidates_for_claim(claim_text, candidate_items, max_candidates=15)
+        gemini_stances = (
+            self.gemini_classifier.classify_candidates_for_claim(claim_text, candidate_items, max_candidates=15)
+            if allow_gemini
+            else None
+        )
 
         evaluated: List[Dict[str, Any]] = []
 
@@ -535,6 +684,8 @@ class EvidenceRanker:
             
             # 2. Check authoritative fact-check ratings or Wikipedia derived checks first
             fc_rating = str(item.get("factCheckRating", "")).lower().strip()
+            reviewed_fc_claim = str(item.get("reviewedClaim", "")).strip()
+            fc_relevant = (not fc_rating) or is_factcheck_claim_relevant(claim_text, reviewed_fc_claim)
             wiki_channel = item.get("retrievalChannel") in ("Wikipedia REST API", "Wikidata API")
 
             if wiki_channel and item.get("stance") in ("support", "contradict"):
@@ -546,11 +697,11 @@ class EvidenceRanker:
                     stance = item["stance"]
                     stance_conf = 98
                     stance_reason = item.get("evidenceSnippet", "")
-            elif fc_rating and any(neg in fc_rating for neg in NEGATIVE_RATINGS):
+            elif fc_rating and fc_relevant and any(neg in fc_rating for neg in NEGATIVE_RATINGS):
                 stance = "contradict"
                 stance_conf = 98
                 stance_reason = f"Fact-checked as '{item.get('factCheckRating')}' by {item.get('publisher', 'fact-checker')}."
-            elif fc_rating and any(pos in fc_rating for pos in POSITIVE_RATINGS):
+            elif fc_rating and fc_relevant and not any(part in fc_rating for part in ("half true", "half-true", "partly true", "partially true", "not true", "mixed")) and any(pos in fc_rating for pos in POSITIVE_RATINGS):
                 stance = "support"
                 stance_conf = 95
                 stance_reason = f"Fact-checked as '{item.get('factCheckRating')}' by {item.get('publisher', 'fact-checker')}."
@@ -659,7 +810,8 @@ class EvidenceRanker:
     def build_evidence_matrix_for_claims(
         self,
         claims: List[Dict[str, Any]],
-        retrieval_map: Dict[str, List[Dict[str, Any]]]
+        retrieval_map: Dict[str, List[Dict[str, Any]]],
+        pre_ranked_map: Optional[Dict[str, Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Constructs the comprehensive Evidence Matrix:
@@ -675,6 +827,38 @@ class EvidenceRanker:
         - Grounded Explanation
         """
         matrix: List[Dict[str, Any]] = []
+
+        # Concurrently rank any unranked factual claims with ThreadPoolExecutor(max_workers=3)
+        ranked_cache: Dict[str, Dict[str, Any]] = dict(pre_ranked_map or {})
+        pending_claims: List[str] = []
+        for claim_obj in claims:
+            c_text = claim_obj.get("claim", "")
+            is_op = claim_obj.get("isOpinion", False) or claim_obj.get("claimType") == "Opinion / Perspective Assertion"
+            if not is_op and c_text and c_text not in ranked_cache:
+                pending_claims.append(c_text)
+
+        if len(pending_claims) > 1:
+            executor = ThreadPoolExecutor(max_workers=min(3, len(pending_claims)))
+            future_to_claim = {}
+            for c_text in pending_claims:
+                ctx = contextvars.copy_context()
+                future_to_claim[
+                    executor.submit(ctx.run, self.rank_evidence_for_claim, c_text, retrieval_map.get(c_text, []))
+                ] = c_text
+            try:
+                done, _ = wait(list(future_to_claim.keys()), timeout=10.0)
+                for fut in done:
+                    c_text = future_to_claim[fut]
+                    try:
+                        ranked_cache[c_text] = fut.result()
+                    except Exception as e:
+                        logger.warning(f"Error ranking evidence for claim '{c_text[:40]}': {e}")
+                        ranked_cache[c_text] = {"supporting": [], "contradicting": [], "related": [], "neutral": []}
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
+        elif len(pending_claims) == 1:
+            c_text = pending_claims[0]
+            ranked_cache[c_text] = self.rank_evidence_for_claim(c_text, retrieval_map.get(c_text, []))
 
         for idx, claim_obj in enumerate(claims):
             claim_text = claim_obj.get("claim", "")
@@ -698,7 +882,9 @@ class EvidenceRanker:
                 matrix.append(matrix_entry)
                 continue
 
-            ranked_data = self.rank_evidence_for_claim(claim_text, candidates)
+            ranked_data = ranked_cache.get(claim_text)
+            if ranked_data is None:
+                ranked_data = self.rank_evidence_for_claim(claim_text, candidates)
             supp = ranked_data["supporting"]
             contra = ranked_data["contradicting"]
             related = ranked_data.get("related", [])

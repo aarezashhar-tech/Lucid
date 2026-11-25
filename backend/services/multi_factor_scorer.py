@@ -2,11 +2,11 @@ from __future__ import annotations
 """
 Layer 4 & Layer 5: Multi-Factor Scoring & Modern Verdict Engine
 Combines 5 independent analytical dimensions:
-- 30% ML Prediction
-- 25% Source Reputation
-- 25% Evidence Strength
+- 70% Evidence Strength
+- 10% Source Reputation
 - 10% Claim Consistency
-- 10% Language Quality
+- 5% ML Prediction
+- 5% Language Quality
 
 Replaces binary REAL/FAKE with granular verdict types:
 - VERIFIED
@@ -16,11 +16,59 @@ Replaces binary REAL/FAKE with granular verdict types:
 - LIKELY FALSE
 - KNOWN FALSE
 """
-from typing import Dict, Any, List, Tuple
+import re
+from typing import Dict, Any, List, Tuple, Optional, Set
 from datetime import datetime, date
+from urllib.parse import urlparse
 from utils.url_extractor import is_real_article_url
 
 TupleScore = Tuple[int, str]
+
+WEIGHT_EVIDENCE = 0.70
+WEIGHT_SOURCE = 0.10
+WEIGHT_CONSISTENCY = 0.10
+WEIGHT_ML = 0.05
+WEIGHT_LANGUAGE = 0.05
+
+HIGH_STANCE_CONFIDENCE_THRESHOLD = 75.0
+TIER1_SCORE_FLOOR = 82
+
+# Canonical Tier-1 global news outlets: (canonical_name, domains, substring_patterns, word_boundary_acronyms)
+TIER1_NEWS_SPECS: List[Tuple[str, Set[str], Tuple[str, ...], Tuple[str, ...]]] = [
+    ("Reuters", {"reuters.com"}, ("reuters",), ()),
+    ("Associated Press", {"apnews.com"}, ("associated press", "ap news"), ("ap",)),
+    ("AFP", {"afp.com", "factcheck.afp.com"}, ("agence france-presse", "agence france presse"), ("afp",)),
+    ("BBC", {"bbc.com", "bbc.co.uk", "bbc.in"}, ("bbc news",), ("bbc",)),
+    ("Al Jazeera", {"aljazeera.com", "aljazeera.net"}, ("al jazeera", "aljazeera"), ()),
+    ("DPA", {"dpa.com", "dpa-international.com"}, ("deutsche presse-agentur", "dpa international"), ("dpa",)),
+    ("DW", {"dw.com"}, ("deutsche welle",), ("dw",)),
+    ("The Guardian", {"theguardian.com"}, ("the guardian",), ("guardian",)),
+    ("The Hindu", {"thehindu.com"}, ("the hindu", "thehindu"), ()),
+    ("The Indian Express", {"indianexpress.com"}, ("indian express",), ()),
+    ("Financial Times", {"ft.com"}, ("financial times",), ("ft",)),
+    ("The Economist", {"economist.com"}, ("the economist",), ("economist",)),
+]
+
+# Accredited IFCN fact-checkers (also count as Tier-1 sources)
+IFCN_CHECKER_SPECS: List[Tuple[str, Set[str], Tuple[str, ...], Tuple[str, ...]]] = [
+    ("Snopes", {"snopes.com"}, ("snopes",), ()),
+    ("PolitiFact", {"politifact.com"}, ("politifact",), ()),
+    ("FactCheck.org", {"factcheck.org"}, ("factcheck.org",), ()),
+    ("Full Fact", {"fullfact.org"}, ("full fact", "fullfact"), ()),
+    ("Alt News", {"altnews.in"}, ("alt news", "altnews"), ()),
+    ("BOOM Live", {"boomlive.in"}, ("boom live", "boomlive"), ()),
+    ("Factly", {"factly.in"}, ("factly",), ()),
+    ("Vishvas News", {"vishvasnews.com"}, ("vishvas news", "vishvasnews"), ()),
+]
+
+PARTIAL_OR_NEGATED_TRUE_REGEX = re.compile(
+    r'\b(untrue|not\s+true|half[\s-]+true|partly[\s-]+true|partially[\s-]+true|mixed|misleading|false|fake|pants\s+on\s+fire|incorrect|debunked?|hoax|fabricated)\b',
+    re.IGNORECASE,
+)
+EXPLICIT_TRUE_RATING_REGEX = re.compile(
+    r'\b(true|mostly\s+true|correct|accurate|verified|confirmed)\b',
+    re.IGNORECASE,
+)
 
 class MultiFactorScoringEngine:
     """
@@ -89,6 +137,155 @@ class MultiFactorScoringEngine:
 
         return quality, notes
 
+    @staticmethod
+    def _extract_domain(url: str) -> str:
+        if not url:
+            return ""
+        try:
+            netloc = urlparse(url.strip()).netloc.lower()
+            if netloc.startswith("www."):
+                netloc = netloc[4:]
+            return netloc
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _match_specs(
+        pub_lower: str,
+        domain: str,
+        specs: List[Tuple[str, Set[str], Tuple[str, ...], Tuple[str, ...]]]
+    ) -> Optional[str]:
+        for canonical, domains, substrings, acronyms in specs:
+            if domain and any(domain == d or domain.endswith("." + d) for d in domains):
+                return canonical
+            if pub_lower and any(sub in pub_lower for sub in substrings):
+                return canonical
+            if pub_lower and any(re.search(rf'\b{re.escape(acr)}\b', pub_lower) for acr in acronyms):
+                return canonical
+        return None
+
+    def _identify_tier1_or_ifcn(self, item: Dict[str, Any]) -> Tuple[Optional[str], bool]:
+        """
+        Identifies whether an evidence item belongs to a canonical Tier-1 outlet
+        or accredited IFCN fact-checker.
+        Returns (canonical_name_or_None, is_ifcn).
+        """
+        pub_raw = str(
+            item.get("publisher")
+            or item.get("source")
+            or item.get("sourceName")
+            or item.get("reviewer")
+            or ""
+        ).strip()
+        pub_lower = pub_raw.lower()
+        domain = str(item.get("publisherDomain") or "").lower().strip()
+        if not domain:
+            domain = self._extract_domain(str(item.get("url") or ""))
+        elif domain.startswith("www."):
+            domain = domain[4:]
+
+        cat_lower = str(item.get("sourceCategory") or item.get("category") or "").lower()
+
+        ifcn_name = self._match_specs(pub_lower, domain, IFCN_CHECKER_SPECS)
+        if ifcn_name:
+            return ifcn_name, True
+
+        tier1_name = self._match_specs(pub_lower, domain, TIER1_NEWS_SPECS)
+        if tier1_name:
+            is_ifcn_cat = ("ifcn" in cat_lower) or ("fact check" in pub_lower and "ifcn" in cat_lower)
+            return tier1_name, is_ifcn_cat
+
+        if "ifcn" in cat_lower:
+            return (pub_raw or domain or "IFCN Fact Checker"), True
+
+        return None, False
+
+    @staticmethod
+    def _is_high_stance_confidence(item: Dict[str, Any]) -> bool:
+        stance_conf = item.get("stanceConfidence")
+        if stance_conf is not None:
+            try:
+                return float(stance_conf) >= HIGH_STANCE_CONFIDENCE_THRESHOLD
+            except (TypeError, ValueError):
+                return False
+        rel_score = item.get("relevanceScore")
+        if rel_score is not None:
+            try:
+                return float(rel_score) >= 70.0
+            except (TypeError, ValueError):
+                return False
+        return True
+
+    def _is_explicit_false_rating(self, rating: str) -> bool:
+        if not rating:
+            return False
+        r = rating.lower().strip()
+        return any(k in r for k in self.FALSE_FACTCHECK_KEYWORDS)
+
+    @staticmethod
+    def _is_explicit_true_rating(rating: str) -> bool:
+        if not rating:
+            return False
+        r = rating.strip()
+        if PARTIAL_OR_NEGATED_TRUE_REGEX.search(r):
+            return False
+        return bool(EXPLICIT_TRUE_RATING_REGEX.search(r))
+
+    @staticmethod
+    def _build_scoring_factors(
+        evi_score: Any,
+        ml_score: Any,
+        lan_score: Any,
+        src_score: Any,
+        con_score: Any,
+        language_notes: str,
+        consistency_notes: str,
+        evi_contrib: float = None,
+        ml_contrib: float = None,
+        lan_contrib: float = None,
+        src_contrib: float = None,
+        con_contrib: float = None,
+        evi_label: str = f"Evidence Strength ({int(WEIGHT_EVIDENCE * 100)}%)",
+        ml_label: str = f"ML Text Pattern Classifier ({int(WEIGHT_ML * 100)}%)",
+        lan_label: str = f"Journalistic Language Integrity ({int(WEIGHT_LANGUAGE * 100)}%)",
+        src_label: str = f"Domain & Source Reputation ({int(WEIGHT_SOURCE * 100)}%)",
+        con_label: str = f"Factual Claim Consistency ({int(WEIGHT_CONSISTENCY * 100)}%)"
+    ) -> Dict[str, Any]:
+        return {
+            "evidenceStrength": {
+                "weight": WEIGHT_EVIDENCE,
+                "score": evi_score,
+                "contribution": evi_contrib if evi_contrib is not None else round(WEIGHT_EVIDENCE * float(evi_score), 1),
+                "label": evi_label
+            },
+            "mlPrediction": {
+                "weight": WEIGHT_ML,
+                "score": ml_score,
+                "contribution": ml_contrib if ml_contrib is not None else round(WEIGHT_ML * float(ml_score), 1),
+                "label": ml_label
+            },
+            "languageQuality": {
+                "weight": WEIGHT_LANGUAGE,
+                "score": lan_score,
+                "contribution": lan_contrib if lan_contrib is not None else round(WEIGHT_LANGUAGE * float(lan_score), 1),
+                "label": lan_label,
+                "notes": language_notes
+            },
+            "sourceReputation": {
+                "weight": WEIGHT_SOURCE,
+                "score": src_score,
+                "contribution": src_contrib if src_contrib is not None else round(WEIGHT_SOURCE * float(src_score), 1),
+                "label": src_label
+            },
+            "claimConsistency": {
+                "weight": WEIGHT_CONSISTENCY,
+                "score": con_score,
+                "contribution": con_contrib if con_contrib is not None else round(WEIGHT_CONSISTENCY * float(con_score), 1),
+                "label": con_label,
+                "notes": consistency_notes
+            }
+        }
+
     def compute_verdict_and_score(
         self,
         ml_score: float,
@@ -156,40 +353,25 @@ class MultiFactorScoringEngine:
                 "verdict": "Satire",
                 "riskLevel": "LOW",
                 "summaryReason": "Satirical content — published by a known satire or parody publication and not intended as factual news.",
-                "scoringFactors": {
-                    "evidenceStrength": {
-                        "weight": 0.45,
-                        "score": "Satire",
-                        "contribution": 0.0,
-                        "label": "Evidence Strength (45%) — Satirical publication"
-                    },
-                    "mlPrediction": {
-                        "weight": 0.20,
-                        "score": "Satire",
-                        "contribution": 0.0,
-                        "label": "ML Pattern Classifier (20%) — Satirical publication"
-                    },
-                    "languageQuality": {
-                        "weight": 0.15,
-                        "score": int(round(lan_s)),
-                        "contribution": 0.0,
-                        "label": "Language Tone & Humor (15%)",
-                        "notes": language_notes
-                    },
-                    "sourceReputation": {
-                        "weight": 0.10,
-                        "score": int(round(src_s)),
-                        "contribution": 0.0,
-                        "label": "Domain & Source Authority (10%)"
-                    },
-                    "claimConsistency": {
-                        "weight": 0.10,
-                        "score": int(round(con_s)),
-                        "contribution": 0.0,
-                        "label": "Viewpoint Consistency (10%)",
-                        "notes": consistency_notes
-                    }
-                }
+                "scoringFactors": self._build_scoring_factors(
+                    evi_score="Satire",
+                    ml_score="Satire",
+                    lan_score=int(round(lan_s)),
+                    src_score=int(round(src_s)),
+                    con_score=int(round(con_s)),
+                    language_notes=language_notes,
+                    consistency_notes=consistency_notes,
+                    evi_contrib=0.0,
+                    ml_contrib=0.0,
+                    lan_contrib=0.0,
+                    src_contrib=0.0,
+                    con_contrib=0.0,
+                    evi_label=f"Evidence Strength ({int(WEIGHT_EVIDENCE * 100)}%) — Satirical publication",
+                    ml_label=f"ML Pattern Classifier ({int(WEIGHT_ML * 100)}%) — Satirical publication",
+                    lan_label=f"Language Tone & Humor ({int(WEIGHT_LANGUAGE * 100)}%)",
+                    src_label=f"Domain & Source Authority ({int(WEIGHT_SOURCE * 100)}%)",
+                    con_label=f"Viewpoint Consistency ({int(WEIGHT_CONSISTENCY * 100)}%)"
+                )
             }
 
         # -----------------------------------------------------------------
@@ -203,40 +385,25 @@ class MultiFactorScoringEngine:
                 "verdict": "Opinion - not fact-checked",
                 "riskLevel": "LOW",
                 "summaryReason": "Opinion / commentary piece — subjective arguments, perspectives, and commentary are not assigned a fact-based verification score.",
-                "scoringFactors": {
-                    "evidenceStrength": {
-                        "weight": 0.45,
-                        "score": "Not scored",
-                        "contribution": 0.0,
-                        "label": "Evidence Strength (45%) — N/A for Opinion"
-                    },
-                    "mlPrediction": {
-                        "weight": 0.20,
-                        "score": "Not scored",
-                        "contribution": 0.0,
-                        "label": "ML Pattern Classifier (20%) — N/A for Opinion"
-                    },
-                    "languageQuality": {
-                        "weight": 0.15,
-                        "score": int(round(lan_s)),
-                        "contribution": 0.0,
-                        "label": "Language Tone & Rhetoric (15%)",
-                        "notes": language_notes
-                    },
-                    "sourceReputation": {
-                        "weight": 0.10,
-                        "score": int(round(src_s)),
-                        "contribution": 0.0,
-                        "label": "Domain & Source Authority (10%)"
-                    },
-                    "claimConsistency": {
-                        "weight": 0.10,
-                        "score": int(round(con_s)),
-                        "contribution": 0.0,
-                        "label": "Viewpoint Consistency (10%)",
-                        "notes": consistency_notes
-                    }
-                }
+                "scoringFactors": self._build_scoring_factors(
+                    evi_score="Not scored",
+                    ml_score="Not scored",
+                    lan_score=int(round(lan_s)),
+                    src_score=int(round(src_s)),
+                    con_score=int(round(con_s)),
+                    language_notes=language_notes,
+                    consistency_notes=consistency_notes,
+                    evi_contrib=0.0,
+                    ml_contrib=0.0,
+                    lan_contrib=0.0,
+                    src_contrib=0.0,
+                    con_contrib=0.0,
+                    evi_label=f"Evidence Strength ({int(WEIGHT_EVIDENCE * 100)}%) — N/A for Opinion",
+                    ml_label=f"ML Pattern Classifier ({int(WEIGHT_ML * 100)}%) — N/A for Opinion",
+                    lan_label=f"Language Tone & Rhetoric ({int(WEIGHT_LANGUAGE * 100)}%)",
+                    src_label=f"Domain & Source Authority ({int(WEIGHT_SOURCE * 100)}%)",
+                    con_label=f"Viewpoint Consistency ({int(WEIGHT_CONSISTENCY * 100)}%)"
+                )
             }
 
         if article_type == "Historical Analysis":
@@ -265,83 +432,31 @@ class MultiFactorScoringEngine:
                 "verdict": verdict,
                 "riskLevel": risk_level,
                 "summaryReason": summary_reason,
-                "scoringFactors": {
-                    "evidenceStrength": {
-                        "weight": 0.45,
-                        "score": int(round(evi_s)),
-                        "contribution": round(0.45 * evi_s, 1),
-                        "label": "Evidence Strength (45%)"
-                    },
-                    "mlPrediction": {
-                        "weight": 0.20,
-                        "score": int(round(ml_s)),
-                        "contribution": round(0.20 * ml_s, 1),
-                        "label": "ML Text Pattern Classifier (20%)"
-                    },
-                    "languageQuality": {
-                        "weight": 0.15,
-                        "score": int(round(lan_s)),
-                        "contribution": round(0.15 * lan_s, 1),
-                        "label": "Journalistic Language Integrity (15%)",
-                        "notes": language_notes
-                    },
-                    "sourceReputation": {
-                        "weight": 0.10,
-                        "score": int(round(src_s)),
-                        "contribution": round(0.10 * src_s, 1),
-                        "label": "Domain & Source Reputation (10%)"
-                    },
-                    "claimConsistency": {
-                        "weight": 0.10,
-                        "score": int(round(con_s)),
-                        "contribution": round(0.10 * con_s, 1),
-                        "label": "Factual Claim Consistency (10%)",
-                        "notes": consistency_notes
-                    }
-                }
+                "scoringFactors": self._build_scoring_factors(
+                    evi_score=int(round(evi_s)),
+                    ml_score=int(round(ml_s)),
+                    lan_score=int(round(lan_s)),
+                    src_score=int(round(src_s)),
+                    con_score=int(round(con_s)),
+                    language_notes=language_notes,
+                    consistency_notes=consistency_notes
+                )
             }
 
         # -----------------------------------------------------------------
-        # 2. FACTUAL VERIFICATION MULTI-FACTOR SCORING (Problems 1, 2, 5)
-        # Domain reputation is ONE small part (10%, strictly max 10-15%).
-        # Weights: Evidence 45%, ML 20%, Language 15%, Source 10%, Consistency 10%.
+        # 2. FACTUAL VERIFICATION MULTI-FACTOR SCORING
+        # Domain reputation is capped at 10%.
+        # Weights: Evidence 70%, Source 10%, Consistency 10%, ML 5%, Language 5%.
+        # (Evidence + Source = 80% combined; ML + Language = 10% combined)
         # -----------------------------------------------------------------
         computed_score = round(
-            (0.45 * evi_s) +
-            (0.20 * ml_s) +
-            (0.15 * lan_s) +
-            (0.10 * src_s) +
-            (0.10 * con_s)
+            (WEIGHT_EVIDENCE * evi_s) +
+            (WEIGHT_SOURCE * src_s) +
+            (WEIGHT_CONSISTENCY * con_s) +
+            (WEIGHT_ML * ml_s) +
+            (WEIGHT_LANGUAGE * lan_s)
         )
         final_trust_score = max(5, min(98, int(computed_score)))
-
-        # Detect Google Fact Check false/debunked rating if not explicitly supplied
-        if has_false_fact_check is None:
-            has_false_fact_check = False
-            if fact_check_results:
-                for fc in fact_check_results:
-                    rating = (fc.get("rating") or fc.get("textualRating") or "").lower()
-                    if any(k in rating for k in self.FALSE_FACTCHECK_KEYWORDS):
-                        has_false_fact_check = True
-                        break
-
-            if not has_false_fact_check and claims:
-                for c in claims:
-                    for fc in c.get("factCheckMatches", []):
-                        rating = (fc.get("rating") or fc.get("textualRating") or "").lower()
-                        if any(k in rating for k in self.FALSE_FACTCHECK_KEYWORDS):
-                            has_false_fact_check = True
-                            break
-                    if has_false_fact_check:
-                        break
-                    for snip in c.get("evidenceSnippets", []):
-                        calc_reason = (snip.get("calculationReason") or "").lower()
-                        snip_text = (snip.get("snippet") or "").lower()
-                        if ("debunked" in calc_reason or "debunked" in snip_text) and "google fact check" in (calc_reason + snip_text):
-                            has_false_fact_check = True
-                            break
-                    if has_false_fact_check:
-                        break
 
         # -----------------------------------------------------------------
         # 3. WEIGHTED EVIDENCE SCORING & VERDICT ASSIGNMENT (Requirements 4, 7, 8)
@@ -413,6 +528,123 @@ class MultiFactorScoringEngine:
                         elif snip.get("stance") == "contradict":
                             contra_items.append(snip)
 
+        # Detect Google Fact Check / IFCN false debunked rating if not explicitly supplied
+        if has_false_fact_check is None:
+            has_false_fact_check = False
+            if fact_check_results:
+                for fc in fact_check_results:
+                    rating = str(fc.get("rating") or fc.get("textualRating") or "")
+                    if self._is_explicit_false_rating(rating):
+                        has_false_fact_check = True
+                        break
+
+            if not has_false_fact_check and claims:
+                for c in claims:
+                    for fc in c.get("factCheckMatches", []):
+                        rating = str(fc.get("rating") or fc.get("textualRating") or "")
+                        if self._is_explicit_false_rating(rating):
+                            has_false_fact_check = True
+                            break
+                    if has_false_fact_check:
+                        break
+                    for snip in c.get("evidenceSnippets", []):
+                        calc_reason = (snip.get("calculationReason") or "").lower()
+                        snip_text = (snip.get("snippet") or "").lower()
+                        if ("debunked" in calc_reason or "debunked" in snip_text) and "google fact check" in (calc_reason + snip_text):
+                            has_false_fact_check = True
+                            break
+                    if has_false_fact_check:
+                        break
+
+            if not has_false_fact_check and contra_items:
+                for ci in contra_items:
+                    fc_rating = str(ci.get("factCheckRating") or "")
+                    if self._is_explicit_false_rating(fc_rating):
+                        has_false_fact_check = True
+                        break
+                    _, is_ifcn_ci = self._identify_tier1_or_ifcn(ci)
+                    if is_ifcn_ci:
+                        text_blob = (
+                            str(ci.get("articleTitle") or "")
+                            + " "
+                            + str(ci.get("evidenceSnippet") or ci.get("snippet") or "")
+                        ).lower()
+                        cat_ci = str(ci.get("sourceCategory") or "").lower()
+                        if "ifcn" in cat_ci or "fact checker" in cat_ci or any(
+                            k in text_blob for k in ("fact check", "false", "debunk", "hoax", "pants on fire", "misleading", "fake")
+                        ):
+                            has_false_fact_check = True
+                            break
+
+        # Detect Tier-1 Consensus and IFCN True ratings
+        distinct_tier1_supp: List[str] = []
+        ifcn_true_sources: List[str] = []
+        tier1_contra_sources: Set[str] = set()
+
+        for s in supp_items:
+            canonical, is_ifcn_s = self._identify_tier1_or_ifcn(s)
+            if canonical and self._is_high_stance_confidence(s):
+                if canonical not in distinct_tier1_supp:
+                    distinct_tier1_supp.append(canonical)
+            if is_ifcn_s and self._is_explicit_true_rating(str(s.get("factCheckRating") or "")):
+                if canonical and canonical not in ifcn_true_sources:
+                    ifcn_true_sources.append(canonical)
+
+        for fc in (fact_check_results or []):
+            rating = str(fc.get("rating") or fc.get("textualRating") or "")
+            if self._is_explicit_true_rating(rating):
+                reviewer = str(fc.get("reviewer") or "").strip()
+                probe = {
+                    "publisher": reviewer,
+                    "url": fc.get("url", ""),
+                    "sourceCategory": "IFCN Fact Checker" if "google fact check" in str(fc.get("source", "")).lower() else "",
+                }
+                canonical, is_ifcn_fc = self._identify_tier1_or_ifcn(probe)
+                if is_ifcn_fc:
+                    label = canonical or reviewer or "IFCN Fact Checker"
+                    if label not in ifcn_true_sources:
+                        ifcn_true_sources.append(label)
+
+        for c in (claims or []):
+            for fc in c.get("factCheckMatches", []):
+                rating = str(fc.get("rating") or fc.get("textualRating") or "")
+                if self._is_explicit_true_rating(rating):
+                    reviewer = str(fc.get("reviewer") or "").strip()
+                    probe = {
+                        "publisher": reviewer,
+                        "url": fc.get("url", ""),
+                        "sourceCategory": "IFCN Fact Checker" if "google fact check" in str(fc.get("source", "")).lower() else "",
+                    }
+                    canonical, is_ifcn_fc = self._identify_tier1_or_ifcn(probe)
+                    if is_ifcn_fc:
+                        label = canonical or reviewer or "IFCN Fact Checker"
+                        if label not in ifcn_true_sources:
+                            ifcn_true_sources.append(label)
+
+        for ci in contra_items:
+            canonical_ci, is_ifcn_ci = self._identify_tier1_or_ifcn(ci)
+            cat_ci = str(ci.get("sourceCategory") or "").lower()
+            if canonical_ci or is_ifcn_ci or "ifcn" in cat_ci or "fact checker" in cat_ci:
+                tier1_contra_sources.add(canonical_ci or str(ci.get("publisher") or ci.get("sourceName") or "Tier-1/IFCN"))
+
+        has_wikidata_living_contra = any(
+            "[derived check]" in str(ci.get("evidenceSnippet") or ci.get("snippet") or "").lower()
+            or "no date of death recorded" in str(ci.get("evidenceSnippet") or ci.get("snippet") or "").lower()
+            or ci.get("retrievalChannel") == "Wikidata API"
+            for ci in contra_items
+        )
+        has_contradicted_subclaim = bool(
+            claims and len(claims) > 1 and any(c.get("status") in ("Contradicted", "False") for c in claims)
+        )
+
+        tier1_consensus_met = (
+            (not has_false_fact_check)
+            and (len(tier1_contra_sources) == 0)
+            and (not has_wikidata_living_contra)
+            and (not has_contradicted_subclaim)
+            and (len(distinct_tier1_supp) >= 2 or len(ifcn_true_sources) >= 1)
+        )
+
         total_support_weight = sum(_calc_source_weight(s) for s in supp_items)
         total_contradict_weight = sum(_calc_source_weight(c) for c in contra_items)
 
@@ -421,6 +653,12 @@ class MultiFactorScoringEngine:
             if supporting_evidence_count > 0 or contradicting_evidence_count > 0:
                 total_support_weight = supporting_evidence_count * 0.5
                 total_contradict_weight = contradicting_evidence_count * 0.5
+
+        distinct_supp_pubs = {
+            (self._identify_tier1_or_ifcn(s)[0] or str(s.get("publisher") or s.get("sourceName") or s.get("source") or s.get("url") or "")).lower().strip()
+            for s in supp_items
+        }
+        distinct_supp_pubs.discard("")
 
         # Both sides are strong and close (balanced conflict)
         both_sides_strong = (total_support_weight >= 0.20 and total_contradict_weight >= 0.20)
@@ -438,6 +676,23 @@ class MultiFactorScoringEngine:
             final_trust_score = min(final_trust_score, 12)
             risk_level = "CRITICAL"
             summary_reason = "Conclusively disproven. Flagged as false by certified Google Fact Check organization."
+
+        elif tier1_consensus_met:
+            verdict = "VERIFIED"
+            final_trust_score = max(TIER1_SCORE_FLOOR, min(98, int(computed_score)))
+            risk_level = "LOW"
+            if len(distinct_tier1_supp) >= 2:
+                tier1_names = ", ".join(distinct_tier1_supp[:3])
+                summary_reason = (
+                    f"Tier-1 consensus verified across {len(distinct_tier1_supp)} independent authoritative sources ({tier1_names}) "
+                    f"with support clearly dominating (Support weight: {round(total_support_weight, 2)}) and zero Tier-1/IFCN contradictions."
+                )
+            else:
+                ifcn_names = ", ".join(ifcn_true_sources[:2])
+                summary_reason = (
+                    f"IFCN fact-check verified by {ifcn_names} with support clearly dominating "
+                    f"(Support weight: {round(total_support_weight, 2)}) and zero Tier-1/IFCN contradictions."
+                )
 
         elif contradict_clearly_dominates:
             if total_contradict_weight >= 0.8:
@@ -459,21 +714,22 @@ class MultiFactorScoringEngine:
             summary_reason = f"Mixed evidence detected across wire sources. Conflicting evidence exists on both sides (Support weight: {round(total_support_weight, 2)} vs Contradict weight: {round(total_contradict_weight, 2)})."
 
         elif support_clearly_dominates:
-            if total_support_weight >= 1.0 and (len(supp_items) >= 2 or supporting_evidence_count >= 2):
+            has_multi_distinct_supp = (len(distinct_supp_pubs) >= 2) if supp_items else (supporting_evidence_count >= 2)
+            if total_support_weight >= 1.0 and has_multi_distinct_supp:
                 verdict = "VERIFIED"
-                # Requirement 6: Do not floor at 78. Let weighted score show within sensible band [70, 98]
+                # Let weighted score show within sensible band [70, 98]
                 final_trust_score = max(70, min(98, int(computed_score)))
                 risk_level = "LOW"
                 summary_reason = f"Corroborated across reliable wire sources (Support weight: {round(total_support_weight, 2)}) with support clearly dominating."
             else:
                 verdict = "LIKELY TRUE"
-                # Requirement 6: Do not floor at 68. Let weighted score show within sensible band [60, 85]
+                # Let weighted score show within sensible band [60, 85]
                 final_trust_score = max(60, min(85, int(computed_score)))
                 risk_level = "LOW"
                 summary_reason = f"Supported by reputable reporting (Support weight: {round(total_support_weight, 2)}) without substantial contradiction."
 
         elif not supp_items and not contra_items and supporting_evidence_count == 0 and contradicting_evidence_count == 0:
-            # Requirement 2: Return UNVERIFIED with "no live evidence found"
+            # Return UNVERIFIED with "no live evidence found"
             verdict = "UNVERIFIED"
             final_trust_score = min(50, final_trust_score)
             risk_level = "MEDIUM"
@@ -545,40 +801,15 @@ class MultiFactorScoringEngine:
             "verdict": verdict,
             "riskLevel": risk_level,
             "summaryReason": summary_reason,
-            "scoringFactors": {
-                "evidenceStrength": {
-                    "weight": 0.45,
-                    "score": int(round(evi_s)),
-                    "contribution": round(0.45 * evi_s, 1),
-                    "label": "Evidence Strength (45%)"
-                },
-                "mlPrediction": {
-                    "weight": 0.20,
-                    "score": int(round(ml_s)),
-                    "contribution": round(0.20 * ml_s, 1),
-                    "label": "ML Text Pattern Classifier (20%)"
-                },
-                "languageQuality": {
-                    "weight": 0.15,
-                    "score": int(round(lan_s)),
-                    "contribution": round(0.15 * lan_s, 1),
-                    "label": "Journalistic Language Integrity (15%)",
-                    "notes": language_notes
-                },
-                "sourceReputation": {
-                    "weight": 0.10,
-                    "score": int(round(src_s)),
-                    "contribution": round(0.10 * src_s, 1),
-                    "label": "Domain & Source Reputation (10%)"
-                },
-                "claimConsistency": {
-                    "weight": 0.10,
-                    "score": int(round(con_s)),
-                    "contribution": round(0.10 * con_s, 1),
-                    "label": "Factual Claim Consistency (10%)",
-                    "notes": consistency_notes
-                }
-            }
+            "scoringFactors": self._build_scoring_factors(
+                evi_score=int(round(evi_s)),
+                ml_score=int(round(ml_s)),
+                lan_score=int(round(lan_s)),
+                src_score=int(round(src_s)),
+                con_score=int(round(con_s)),
+                language_notes=language_notes,
+                consistency_notes=consistency_notes
+            )
         }
 
 scoring_engine = MultiFactorScoringEngine()

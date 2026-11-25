@@ -133,6 +133,7 @@ rate_limiter = SlidingWindowRateLimiter()
 # In-memory TTL cache for verified Firebase ID tokens: token -> (user_info, expiry_ts)
 TOKEN_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
 TOKEN_CACHE_LOCK = threading.Lock()
+TOKEN_CACHE_MAX_ENTRIES = 500
 
 FIREBASE_SERVICE_ACCOUNT_ENV = "FIREBASE_SERVICE_ACCOUNT_JSON"
 _firebase_app = None
@@ -178,11 +179,16 @@ def _get_firebase_app():
 
 
 def _purge_expired_tokens(now: float) -> None:
-    """Removes expired token cache entries so empty/expired keys never accumulate."""
+    """Removes expired token cache entries and bounds cache size to max 500 entries."""
     with TOKEN_CACHE_LOCK:
         expired = [tok for tok, (_, expiry) in TOKEN_CACHE.items() if now >= expiry]
         for tok in expired:
             TOKEN_CACHE.pop(tok, None)
+        if len(TOKEN_CACHE) > TOKEN_CACHE_MAX_ENTRIES:
+            sorted_by_expiry = sorted(TOKEN_CACHE.items(), key=lambda it: it[1][1])
+            excess = len(TOKEN_CACHE) - TOKEN_CACHE_MAX_ENTRIES
+            for tok, _ in sorted_by_expiry[:excess]:
+                TOKEN_CACHE.pop(tok, None)
 
 
 def _guest_auth_context(ip: str) -> Dict[str, Any]:
@@ -246,6 +252,10 @@ def get_auth_context() -> Dict[str, Any]:
             "identifier": user_id or email or ip
         }
         with TOKEN_CACHE_LOCK:
+            if len(TOKEN_CACHE) >= TOKEN_CACHE_MAX_ENTRIES:
+                oldest_tok = min(TOKEN_CACHE.keys(), key=lambda k: TOKEN_CACHE[k][1], default=None)
+                if oldest_tok:
+                    TOKEN_CACHE.pop(oldest_tok, None)
             TOKEN_CACHE[token] = (info, min(exp, now + 300))
         return info
     except Exception as err:
@@ -323,7 +333,7 @@ def health():
             "layer1": "Source Reputation Engine",
             "layer2": "Claim Extraction Engine",
             "layer3": "Evidence Verification",
-            "layer4": "Multi-Factor Scoring (25% ML, 10% Source, 40% Evidence, 10% Consistency, 15% Language)",
+            "layer4": "Multi-Factor Scoring (70% Evidence, 10% Source, 10% Consistency, 5% ML, 5% Language)",
             "layer5": "Modern 6-Tier Verdict Generation",
             "layer6": "Investigation Dashboard Support (Overview, Claims, Evidence, Sources, Reasoning)",
             "layer7": "Transparency Warning Disclaimers",
@@ -386,7 +396,7 @@ def run_shared_verification_pipeline(
     ts_str = f"{ts_display}/100" if isinstance(ts_display, (int, float)) else str(ts_display)
     log_line = (
         f"[SharedPipeline Scoring] {input_type.upper()} -> Text Length: {len(text)} chars | Trust Score: {ts_str} | Verdict: {result.get('verdict')} | "
-        f"Components: [Evidence(45%): {evi_contrib}, ML(20%): {ml_contrib}, Language(15%): {lan_contrib}, Source(10%): {src_contrib}, Consistency(10%): {con_contrib}]"
+        f"Components: [Evidence(70%): {evi_contrib}, Source(10%): {src_contrib}, Consistency(10%): {con_contrib}, ML(5%): {ml_contrib}, Language(5%): {lan_contrib}]"
     )
     app.logger.info(log_line)
     print(log_line)

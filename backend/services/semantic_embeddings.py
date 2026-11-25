@@ -6,6 +6,7 @@ for claim-to-evidence cross-referencing and retrieval reranking.
 import os
 import re
 import logging
+import threading
 from typing import List, Tuple, Optional, Union
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -26,6 +27,22 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 MODEL_NAME = "all-MiniLM-L6-v2"
 
 
+def is_lightweight_embeddings_enabled() -> bool:
+    """
+    Checks if lightweight lexical/TF-IDF embeddings should be used instead
+    of loading SentenceTransformer in memory (optimizes CPU/RAM on free hosting like Render).
+    """
+    val = os.getenv("USE_LIGHTWEIGHT_EMBEDDINGS")
+    if val is not None:
+        return val.strip().lower() in ("1", "true", "yes", "on")
+    # Default to true when in production or on Render
+    return (
+        os.getenv("FLASK_ENV") == "production"
+        or os.getenv("RENDER") == "true"
+        or os.getenv("RENDER_SERVICE_ID") is not None
+    )
+
+
 class SemanticEmbeddingEngine:
     """
     Computes semantic vector embeddings and cosine similarities
@@ -35,6 +52,8 @@ class SemanticEmbeddingEngine:
     def __init__(self):
         self._model = None
         self._model_load_attempted = False
+        self._model_lock = threading.Lock()
+        self._fallback_lock = threading.Lock()
         self._fallback_vectorizer = TfidfVectorizer(
             ngram_range=(1, 3),
             stop_words='english',
@@ -42,17 +61,30 @@ class SemanticEmbeddingEngine:
         )
 
     def _get_model(self):
-        """Lazy-load the SentenceTransformer model to optimize cold start."""
-        if not self._model_load_attempted:
-            self._model_load_attempted = True
-            try:
-                from sentence_transformers import SentenceTransformer
-                logger.info(f"Loading SentenceTransformer model: {MODEL_NAME}...")
-                self._model = SentenceTransformer(MODEL_NAME)
-                logger.info("SentenceTransformer model loaded successfully.")
-            except Exception as e:
-                logger.warning(f"Failed to initialize SentenceTransformer ({e}). Using TF-IDF semantic fallback.")
-                self._model = None
+        """Lazy-load the SentenceTransformer model to optimize cold start (thread-safe)."""
+        if is_lightweight_embeddings_enabled():
+            if not self._model_load_attempted:
+                logger.info("USE_LIGHTWEIGHT_EMBEDDINGS active: using fast TF-IDF / lexical similarity without loading SentenceTransformer.")
+                self._model_load_attempted = True
+            return None
+
+        if self._model_load_attempted:
+            return self._model
+        with self._model_lock:
+            if not self._model_load_attempted:
+                try:
+                    from sentence_transformers import SentenceTransformer
+                    logger.info(f"Loading SentenceTransformer model: {MODEL_NAME}...")
+                    try:
+                        self._model = SentenceTransformer(MODEL_NAME, local_files_only=True)
+                    except Exception:
+                        self._model = SentenceTransformer(MODEL_NAME)
+                    logger.info("SentenceTransformer model loaded successfully.")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize SentenceTransformer ({e}). Using TF-IDF semantic fallback.")
+                    self._model = None
+                finally:
+                    self._model_load_attempted = True
         return self._model
 
     def encode(self, texts: Union[str, List[str]]) -> np.ndarray:
@@ -72,7 +104,8 @@ class SemanticEmbeddingEngine:
 
         # Fallback: TF-IDF vectorization
         try:
-            vecs = self._fallback_vectorizer.fit_transform(cleaned).toarray()
+            with self._fallback_lock:
+                vecs = self._fallback_vectorizer.fit_transform(cleaned).toarray()
             # Normalize
             norms = np.linalg.norm(vecs, axis=1, keepdims=True)
             norms[norms == 0] = 1.0
@@ -112,7 +145,8 @@ class SemanticEmbeddingEngine:
     def _lexical_semantic_similarity(self, text1: str, text2: str) -> float:
         """Hybrid n-gram, stem overlap, and semantic synonym fallback."""
         try:
-            vecs = self._fallback_vectorizer.fit_transform([text1, text2])
+            with self._fallback_lock:
+                vecs = self._fallback_vectorizer.fit_transform([text1, text2])
             tfidf_sim = float(cosine_similarity(vecs[0:1], vecs[1:2])[0][0])
         except Exception:
             tfidf_sim = 0.0

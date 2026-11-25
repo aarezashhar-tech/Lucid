@@ -347,12 +347,14 @@ def is_real_article_url(url: str) -> bool:
     return True
 
 
-def resolve_google_news_url(url: str, timeout: float = 1.5) -> Tuple[str, str]:
+def resolve_google_news_url(url: str, timeout: float = 1.5, allow_network: bool = False) -> Tuple[str, str]:
     """
     Attempts to resolve a Google News redirect URL to the publisher's real article URL and domain.
     Returns (resolved_url, publisher_domain).
     If resolution fails or URL is not a Google News redirect, returns (url, extracted_domain).
     Enforces a strict timeout <= 2.0s so individual redirect resolution never blocks the pipeline.
+    By default allow_network=False so decoding uses instant local protobuf extraction without
+    blocking network calls.
     """
     if not url or not isinstance(url, str):
         return "", ""
@@ -367,9 +369,7 @@ def resolve_google_news_url(url: str, timeout: float = 1.5) -> Tuple[str, str]:
     if "news.google.com" not in netloc:
         return url_clean, netloc
 
-    timeout = min(timeout, 2.0)
-
-    # Method 1: Decode base64 / protobuf token if present in path
+    # Method 1: Decode base64 / protobuf token if present in path (0ms, offline)
     # Google News article URLs: https://news.google.com/rss/articles/<TOKEN>?oc=5
     resolved_url = None
     try:
@@ -393,7 +393,12 @@ def resolve_google_news_url(url: str, timeout: float = 1.5) -> Tuple[str, str]:
         cand_domain = urlparse(resolved_url).netloc.lower().replace("www.", "")
         return resolved_url, cand_domain
 
-    # Method 2: HTTP GET with manual, SSRF-validated redirect following (capped at <= 2s)
+    if not allow_network:
+        return url_clean, netloc
+
+    timeout = min(timeout, 1.5)
+
+    # Method 2: HTTP GET with manual, SSRF-validated redirect following (capped at <= 1.5s)
     try:
         result = safe_get(
             url_clean,
@@ -428,29 +433,31 @@ def resolve_google_news_url(url: str, timeout: float = 1.5) -> Tuple[str, str]:
     return url_clean, netloc
 
 
-def batch_resolve_google_news_urls(urls: List[str], max_timeout: float = 2.0) -> Dict[str, Tuple[str, str]]:
+def batch_resolve_google_news_urls(urls: List[str], max_timeout: float = 1.5) -> Dict[str, Tuple[str, str]]:
     """
     Resolves multiple Google News redirect URLs in parallel using ThreadPoolExecutor,
-    capped at max_timeout seconds total (default 2.0s) so redirect resolution doesn't block for 10-15 seconds.
+    capped at max_timeout seconds total (default 1.5s) so redirect resolution doesn't block for 10-15 seconds.
     """
     if not urls:
         return {}
     results: Dict[str, Tuple[str, str]] = {}
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
-        future_to_url = {
-            executor.submit(resolve_google_news_url, u, min(max_timeout, 1.5)): u
-            for u in urls
-        }
-        try:
-            for fut in as_completed(future_to_url, timeout=max_timeout):
-                u = future_to_url[fut]
-                try:
-                    results[u] = fut.result()
-                except Exception:
-                    results[u] = (u, "")
-        except Exception:
-            pass
+    executor = ThreadPoolExecutor(max_workers=min(len(urls), 5))
+    future_to_url = {
+        executor.submit(resolve_google_news_url, u, min(max_timeout, 1.5)): u
+        for u in urls
+    }
+    try:
+        for fut in as_completed(future_to_url, timeout=max_timeout):
+            u = future_to_url[fut]
+            try:
+                results[u] = fut.result()
+            except Exception:
+                results[u] = (u, "")
+    except Exception:
+        pass
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     for u in urls:
         if u not in results:

@@ -19,6 +19,7 @@ import os
 import re
 import html
 import logging
+import contextvars
 from typing import List, Dict, Any
 from difflib import SequenceMatcher
 import urllib.parse
@@ -49,17 +50,22 @@ def clean_snippet(text: str) -> str:
     return clean
 
 GNEWS_API_ENDPOINT = "https://gnews.io/api/v4/search"
-GNEWS_TIMEOUT = 4  # seconds
+GNEWS_TIMEOUT = 2.5  # seconds
 GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
+_gnews_disabled_until = 0.0
 
 # Trusted source domains and their baseline trust scores (0-100)
 TRUSTED_DOMAINS_SCORES = {
     "reuters.com": 96,
     "apnews.com": 95,
+    "afp.com": 95,
     "bbc.com": 94,
     "bbc.co.uk": 94,
     "aljazeera.com": 91,
+    "dpa-international.com": 93,
+    "dw.com": 90,
     "thehindu.com": 89,
+    "indianexpress.com": 88,
     "who.int": 99,
     "un.org": 99,
     "iea.org": 98,
@@ -74,6 +80,11 @@ TRUSTED_DOMAINS_SCORES = {
     "politifact.com": 95,
     "snopes.com": 95,
     "factcheck.org": 96,
+    "fullfact.org": 95,
+    "altnews.in": 94,
+    "boomlive.in": 94,
+    "factly.in": 94,
+    "vishvasnews.com": 94,
     "cnn.com": 85,
     "abcnews.go.com": 87,
     "nbcnews.com": 86,
@@ -100,11 +111,11 @@ def _lookup_domain_trust(url_or_name: str) -> int:
     for domain, score in TRUSTED_DOMAINS_SCORES.items():
         if domain in lower:
             return score
-    if any(k in lower for k in ["reuters", "ap ", "associated press", "who", "iea", "un "]):
+    if any(k in lower for k in ["reuters", "associated press", "agence france-presse", "dpa", "who", "iea", "un "]) or re.search(r'\b(ap|afp)\b', lower):
         return 95
-    if any(k in lower for k in ["bbc", "bloomberg", "ft", "financial times", "guardian", "times", "post"]):
+    if any(k in lower for k in ["bbc", "al jazeera", "deutsche welle", "bloomberg", "financial times", "the economist", "the guardian", "the hindu", "indian express"]) or re.search(r'\bdw\b', lower):
         return 90
-    if any(k in lower for k in ["factcheck", "snopes", "politifact"]):
+    if any(k in lower for k in ["factcheck", "snopes", "politifact", "full fact", "alt news", "boom live", "factly", "vishvas news"]):
         return 95
     return 78
 
@@ -208,7 +219,7 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
             root = ET.fromstring(resp.content)
             items = root.findall(".//item")[:max_articles]
             raw_urls = [item.findtext("link", "").strip() for item in items if item.findtext("link", "").strip()]
-            resolved_map = batch_resolve_google_news_urls(raw_urls, max_timeout=2.0)
+            resolved_map = batch_resolve_google_news_urls(raw_urls, max_timeout=1.5)
 
             for item in items:
                 raw_title = item.findtext("title", "").strip()
@@ -217,13 +228,16 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
                 raw_desc = item.findtext("description", "").strip()
                 description = clean_snippet(raw_desc)
 
-                # Source name usually appears after " - " in Google News RSS title
+                source_el = item.find("source")
                 source_name = "Google News Wire"
+                if source_el is not None and source_el.text and source_el.text.strip():
+                    source_name = source_el.text.strip()
                 clean_title = clean_snippet(raw_title)
                 if " - " in raw_title:
                     parts = raw_title.rsplit(" - ", 1)
                     clean_title = clean_snippet(parts[0].strip())
-                    source_name = re.sub(r'https?://\S+', '', parts[1].strip()).strip() or "Google News Wire"
+                    if source_name == "Google News Wire":
+                        source_name = re.sub(r'https?://\S+', '', parts[1].strip()).strip() or "Google News Wire"
 
                 # Parse date to YYYY-MM-DD
                 parsed_date = "2026-11-13"
@@ -240,6 +254,14 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
                 is_trusted = trust_score >= 85
 
                 resolved_url, pub_domain = resolved_map.get(article_url, (article_url, ""))
+                if not pub_domain and source_el is not None:
+                    source_url = source_el.get("url", "")
+                    if source_url:
+                        try:
+                            from urllib.parse import urlparse
+                            pub_domain = urlparse(source_url).netloc.lower().replace("www.", "")
+                        except Exception:
+                            pass
                 final_url = resolved_url or article_url
 
                 results.append({
@@ -256,11 +278,98 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
                     "isTrustedSource": is_trusted
                 })
 
+            if not results:
+                logger.info("Google News RSS returned 0 items. Falling back to Bing News RSS...")
+                bing_items = fetch_bing_news_rss(claim_text, max_articles=max_articles)
+                if bing_items:
+                    return bing_items, None
+        elif resp.status_code in (403, 429):
+            logger.info(f"Google News RSS returned HTTP {resp.status_code}. Falling back to Bing News RSS...")
+            bing_items = fetch_bing_news_rss(claim_text, max_articles=max_articles)
+            if bing_items:
+                return bing_items, None
+
     except Exception as e:
         error = str(e)
-        logger.warning(f"Google News RSS query fallback encountered: {e}")
+        logger.warning(f"Google News RSS query fallback encountered: {e}. Falling back to Bing News RSS...")
+        bing_items = fetch_bing_news_rss(claim_text, max_articles=max_articles)
+        if bing_items:
+            return bing_items, None
 
     return results, error
+
+
+def fetch_bing_news_rss(query: str, max_articles: int = 5) -> List[Dict[str, Any]]:
+    """
+    Queries Bing News RSS as secondary news fallback when Google News RSS returns 403/429 or 0 items.
+    Endpoint: https://www.bing.com/news/search?q={query}&format=rss
+    """
+    if not query or not query.strip():
+        return []
+    clean_q = re.sub(r'[^\w\s.%-]', '', query.strip())[:85]
+    url = f"https://www.bing.com/news/search?q={urllib.parse.quote(clean_q)}&format=rss"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 LucidVerifier/2.0"
+    }
+    results = []
+    try:
+        resp = requests.get(url, headers=headers, timeout=GNEWS_TIMEOUT)
+        if resp.status_code == 200 and resp.content:
+            root = ET.fromstring(resp.content)
+            items = root.findall(".//item")[:max_articles]
+            for item in items:
+                title = clean_snippet(item.findtext("title", "").strip())
+                desc = clean_snippet(item.findtext("description", "").strip())
+                bing_link = item.findtext("link", "").strip()
+                pub_date = item.findtext("pubDate", "").strip()
+
+                real_url = bing_link
+                pub_domain = ""
+                if "url=" in bing_link:
+                    try:
+                        parsed = urllib.parse.urlparse(bing_link)
+                        qs = urllib.parse.parse_qs(parsed.query)
+                        if "url" in qs and qs["url"]:
+                            real_url = qs["url"][0]
+                            pub_domain = urllib.parse.urlparse(real_url).netloc.lower().replace("www.", "")
+                    except Exception:
+                        pass
+
+                source_name = pub_domain or "News Wire"
+                if " - " in title:
+                    parts = title.rsplit(" - ", 1)
+                    title = clean_snippet(parts[0].strip())
+                    if not pub_domain:
+                        source_name = re.sub(r'https?://\S+', '', parts[1].strip()).strip() or "News Wire"
+
+                parsed_date = "2026-11-13"
+                if pub_date:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        dt = parsedate_to_datetime(pub_date)
+                        parsed_date = dt.strftime("%Y-%m-%d")
+                    except Exception:
+                        parsed_date = pub_date[:16]
+
+                trust_score = _lookup_domain_trust(source_name)
+                agreement = _compute_agreement_score(query, title, desc)
+
+                results.append({
+                    "sourceName": source_name,
+                    "publisherDomain": pub_domain,
+                    "articleTitle": title,
+                    "publicationDate": parsed_date,
+                    "publicationTime": pub_date or parsed_date,
+                    "sourceTrustScore": trust_score,
+                    "url": real_url,
+                    "matchingClaim": query,
+                    "agreementScore": agreement,
+                    "description": desc[:250] if desc else title,
+                    "isTrustedSource": trust_score >= 85
+                })
+    except Exception as e:
+        logger.warning(f"Bing News RSS fallback error: {e}")
+    return results
 
 
 def search_gnews(claim_text: str, max_articles: int = 5) -> List[Dict[str, Any]]:
@@ -390,19 +499,27 @@ def search_gnews_for_claims(
     if not valid_claims:
         return results_map
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    with ThreadPoolExecutor(max_workers=min(len(valid_claims), 4)) as executor:
-        future_to_claim = {
-            executor.submit(search_gnews, c_text, max_articles_per_claim): c_text
-            for c_text in valid_claims
-        }
-        for fut in as_completed(future_to_claim):
+    from concurrent.futures import ThreadPoolExecutor, wait
+    executor = ThreadPoolExecutor(max_workers=min(len(valid_claims), 3))
+    future_to_claim = {}
+    for c_text in valid_claims:
+        ctx = contextvars.copy_context()
+        future_to_claim[executor.submit(ctx.run, search_gnews, c_text, max_articles_per_claim)] = c_text
+
+    try:
+        done, _ = wait(list(future_to_claim.keys()), timeout=5.0)
+        for fut in done:
             c_text = future_to_claim[fut]
             try:
                 results_map[c_text] = fut.result()
             except Exception as e:
                 logger.warning(f"Error in concurrent GNews search for claim '{c_text[:40]}': {e}")
                 results_map[c_text] = []
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    for c_text in valid_claims:
+        results_map.setdefault(c_text, [])
 
     total = sum(len(v) for v in results_map.values())
     logger.info(f"GNews batch search: {len(claims)} claims -> {total} total articles found")

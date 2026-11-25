@@ -136,9 +136,9 @@ class AIReasoningEngine:
         # Synthesis
         synthesis = (
             f"Verdict reached: {verdict} (Trust Score: {trust_score}/100). "
-            f"The evaluation synthesizes 30% ML pattern classification, 25% source authority ({source_name}), "
-            f"25% evidence corroboration ({supp_count} supporting, {contra_count} contradicting), "
-            f"and 20% linguistic/consistency audits. "
+            f"The evaluation synthesizes 70% evidence corroboration ({supp_count} supporting, {contra_count} contradicting), "
+            f"10% source authority ({source_name}), 10% claim consistency, "
+            f"and 10% ML & linguistic pattern audits (5% ML + 5% language). "
             f"Final verdict is governed by multi-factor mathematical scoring, not solely text pattern classification."
         )
 
