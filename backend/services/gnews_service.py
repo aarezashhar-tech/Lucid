@@ -26,7 +26,7 @@ from defusedxml import ElementTree as ET
 
 import requests
 from services.evidence_availability import evidence_tracker
-from utils.url_extractor import is_real_article_url, resolve_google_news_url
+from utils.url_extractor import is_real_article_url, resolve_google_news_url, batch_resolve_google_news_urls
 
 logger = logging.getLogger("lucid.gnews")
 if not logger.handlers:
@@ -49,7 +49,7 @@ def clean_snippet(text: str) -> str:
     return clean
 
 GNEWS_API_ENDPOINT = "https://gnews.io/api/v4/search"
-GNEWS_TIMEOUT = 6  # seconds
+GNEWS_TIMEOUT = 4  # seconds
 GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 
 # Trusted source domains and their baseline trust scores (0-100)
@@ -63,6 +63,7 @@ TRUSTED_DOMAINS_SCORES = {
     "who.int": 99,
     "un.org": 99,
     "iea.org": 98,
+    "irena.org": 98,
     "nytimes.com": 92,
     "washingtonpost.com": 91,
     "theguardian.com": 90,
@@ -180,16 +181,16 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
     Queries Google News RSS endpoint without requiring an API key.
     Extracts Source Name, Title, Publication Date, URL, and calculates Agreement & Trust.
     """
-    clean_query = re.sub(r'[^\w\s.-]', '', claim_text).strip('. ')
+    clean_query = re.sub(r'[^\w\s.%-]', '', claim_text).strip('. ')
     if not clean_query:
         return [], None
 
-    # Trim subordinate clauses or cut cleanly at word boundary
-    m = re.search(r'^(.*?)\s+(?:following|according to|amid|after|as|during)\b', clean_query, re.I)
+    # Trim subordinate / participial clauses or cut cleanly at word boundary
+    m = re.search(r'^(.*?)\s*(?:,|;|\b(?:following|according to|amid|after|as|during|marking|which|resulting in)\b)', clean_query, re.I)
     if m and len(m.group(1)) >= 25:
         search_text = m.group(1)
-    elif len(clean_query) > 90:
-        search_text = clean_query[:90].rsplit(' ', 1)[0]
+    elif len(clean_query) > 85:
+        search_text = clean_query[:85].rsplit(' ', 1)[0]
     else:
         search_text = clean_query
 
@@ -205,8 +206,11 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
         resp = requests.get(url, headers=headers, timeout=GNEWS_TIMEOUT)
         if resp.status_code == 200 and resp.content:
             root = ET.fromstring(resp.content)
-            items = root.findall(".//item")
-            for item in items[:max_articles]:
+            items = root.findall(".//item")[:max_articles]
+            raw_urls = [item.findtext("link", "").strip() for item in items if item.findtext("link", "").strip()]
+            resolved_map = batch_resolve_google_news_urls(raw_urls, max_timeout=2.0)
+
+            for item in items:
                 raw_title = item.findtext("title", "").strip()
                 article_url = item.findtext("link", "").strip()
                 pub_date = item.findtext("pubDate", "").strip()
@@ -235,7 +239,7 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
                 agreement = _compute_agreement_score(claim_text, clean_title, description)
                 is_trusted = trust_score >= 85
 
-                resolved_url, pub_domain = resolve_google_news_url(article_url)
+                resolved_url, pub_domain = resolved_map.get(article_url, (article_url, ""))
                 final_url = resolved_url or article_url
 
                 results.append({
@@ -379,15 +383,26 @@ def search_gnews_for_claims(
     max_articles_per_claim: int = 5
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Search GNews / News Wires for multiple claims and return mapped by claim text.
+    Search GNews / News Wires for multiple claims concurrently and return mapped by claim text.
     """
     results_map: Dict[str, List[Dict[str, Any]]] = {}
+    valid_claims = [c.get("claim", "").strip() for c in claims if c.get("claim", "").strip()]
+    if not valid_claims:
+        return results_map
 
-    for claim_obj in claims:
-        claim_text = claim_obj.get("claim", "")
-        if claim_text:
-            articles = search_gnews(claim_text, max_articles=max_articles_per_claim)
-            results_map[claim_text] = articles
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=min(len(valid_claims), 4)) as executor:
+        future_to_claim = {
+            executor.submit(search_gnews, c_text, max_articles_per_claim): c_text
+            for c_text in valid_claims
+        }
+        for fut in as_completed(future_to_claim):
+            c_text = future_to_claim[fut]
+            try:
+                results_map[c_text] = fut.result()
+            except Exception as e:
+                logger.warning(f"Error in concurrent GNews search for claim '{c_text[:40]}': {e}")
+                results_map[c_text] = []
 
     total = sum(len(v) for v in results_map.values())
     logger.info(f"GNews batch search: {len(claims)} claims -> {total} total articles found")

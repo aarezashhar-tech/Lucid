@@ -166,6 +166,40 @@ def test_pinned_adapter_connects_to_validated_ip_and_preserves_host():
     assert sent_request.headers["Host"] == "example.com"
 
 
+def test_fetch_once_and_safe_get_stream_consumption():
+    """
+    Verifies that _fetch_once() and safe_get() succeed on a streamed response
+    without raising 'RuntimeError: The content for this response was already consumed'.
+    """
+    import io
+
+    raw_stream = io.BytesIO(b"<html><head><title>Test</title></head><body>Hello world</body></html>")
+    mock_resp = requests.Response()
+    mock_resp.status_code = 200
+    mock_resp.raw = raw_stream
+    mock_resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    mock_resp.encoding = "utf-8"
+
+    with patch.object(url_extractor_module, "resolve_and_validate_url", return_value=(True, "", "https://example.com/article", "93.184.216.34", "example.com", 443)), \
+         patch("requests.Session.get", return_value=mock_resp):
+        res = url_extractor_module._fetch_once("https://example.com/article", {}, timeout=5, max_bytes=1024*1024)
+        assert res["status_code"] == 200
+        assert b"Hello world" in res["content"]
+        assert res["encoding"] == "utf-8"
+
+    raw_stream2 = io.BytesIO(b"<html><body>Article Content</body></html>")
+    mock_resp2 = requests.Response()
+    mock_resp2.status_code = 200
+    mock_resp2.raw = raw_stream2
+    mock_resp2.encoding = "utf-8"
+
+    with patch.object(url_extractor_module, "resolve_and_validate_url", return_value=(True, "", "https://example.com/article", "93.184.216.34", "example.com", 443)), \
+         patch("requests.Session.get", return_value=mock_resp2):
+        res2 = url_extractor_module.safe_get("https://example.com/article", {}, timeout=5)
+        assert res2["status_code"] == 200
+        assert b"Article Content" in res2["content"]
+
+
 # ---------------------------------------------------------------------------
 # 4. defusedxml
 # ---------------------------------------------------------------------------

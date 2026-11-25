@@ -428,12 +428,12 @@ class EvidenceVerificationEngine:
         if not supporting_sources and not contradicting_sources:
             status = "Unverified"
             confidence = 50
-            notes = "no live evidence found"
+            notes = "NO SUPPORTING EVIDENCE FOUND: no live evidence found"
             claim["supportingCitationStatus"] = "no live evidence found"
         elif not supporting_sources and status != "Contradicted":
             status = "Unverified"
             confidence = 50
-            notes = "no live evidence found"
+            notes = "NO SUPPORTING EVIDENCE FOUND: no live evidence found"
             claim["supportingCitationStatus"] = "no live evidence found"
 
         # Deduplicate sources while maintaining order

@@ -7,7 +7,7 @@ from urllib.parse import urlparse, urljoin
 import requests
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 
 logger = logging.getLogger("lucid.url_extractor")
 if not logger.handlers:
@@ -169,6 +169,33 @@ class _PinnedHTTPAdapter(HTTPAdapter):
         return super().send(request, **kwargs)
 
 
+def _detect_encoding(raw_bytes: bytes, header_encoding: str = None) -> str:
+    """
+    Safely determines the text encoding without touching response.apparent_encoding
+    on a consumed stream. Checks response.encoding header first, falls back to
+    charset_normalizer/chardet on the collected bytes, and defaults to 'utf-8'.
+    """
+    if header_encoding:
+        return header_encoding
+    if not raw_bytes:
+        return 'utf-8'
+    try:
+        import charset_normalizer
+        detected = charset_normalizer.detect(raw_bytes)
+        if detected and detected.get('encoding'):
+            return detected['encoding']
+    except Exception:
+        pass
+    try:
+        import chardet
+        detected = chardet.detect(raw_bytes)
+        if detected and detected.get('encoding'):
+            return detected['encoding']
+    except Exception:
+        pass
+    return 'utf-8'
+
+
 def _fetch_once(url: str, headers: Dict[str, str], timeout: float, max_bytes: int) -> Dict[str, Any]:
     """
     Performs exactly one HTTP request with redirects disabled. The hostname is
@@ -201,12 +228,15 @@ def _fetch_once(url: str, headers: Dict[str, str], timeout: float, max_bytes: in
                 logger.warning(f"Response size exceeded {max_bytes} bytes. Truncating.")
                 break
 
+        raw_content = bytes(content_bytes)
+        detected_encoding = _detect_encoding(raw_content, response.encoding)
+
         return {
             'status_code': response.status_code,
             'headers': dict(response.headers),
-            'content': bytes(content_bytes),
+            'content': raw_content,
             'encoding': response.encoding,
-            'apparent_encoding': response.apparent_encoding,
+            'apparent_encoding': detected_encoding,
             'url': normalized_url,
         }
     finally:
@@ -317,11 +347,12 @@ def is_real_article_url(url: str) -> bool:
     return True
 
 
-def resolve_google_news_url(url: str, timeout: float = 2.5) -> Tuple[str, str]:
+def resolve_google_news_url(url: str, timeout: float = 1.5) -> Tuple[str, str]:
     """
     Attempts to resolve a Google News redirect URL to the publisher's real article URL and domain.
     Returns (resolved_url, publisher_domain).
     If resolution fails or URL is not a Google News redirect, returns (url, extracted_domain).
+    Enforces a strict timeout <= 2.0s so individual redirect resolution never blocks the pipeline.
     """
     if not url or not isinstance(url, str):
         return "", ""
@@ -335,6 +366,8 @@ def resolve_google_news_url(url: str, timeout: float = 2.5) -> Tuple[str, str]:
 
     if "news.google.com" not in netloc:
         return url_clean, netloc
+
+    timeout = min(timeout, 2.0)
 
     # Method 1: Decode base64 / protobuf token if present in path
     # Google News article URLs: https://news.google.com/rss/articles/<TOKEN>?oc=5
@@ -360,14 +393,14 @@ def resolve_google_news_url(url: str, timeout: float = 2.5) -> Tuple[str, str]:
         cand_domain = urlparse(resolved_url).netloc.lower().replace("www.", "")
         return resolved_url, cand_domain
 
-    # Method 2: HTTP GET with manual, SSRF-validated redirect following
+    # Method 2: HTTP GET with manual, SSRF-validated redirect following (capped at <= 2s)
     try:
         result = safe_get(
             url_clean,
             headers={"User-Agent": BROWSER_USER_AGENT},
             timeout=timeout,
-            max_redirects=5,
-            max_bytes=200 * 1024
+            max_redirects=3,
+            max_bytes=100 * 1024
         )
         final_url = result.get("final_url", url_clean)
         if final_url and "news.google.com" not in final_url and is_real_article_url(final_url):
@@ -393,6 +426,36 @@ def resolve_google_news_url(url: str, timeout: float = 2.5) -> Tuple[str, str]:
         pass
 
     return url_clean, netloc
+
+
+def batch_resolve_google_news_urls(urls: List[str], max_timeout: float = 2.0) -> Dict[str, Tuple[str, str]]:
+    """
+    Resolves multiple Google News redirect URLs in parallel using ThreadPoolExecutor,
+    capped at max_timeout seconds total (default 2.0s) so redirect resolution doesn't block for 10-15 seconds.
+    """
+    if not urls:
+        return {}
+    results: Dict[str, Tuple[str, str]] = {}
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
+        future_to_url = {
+            executor.submit(resolve_google_news_url, u, min(max_timeout, 1.5)): u
+            for u in urls
+        }
+        try:
+            for fut in as_completed(future_to_url, timeout=max_timeout):
+                u = future_to_url[fut]
+                try:
+                    results[u] = fut.result()
+                except Exception:
+                    results[u] = (u, "")
+        except Exception:
+            pass
+
+    for u in urls:
+        if u not in results:
+            results[u] = (u, "")
+    return results
 
 
 def fetch_and_extract_article(url_input: str) -> Dict[str, Any]:

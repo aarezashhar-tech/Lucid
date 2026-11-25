@@ -224,6 +224,20 @@ class EvidenceRanker:
         if any(term in combined for term in ev_negation_terms):
             return ("neutral", 50)
 
+        # In endorsement claims, evidence must express affirmative endorsement; clashing or choosing between candidates is not support
+        if "endors" in claim_lower:
+            conflict_terms = [
+                "clash", "clashed", "clashes", "clashing",
+                "criticized", "criticizes", "rebuked", "rebukes",
+                "lesser evil", "neither", "refused", "declined",
+                "warned against", "spoke against", "feud", "feuded", "feuding", "at odds"
+            ]
+            if any(term in combined for term in conflict_terms):
+                return ("neutral", 50)
+            endorse_evidence = ["endorse", "endorsed", "endorses", "endorsing", "endorsement", "backs", "backed", "blessing", "support for president", "rallying for"]
+            if not any(term in combined for term in endorse_evidence):
+                return ("related", 50)
+
         # 4. Strict NLP Stance: SUPPORTS vs RELATED vs NEUTRAL
         # Requirement 2: A headline counts as "Supported" only if it matches the specific claim (same entities, numbers, or event).
         # Topic similarity alone must be shown as "Related", not "Supported".
@@ -559,8 +573,9 @@ class EvidenceRanker:
 
             # Requirement 5: Require snippet to mention claim's key entities or topic.
             # A generic overview page (like a Wikipedia article on a whole planet) must not count as a contradiction.
+            # Explicit IFCN / Fact Check ratings are direct debunks and not generic overview pages.
             combined_snip = f"{title} {snippet}"
-            if stance == "contradict":
+            if stance == "contradict" and not (fc_rating and any(neg in fc_rating for neg in NEGATIVE_RATINGS)):
                 if not self._snippet_mentions_claim_topic_or_entities(claim_text, combined_snip):
                     stance = "related" if sim >= 0.35 else "neutral"
                     stance_conf = 50
