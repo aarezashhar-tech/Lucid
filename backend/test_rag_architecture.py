@@ -123,7 +123,7 @@ def test_evidence_matrix_and_opinion_handling():
                 "articleTitle": "Federal Reserve raises interest rates by quarter percentage point",
                 "publisher": "Reuters",
                 "publicationDate": "2024-03-20",
-                "url": "https://reuters.com/rates",
+                "url": "https://reuters.com/rates/fed-decision-2024",
                 "evidenceSnippet": "The US central bank raised its benchmark rate by 25 basis points.",
                 "sourceTrustScore": 96,
                 "sourceCategory": "Wire Service"

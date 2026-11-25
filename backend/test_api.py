@@ -106,13 +106,15 @@ def test_endpoints():
     fake_sample = {
         "text": "SHOCKING BOMBSHELL: Government secretly installs 5G mind control microchips in drinking water! Leaked documents expose big pharma coverup. Share before deleted!"
     }
-    resp = client.post('/api/analyze', json=fake_sample)
-    assert resp.status_code == 200, f"Fake news analyze failed: {resp.status_code}"
-    fake_res = resp.get_json()
-    print(f"Hoax Result: Verdict={fake_res['verdict']}, TrustScore={fake_res['trustScore']}, ContraCount={fake_res['evidence']['contradictingCount']}")
-    assert fake_res['verdict'] in ("KNOWN FALSE", "LIKELY FALSE", "FALSE")
-    assert fake_res['riskLevel'] in ("HIGH", "CRITICAL")
-    assert fake_res['evidence']['contradictingCount'] > 0
+    with patch.dict(os.environ, {"FACTCHECK_API_KEY": "test-mock-key"}):
+        with patch("services.factcheck_service.requests.get", return_value=mock_resp):
+            resp = client.post('/api/analyze', json=fake_sample)
+            assert resp.status_code == 200, f"Fake news analyze failed: {resp.status_code}"
+            fake_res = resp.get_json()
+            print(f"Hoax Result: Verdict={fake_res['verdict']}, TrustScore={fake_res['trustScore']}, ContraCount={fake_res['evidence']['contradictingCount']}")
+            assert fake_res['verdict'] in ("KNOWN FALSE", "LIKELY FALSE", "FALSE")
+            assert fake_res['riskLevel'] in ("HIGH", "CRITICAL")
+            assert fake_res['evidence']['contradictingCount'] > 0
 
     print("\n7. Testing POST /api/analyze-file with text file...")
     txt_data = (io.BytesIO(b"Supreme Court delivers unanimous landmark ruling clarifying environmental standards."), "test_article.txt")

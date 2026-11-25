@@ -350,7 +350,8 @@ class VerificationEngine:
         for claim_obj in extracted_claims:
             claim_text = claim_obj.get("claim", "")
             if claim_text and not claim_obj.get("isOpinion"):
-                fc_results = self.query_external_factcheck(claim_text)
+                # Reuse fact check results already retrieved in Step 2 RAG retriever (no duplicate API call)
+                fc_results = self.rag_retriever.get_factcheck_records_for_claim(claim_text)
                 external_factchecks_map[claim_text] = fc_results
                 all_api_factchecks.extend(fc_results)
 
@@ -416,12 +417,15 @@ class VerificationEngine:
 
         evidence_score = evidence_results.get("evidenceScore", 50)
         if supp_count >= 2 and contra_count == 0:
+            top_trust = max((s.get("sourceTrustScore", 80) for s in top_supporting), default=80)
             avg_supp = sum(s.get("sourceTrustScore", 85) for s in top_supporting[:3]) / min(3, len(top_supporting))
-            evidence_score = max(evidence_score, int(round(avg_supp)))
+            floor = 85 if top_trust >= 90 else 80
+            evidence_score = max(evidence_score, floor, int(round(avg_supp)))
         elif contra_count >= 1 and supp_count == 0:
             evidence_score = 0
         elif supp_count == 1 and contra_count == 0:
-            evidence_score = max(evidence_score, 75)
+            top_trust = max((s.get("sourceTrustScore", 80) for s in top_supporting), default=80)
+            evidence_score = max(evidence_score, 80 if top_trust >= 90 else 75)
         elif supp_count == 0 and contra_count == 0:
             evidence_score = 50
         evidence_results["evidenceScore"] = evidence_score

@@ -27,6 +27,7 @@ import re
 import html
 import logging
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from defusedxml import ElementTree as ET
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -35,7 +36,7 @@ import requests
 import services.factcheck_service as factcheck_service
 from services.evidence_availability import evidence_tracker
 from services.wikipedia_service import get_wikipedia_service, claim_refers_to_relative_or_associate
-from utils.url_extractor import is_real_article_url, resolve_google_news_url
+from utils.url_extractor import is_real_article_url, resolve_google_news_url, batch_resolve_google_news_urls
 
 logger = logging.getLogger("lucid.rag_retriever")
 if not logger.handlers:
@@ -45,7 +46,7 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-REQUEST_TIMEOUT = 6
+REQUEST_TIMEOUT = 4
 GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 
 def clean_text_snippet(raw_text: str) -> str:
@@ -142,10 +143,22 @@ class RAGRetrievalEngine:
         })
         self.wikipedia_service = get_wikipedia_service()
         self.session_queried_sources: Dict[str, int] = {}
+        self._claim_factcheck_records: Dict[str, List[Dict[str, Any]]] = {}
 
     def reset_session_audit(self):
-        """Clears per-session queried sources audit log."""
+        """Clears per-session queried sources audit log and cached fact-check records."""
         self.session_queried_sources = {}
+        self._claim_factcheck_records = {}
+
+    def get_factcheck_records_for_claim(self, claim_text: str) -> List[Dict[str, Any]]:
+        """Returns fact check API records retrieved during Step 2 RAG retrieval, avoiding duplicate queries."""
+        if claim_text in self._claim_factcheck_records:
+            return self._claim_factcheck_records[claim_text]
+        if os.getenv("FACTCHECK_API_KEY", "").strip():
+            records = factcheck_service.query_google_factcheck(claim_text)
+            self._claim_factcheck_records[claim_text] = records
+            return records
+        return []
 
     def _match_publisher_metadata(self, pub_name: str, url: str = "") -> Dict[str, Any]:
         """
@@ -192,35 +205,41 @@ class RAGRetrievalEngine:
                     return {"score": 99, "publisher": "World Health Organization (WHO)", "category": "International Institution"}
                 if netloc == "iea.org" or netloc.endswith(".iea.org"):
                     return {"score": 98, "publisher": "International Energy Agency (IEA)", "category": "International Institution"}
+                if "irena.org" in netloc or "irena" in clean_pub.lower():
+                    return {"score": 98, "publisher": "International Renewable Energy Agency (IRENA)", "category": "International Institution"}
             except Exception:
                 pass
 
         # Unknown publishers get the neutral 50
         return {"score": 50, "publisher": clean_pub, "category": "News Media"}
 
+    def _clean_claim_query(self, claim_text: str) -> str:
+        """Cleans claim text for search query formulation."""
+        m = re.search(r'^(.*?)\s*(?:,|;|\b(?:following|according to|amid|after|as|during|marking|which|resulting in)\b)', claim_text, re.I)
+        text = m.group(1) if (m and len(m.group(1)) >= 25) else claim_text
+        clean = re.sub(r'[^\w\s.%-]', '', text).strip('. ')
+        if len(clean) > 85:
+            clean = clean[:85].rsplit(' ', 1)[0]
+        return clean or claim_text
+
     def _fetch_rss_wire_evidence(self, query: str, max_items: int = 6) -> List[Dict[str, Any]]:
         """Queries Google News RSS wire archives for recent published coverage."""
-        clean_q = re.sub(r'[^\w\s.-]', '', query).strip('. ')
-        if not clean_q or len(clean_q) < 4:
+        q_str = query.strip()
+        if not q_str or len(q_str) < 4:
             return []
 
-        # Trim subordinate clauses or cut cleanly at word boundary (avoid mid-word cuts)
-        m = re.search(r'^(.*?)\s+(?:following|according to|amid|after|as|during)\b', clean_q, re.I)
-        if m and len(m.group(1)) >= 25:
-            search_text = m.group(1)
-        elif len(clean_q) > 90:
-            search_text = clean_q[:90].rsplit(' ', 1)[0]
-        else:
-            search_text = clean_q
-
-        url = f"{GOOGLE_NEWS_RSS_URL}?q={urllib.parse.quote(search_text)}&hl=en-US&gl=US&ceid=US:en"
+        url = f"{GOOGLE_NEWS_RSS_URL}?q={urllib.parse.quote(q_str)}&hl=en-US&gl=US&ceid=US:en"
         results: List[Dict[str, Any]] = []
 
         try:
             resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
             if resp.status_code == 200 and resp.content:
                 root = ET.fromstring(resp.content)
-                for item in root.findall(".//item")[:max_items]:
+                items = root.findall(".//item")[:max_items]
+                raw_urls = [it.findtext("link", "").strip() for it in items if it.findtext("link", "").strip()]
+                resolved_map = batch_resolve_google_news_urls(raw_urls, max_timeout=2.0)
+
+                for item in items:
                     raw_title = item.findtext("title", "").strip()
                     link = item.findtext("link", "").strip()
                     pub_date_raw = item.findtext("pubDate", "").strip()
@@ -255,7 +274,7 @@ class RAGRetrievalEngine:
                             parsed_date = pub_date_raw[:10]
 
                     # Requirement 8: Resolve Google News redirect link to publisher's real article URL and domain
-                    resolved_url, pub_domain = resolve_google_news_url(link)
+                    resolved_url, pub_domain = resolved_map.get(link, (link, ""))
                     source_url = source_el.get("url", "") if source_el is not None else ""
                     if not pub_domain and source_url:
                         try:
@@ -287,6 +306,7 @@ class RAGRetrievalEngine:
     def _fetch_factcheck_evidence(self, claim_text: str) -> List[Dict[str, Any]]:
         """Queries Google Fact Check API & accredited IFCN signatories."""
         fc_records = factcheck_service.query_google_factcheck(claim_text)
+        self._claim_factcheck_records[claim_text] = fc_records
         results: List[Dict[str, Any]] = []
 
         for fc in fc_records:
@@ -324,14 +344,16 @@ class RAGRetrievalEngine:
         is_climate_energy = bool(re.search(r'\b(renewable|solar|wind|energy|iea|emissions|climate|fossil|capacity)\b', lower))
         is_un_geopolitical = bool(re.search(r'\b(un\b|united nations|security council|treaty|resolution|sanctions|icj|icc|genocide|ceasefire)\b', lower))
 
+        base_claim = self._clean_claim_query(claim_text)
+
         if is_health:
-            rss_health = self._fetch_rss_wire_evidence(f"{claim_text} site:who.int OR site:cdc.gov OR site:nih.gov", max_items=2)
+            rss_health = self._fetch_rss_wire_evidence(f"{base_claim} (site:who.int OR site:cdc.gov OR site:nih.gov)", max_items=2)
             results.extend(rss_health)
         if is_climate_energy:
-            rss_energy = self._fetch_rss_wire_evidence(f"{claim_text} site:iea.org OR site:un.org", max_items=2)
+            rss_energy = self._fetch_rss_wire_evidence(f"{base_claim} (site:iea.org OR site:irena.org OR site:un.org)", max_items=2)
             results.extend(rss_energy)
         if is_un_geopolitical:
-            rss_un = self._fetch_rss_wire_evidence(f"{claim_text} site:un.org", max_items=2)
+            rss_un = self._fetch_rss_wire_evidence(f"{base_claim} site:un.org", max_items=2)
             results.extend(rss_un)
 
         return results
@@ -367,78 +389,104 @@ class RAGRetrievalEngine:
                     seen_urls.add(key)
                     all_candidates.append(item)
 
-        # 0. Wikipedia Official API lookup (supporting/contradicting encyclopedic reference)
-        try:
-            wiki_items = self.wikipedia_service.get_wikipedia_evidence_for_claim(claim_text)
-            if claim_refers_to_relative_or_associate(claim_text):
-                filtered_wiki = []
-                for w in wiki_items:
-                    snip = str(w.get("evidenceSnippet", "")).lower()
-                    if w.get("stance") == "contradict" and ("living person" in snip or "no date of death" in snip):
-                        continue
-                    filtered_wiki.append(w)
-                wiki_items = filtered_wiki
-            self.session_queried_sources["Wikipedia (Official REST API)"] = self.session_queried_sources.get("Wikipedia (Official REST API)", 0) + len(wiki_items)
-            add_candidates(wiki_items)
-        except Exception as e:
-            evidence_tracker.mark_failure("Wikipedia", e)
-            self.session_queried_sources["Wikipedia (Official REST API)"] = self.session_queried_sources.get("Wikipedia (Official REST API)", 0)
-            logger.warning(f"Wikipedia retrieval error: {e}")
+        # Define independent retrieval channels for concurrent execution
+        def _fetch_wiki():
+            try:
+                wiki_items = self.wikipedia_service.get_wikipedia_evidence_for_claim(claim_text)
+                if claim_refers_to_relative_or_associate(claim_text):
+                    filtered_wiki = []
+                    for w in wiki_items:
+                        snip = str(w.get("evidenceSnippet", "")).lower()
+                        if w.get("stance") == "contradict" and ("living person" in snip or "no date of death" in snip):
+                            continue
+                        filtered_wiki.append(w)
+                    wiki_items = filtered_wiki
+                return "Wikipedia (Official REST API)", wiki_items
+            except Exception as e:
+                evidence_tracker.mark_failure("Wikipedia", e)
+                logger.warning(f"Wikipedia retrieval error: {e}")
+                return "Wikipedia (Official REST API)", []
 
-        # 1. Fact-check API query (only queried if API key configured)
-        if os.getenv("FACTCHECK_API_KEY", "").strip():
-            factchecks = self._fetch_factcheck_evidence(claim_text)
-            self.session_queried_sources["Google Fact Check Tools API"] = self.session_queried_sources.get("Google Fact Check Tools API", 0) + len(factchecks)
-            add_candidates(factchecks)
+        def _fetch_fc():
+            if os.getenv("FACTCHECK_API_KEY", "").strip():
+                try:
+                    factchecks = self._fetch_factcheck_evidence(claim_text)
+                    return "Google Fact Check Tools API", factchecks
+                except Exception as e:
+                    logger.warning(f"Fact check retrieval error: {e}")
+            return "Google Fact Check Tools API", []
 
-        # 2. Wire search with primary news wire priority
-        if wire_articles is not None:
-            converted = []
-            for art in wire_articles:
-                raw_pub = art.get("sourceName") or art.get("source") or art.get("publisher") or "News Source"
-                if isinstance(raw_pub, dict):
-                    pub = raw_pub.get("name", "News Source")
-                else:
-                    pub = str(raw_pub)
-                
-                title = clean_text_snippet(art.get("articleTitle") or art.get("title") or "")
-                raw_snip = art.get("evidenceSnippet") or art.get("description") or art.get("content") or title
-                snippet = clean_text_snippet(raw_snip) or title
-                if len(snippet) > 250:
-                    snippet = snippet[:250] + "..."
-                date_str = art.get("publicationDate") or art.get("publishedAt") or art.get("date") or datetime.now().strftime("%Y-%m-%d")
-                url = art.get("url") or ""
-                meta = self._match_publisher_metadata(pub, url)
-                
-                converted.append({
-                    "articleTitle": title,
-                    "publisher": meta["publisher"],
-                    "publicationDate": date_str,
-                    "url": url,
-                    "evidenceSnippet": snippet,
-                    "sourceTrustScore": meta["score"] if meta["score"] != 80 else art.get("sourceTrustScore", 80),
-                    "sourceCategory": meta["category"],
-                    "retrievalChannel": "Wire News Search"
-                })
-            add_candidates(converted)
-            self.session_queried_sources["Google News RSS Wire Search"] = self.session_queried_sources.get("Google News RSS Wire Search", 0) + len(converted)
-        else:
-            wire_query = f"{claim_text}"
-            wire_results = self._fetch_rss_wire_evidence(wire_query, max_items=6)
-            add_candidates(wire_results)
+        base_q = self._clean_claim_query(claim_text)
 
-            # 3. Targeted query specifying wire publishers
-            targeted_wire_q = f"{claim_text} (Reuters OR AP OR BBC OR \"Al Jazeera\" OR \"The Guardian\")"
+        def _fetch_wires():
+            wire_results = self._fetch_rss_wire_evidence(base_q, max_items=6)
+            return "Google News RSS Wire Search", wire_results
+
+        def _fetch_targeted_wires():
+            targeted_wire_q = f"{base_q} (Reuters OR AP OR BBC OR \"Al Jazeera\" OR \"The Guardian\")"
             targeted_results = self._fetch_rss_wire_evidence(targeted_wire_q, max_items=4)
-            add_candidates(targeted_results)
-            self.session_queried_sources["Google News RSS Wire Search"] = self.session_queried_sources.get("Google News RSS Wire Search", 0) + len(wire_results) + len(targeted_results)
+            return "Google News RSS Wire Search", targeted_results
 
-        # 4. Institutional archives (UN, WHO, etc.)
-        lower = claim_text.lower()
-        if any(k in lower for k in ["vaccine", "covid", "virus", "pandemic", "who", "health", "disease", "treatment", "fda", "cdc", "renewable", "solar", "wind", "energy", "iea", "emissions", "climate", "fossil", "capacity", "un", "united nations", "security council", "treaty", "resolution", "sanctions", "icj", "icc", "genocide", "ceasefire"]):
+        def _fetch_inst():
             inst_results = self._fetch_institutional_evidence_if_relevant(claim_text)
-            self.session_queried_sources["Institutional Archives (UN/WHO/CDC)"] = self.session_queried_sources.get("Institutional Archives (UN/WHO/CDC)", 0) + len(inst_results)
-            add_candidates(inst_results)
+            return "Institutional Archives (UN/WHO/CDC)", inst_results
+
+        # Execute independent retrieval channels concurrently
+        lower = claim_text.lower()
+        has_inst = any(k in lower for k in ["vaccine", "covid", "virus", "pandemic", "who", "health", "disease", "treatment", "fda", "cdc", "renewable", "solar", "wind", "energy", "iea", "emissions", "climate", "fossil", "capacity", "un", "united nations", "security council", "treaty", "resolution", "sanctions", "icj", "icc", "genocide", "ceasefire"])
+
+        tasks = []
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            tasks.append(executor.submit(_fetch_wiki))
+            if os.getenv("FACTCHECK_API_KEY", "").strip():
+                tasks.append(executor.submit(_fetch_fc))
+            if not wire_articles:
+                tasks.append(executor.submit(_fetch_wires))
+            tasks.append(executor.submit(_fetch_targeted_wires))
+            if has_inst:
+                tasks.append(executor.submit(_fetch_inst))
+
+            # If wire_articles were passed from GNews batch, convert and add them immediately
+            if wire_articles is not None:
+                converted = []
+                for art in wire_articles:
+                    raw_pub = art.get("sourceName") or art.get("source") or art.get("publisher") or "News Source"
+                    if isinstance(raw_pub, dict):
+                        pub = raw_pub.get("name", "News Source")
+                    else:
+                        pub = str(raw_pub)
+
+                    title = clean_text_snippet(art.get("articleTitle") or art.get("title") or "")
+                    raw_snip = art.get("evidenceSnippet") or art.get("description") or art.get("content") or title
+                    snippet = clean_text_snippet(raw_snip) or title
+                    if len(snippet) > 250:
+                        snippet = snippet[:250] + "..."
+                    date_str = art.get("publicationDate") or art.get("publishedAt") or art.get("date") or datetime.now().strftime("%Y-%m-%d")
+                    url = art.get("url") or ""
+                    meta = self._match_publisher_metadata(pub, url)
+
+                    converted.append({
+                        "articleTitle": title,
+                        "publisher": meta["publisher"],
+                        "publicationDate": date_str,
+                        "url": url,
+                        "evidenceSnippet": snippet,
+                        "sourceTrustScore": meta["score"] if meta["score"] != 80 else art.get("sourceTrustScore", 80),
+                        "sourceCategory": meta["category"],
+                        "retrievalChannel": "Wire News Search"
+                    })
+                add_candidates(converted)
+                self.session_queried_sources["Google News RSS Wire Search"] = self.session_queried_sources.get("Google News RSS Wire Search", 0) + len(converted)
+
+            done, _ = wait(tasks, timeout=8.0)
+            for fut in done:
+                try:
+                    channel_name, items = fut.result()
+                    if channel_name:
+                        self.session_queried_sources[channel_name] = self.session_queried_sources.get(channel_name, 0) + len(items)
+                    add_candidates(items)
+                except Exception as e:
+                    logger.warning(f"Error in concurrent retrieval channel: {e}")
 
 
         logger.info(f"RAG Retrieval for claim '{claim_text[:60]}...': found {len(all_candidates)} raw candidate sources.")

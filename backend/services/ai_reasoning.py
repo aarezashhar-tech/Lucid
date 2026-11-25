@@ -15,7 +15,7 @@ from typing import Dict, Any, List
 import requests
 
 TRANSPARENCY_WARNING = "This verdict is generated using machine learning and evidence scoring. It does not guarantee factual accuracy."
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 class AIReasoningEngine:
     """

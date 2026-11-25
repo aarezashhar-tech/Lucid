@@ -23,6 +23,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
+from services.evidence_availability import evidence_tracker
 
 # Ensure environment variables are loaded
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
@@ -35,7 +36,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
 
 # Try importing google.genai
 try:
@@ -95,7 +96,11 @@ class GeminiStanceClassifier:
             }
             OR None if Gemini is unavailable or errors out (triggers heuristic fallback).
         """
-        if not self.is_available() or not candidate_items or not claim_text.strip():
+        if not self.is_available():
+            reason = "GEMINI_API_KEY not configured" if not self.api_key else self.last_status
+            evidence_tracker.mark_failure("Gemini Stance Classifier", reason)
+            return None
+        if not candidate_items or not claim_text.strip():
             return None
 
         # Format candidates into a clean, compact payload for Gemini
@@ -132,11 +137,11 @@ class GeminiStanceClassifier:
             f"{json.dumps(items_payload, indent=2)}\n\n"
             "CRITICAL CLASSIFICATION RULES:\n"
             "1. SUBJECT/OBJECT INVERSION: If the claim says 'A defeated B' but the evidence says 'B defeated A' (or vice-versa), the stance is CONTRADICT.\n"
-            "2. CONFLICTING LOCATIONS, CAPITALS, YEARS & METRICS: If the claim asserts an incorrect capital city, location, year, date, number, or officeholder that directly CONFLICTS with the evidence (e.g. 'Sydney is the capital of Australia' vs evidence showing Canberra is capital; or 'cut rates by 5%' vs evidence showing 'raised rates by 25 bps'), the stance is CONTRADICT. However, mere omission of non-conflicting background context or headquarters cities (e.g., 'in Washington' for the Federal Reserve) does not contradict or negate support.\n"
+            "2. CONFLICTING LOCATIONS, CAPITALS, YEARS & METRICS: If the claim asserts an incorrect capital city, location, year, date, number, or officeholder that directly CONFLICTS with the evidence (e.g. 'Sydney is the capital of Australia' vs evidence showing Canberra is capital; or 'cut rates by 5%' vs evidence showing 'raised rates by 25 bps'; or a trivial/low growth rate like '2%' when evidence shows 'record pace' or massive expansion), the stance is CONTRADICT or NEUTRAL, NEVER 'support'. However, mere omission of non-conflicting background context or headquarters cities (e.g., 'in Washington' for the Federal Reserve) does not contradict or negate support.\n"
             "3. COMPARATIVE & SUPERLATIVE SWAPS: If the claim asserts 'smallest' and evidence says 'largest' (or vice-versa), the stance is CONTRADICT.\n"
             "4. DEBUNKED MYTHS & FACT-CHECK RATINGS: If the evidence debunks, refutes, or clarifies a known falsehood or myth (e.g. vaccines cause autism, microchips in drinking water), OR if the snippet has an IFCN Fact Check Rating such as 'False' or 'Pants on Fire', the stance is CONTRADICT.\n"
             "5. NO KEYWORD OVERLAP SUPPORT: Never mark 'support' just because words match or the article is about the same general topic/entities. If the evidence is merely on the same general topic without confirming the specific assertion (e.g. an article about Latin American air pollution when the claim is about WHO/European utilities), mark 'neutral'.\n"
-            "6. SUPPORT REQUIREMENT: Mark 'support' if the evidence affirmatively confirms the core factual action, event, or metric of the claim.\n"
+            "6. SUPPORT REQUIREMENT: Mark 'support' if the evidence affirmatively confirms the core factual action, event, finding, or growth asserted in the claim (e.g. if reputable news or institutional reporting confirms the primary finding or record growth rate in 2023, mark 'support' even if the headline uses summary phrasing like 'grew at record pace in 2023' without reciting every metric).\n"
             "7. TEMPORAL AWARENESS & EVENT TIMELINE: Pay careful attention to the publication date of each source relative to the claim and today's date. If a claim asserts an event, appointment, decision, resignation, or recent change, a source published BEFORE that event occurred CANNOT contradict it (the source simply reported prior reality before the event happened). In such cases, mark 'neutral', NEVER 'contradict'.\n"
             "8. OLD SOURCES: Check if the source publication date is older than 6 months relative to today. If so, set 'is_older' to true. (For Wikipedia or reference encyclopedias, set 'is_older' to false).\n"
             "9. FUTURE OR SPECULATIVE EVENTS VS OCCURRED EVENTS: If the claim asserts an event, decision, appointment, resignation, acquisition, or milestone HAS HAPPENED (completed past/present fact), but the evidence only discusses a possible, planned, proposed, or future event (using phrasing like 'wants to', 'may', 'might', 'could', 'plans to', 'planning to', 'talks about', 'aims to', 'considering', 'expected to', 'proposing to', 'prepares to'), the stance MUST be 'neutral', NEVER 'support'. Only sources reporting that the event has actually occurred count as 'support'.\n"
@@ -152,7 +157,7 @@ class GeminiStanceClassifier:
         # Try the configured GEMINI_MODEL first, then stable fallbacks if it is
         # retired or temporarily unavailable.
         models_to_try = [self.active_model]
-        for fallback in [DEFAULT_GEMINI_MODEL, "gemini-1.5-flash"]:
+        for fallback in ["gemini-3.8-flash"]:
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 
@@ -226,6 +231,7 @@ class GeminiStanceClassifier:
                         }
 
                 self.last_status = "available"
+                evidence_tracker.mark_success("Gemini Stance Classifier")
                 logger.info(f"Gemini stance classification succeeded for claim '{claim_text[:45]}...' across {len(results)} items (Model: {model_name}).")
                 return results
 
@@ -239,6 +245,10 @@ class GeminiStanceClassifier:
                 continue
 
         self.last_status = "stance classifier unavailable"
+        evidence_tracker.mark_failure(
+            "Gemini Stance Classifier",
+            f"Stance classification unavailable (models failed: {', '.join(models_to_try)})"
+        )
         return None
 
     def get_status(self) -> Dict[str, Any]:
