@@ -151,7 +151,8 @@ class EvidenceRanker:
         title = evidence_item.get("articleTitle", "")
         snippet = evidence_item.get("evidenceSnippet", "")
         desc = evidence_item.get("description", "")
-        combined = f"{title} {snippet} {desc}".lower()
+        raw_combined = f"{title} {snippet} {desc}".strip()
+        combined = raw_combined.lower()
         fc_rating = str(evidence_item.get("factCheckRating", "")).lower().strip()
 
         # 0. Pre-calculated stance from specialized verification modules (e.g. Wikipedia biographical checks)
@@ -173,7 +174,7 @@ class EvidenceRanker:
         # Catches: conspiracy theory, debunked, false, misleading, no evidence, baseless, etc.
         has_contradiction = any(re.search(pat, combined, re.I) for pat in CONTRADICTION_PATTERNS)
         if has_contradiction:
-            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
+            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, raw_combined)
             if is_specific_match and sim_score >= 0.35:
                 return ("contradict", 98)
             else:
@@ -214,7 +215,7 @@ class EvidenceRanker:
         has_role_claim = any(r in claim_lower for r in roles)
         if has_role_claim:
             if any(term in combined for term in ["founded by", "founded in", "chief executive of", "ceo of", "president and ceo"]):
-                is_match, reason = self._check_specific_claim_match(claim_text, combined)
+                is_match, reason = self._check_specific_claim_match(claim_text, raw_combined)
                 if not is_match and "conflicting organization" in reason.lower() and sim_score >= 0.35:
                     return ("neutral", 50)
 
@@ -249,11 +250,25 @@ class EvidenceRanker:
             if not any(term in combined for term in endorse_evidence):
                 return ("related", 50)
 
+        # If the claim asserts that a specific city is the capital of a country (e.g. "The capital of Australia is Sydney")
+        capital_claim = False
+        pair_affirmed = False
+        cap_order1 = re.search(r'\bcapital\s+of\s+([a-zA-Z\s]+?)\s+is\s+([a-zA-Z\s]+?)(?:\.|$)', claim_lower)
+        cap_order2 = re.search(r'\b([a-zA-Z\s]+?)\s+is\s+(?:the\s+)?capital\s+of\s+([a-zA-Z\s]+?)(?:\.|$)', claim_lower)
+        if cap_order1 or cap_order2:
+            capital_claim = True
+            target_country = (cap_order1.group(1) if cap_order1 else cap_order2.group(2)).strip()
+            target_city = (cap_order1.group(2) if cap_order1 else cap_order2.group(1)).strip()
+            pair_affirmed = bool(
+                re.search(rf'\b{re.escape(target_city)}\b[^\n.!?]{{0,30}}\b(?:is\s+(?:the\s+)?capital\s+of\s+{re.escape(target_country)}|capital\s+of\s+{re.escape(target_country)})\b', combined)
+                or re.search(rf'\bcapital\s+of\s+{re.escape(target_country)}\b[^\n.!?]{{0,30}}\b{re.escape(target_city)}\b', combined)
+            )
+
         # 4. Strict NLP Stance: SUPPORTS vs RELATED vs NEUTRAL
         # Requirement 2: A headline counts as "Supported" only if it matches the specific claim (same entities, numbers, or event).
         # Topic similarity alone must be shown as "Related", not "Supported".
         if sim_score >= 0.40:
-            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, combined)
+            is_specific_match, match_reason = self._check_specific_claim_match(claim_text, raw_combined)
             if not is_specific_match:
                 if (
                     "conflicting geographic" in match_reason.lower()
@@ -269,6 +284,9 @@ class EvidenceRanker:
                 conf = int(min(90, max(50, sim_score * 100)))
                 return ("related", conf)
 
+            if capital_claim and not pair_affirmed:
+                return ("related", 50)
+
             # Check for affirmative reporting verbs confirming the core proposition
             affirmative_report_markers = [
                 "confirmed", "study finds", "findings show", "data shows",
@@ -282,7 +300,7 @@ class EvidenceRanker:
                 "surge", "surged", "expansion", "analysis", "statistics",
                 "official", "milestone", "capacity", "generation", "share",
                 "power", "energy", "annual", "quarter", "decade", "year",
-                "rally", "rallied", "soared", "jumped", "reinstated", "reinstatement"
+                "rally", "rallied", "soared", "jumped"
             ]
             has_affirmative = (sim_score >= 0.50) or any(m in combined for m in affirmative_report_markers)
 
@@ -357,39 +375,250 @@ class EvidenceRanker:
             DOWNWARD_CLAIM = bool(re.search(r'\b(goes\s+down|went\s+down|gone\s+down|falls?|fell|falling|drops?|dropped|dropping|plunges?|plunged|plunging|declines?|declined|declining|slumps?|slumped|slumping|tumbles?|tumbled|tumbling|sinks?|sank|sunk|sinking|decreases?|decreased|decreasing|lower)\b', claim_lower))
 
             if UPWARD_CLAIM or DOWNWARD_CLAIM:
-                non_negated_up = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero)\s+(rally|gain|rise|jump|surge|increase|rallying|rebound)\b', '', combined, flags=re.I)
-                has_affirmative_up_movement = bool(re.search(r'\b(rally|rallied|rallies|rallying|soared?|soaring|soars|jumped?|jumping|jumps|surged?|surging|surges|rose|risen|rising|gained?|gaining|gains|rebound|rebounded)\b', non_negated_up, re.I))
+                # 1. Apply speculative / future-event check first before returning movement-based support
+                # Speculation check applies to the stock movement itself, not merely a completed preceding event
+                has_speculative_movement = bool(re.search(
+                    r'\b(?:wants?\s+to|plans?\s+to|planning\s+to|may|might|could|aims?\s+to|talks?\s+about|considering|expected\s+to|proposes?\s+to|predicts?\s+to|forecasts?\s+to|hopes?\s+to|mulls?)\s+[^.!?;,]{0,30}?\b(?:rally|rise|gain|jump|surge|soar|fall|drop|plunge|decline|slump|tumble)\b'
+                    r'|\b(?:rally|rise|gain|jump|surge|soar|fall|drop|plunge|decline|slump|tumble)\s+(?:may|might|could|is\s+expected|is\s+forecast)\b',
+                    combined,
+                    re.I
+                ))
+                has_completed_movement = bool(re.search(
+                    r'\b(?:has|have|had|was|were|already)\s+(?:rallied|risen|rose|gained|jumped|surged|soared|fallen|fell|dropped|plunged|declined|slumped|tumbled)\b'
+                    r'|\b(?:rallied|rose|gained|jumped|surged|soared|fell|dropped|plunged|declined|slumped|tumbled)\s+(?:sharply|strongly|yesterday|today|on\s+\w+|\d+(?:\.\d+)?%)\b',
+                    combined,
+                    re.I
+                ))
+                if has_speculative_movement and not has_completed_movement:
+                    return ("neutral", 50)
 
-                non_negated_down = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero)\s+(drop|fall|plunge|decline|slump|tumble|loss)\b', '', combined, flags=re.I)
-                has_affirmative_down_movement = bool(re.search(r'\b(fell|falling|drops?|dropped|dropping|plunges?|plunged|plunging|declines?|declined|declining|slumps?|slumped|slumping|tumbles?|tumbled|tumbling|sinks?|sank|sunk|sinking|losses|lost)\b', non_negated_down, re.I))
+                is_causal_claim = any(c_term in claim_lower for c_term in [
+                    "caused", "causes", "causes of", "responsible for",
+                    "cure", "cures", "cured", "treats", "prevents", "heals", "remedy"
+                ])
+                causal_confirmed = any(a in combined for a in [
+                    "study proves", "scientists confirm", "medical audit confirms",
+                    "clinical trial confirms", "fda approved", "evidence shows"
+                ])
 
-                has_affirmative_event_context = bool(re.search(r'\b(reinstated?|reinstatement|returned?|returning|appointed?|resumed?)\b', combined, re.I))
+                SPECULATIVE_VERB_PAT = r'may|might|could|plans?\s+to|planning\s+to|expected\s+to|expects?\s+to|forecasts?|predicts?'
+                DAYS_MONTHS_PAT = r'monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december'
+                other_days_pat = r'monday|tuesday|wednesday|thursday|friday|saturday|sunday'
+
+                non_negated_up = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero|did\s+not|didn\'?t|does\s+not|doesn\'?t|not)\s+(rally|rallied|rallies|rallying|gain|gained|gains|gaining|rise|rose|risen|rising|jump|jumped|jumps|jumping|surge|surged|surges|surging|soar|soared|soars|soaring|climb|climbed|climbs|climbing|increase|increased|increases|increasing|rebound|rebounded)\b', '', combined, flags=re.I)
+                clean_up = re.sub(rf'\b(?:{SPECULATIVE_VERB_PAT})\s+[^.!?;,]{{0,25}}\b(?:rally|rallies|gain|gains|rise|rises|jump|jumps|surge|surges|soar|soars|climb|climbs|increase|increases)\b', '', non_negated_up, flags=re.I)
+                has_affirmative_up_movement = bool(re.search(r'\b(rally|rallied|rallies|rallying|soared?|soaring|soars|jumped?|jumping|jumps|surged?|surging|surges|rose|risen|rising|gained?|gaining|gains|climbed?|climbing|climbs|rebound|rebounded|increased?|increasing|increases)\b', clean_up, re.I))
+                is_explicitly_denied_up = bool(re.search(r'\b(no|without\s+a?|failed\s+to|never|did\s+not|didn\'?t|does\s+not|doesn\'?t)\s+(rally|rallied|gain|gained|rise|rose|jump|jumped|surge|surged|soar|soared|climb|climbed|increase|increased)\b', combined, re.I))
+
+                non_negated_down = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero|did\s+not|didn\'?t|does\s+not|doesn\'?t|not)\s+(drop|dropped|drops|dropping|fall|fell|fallen|falling|plunge|plunged|plunges|plunging|decline|declined|declines|declining|slump|slumped|slumps|slumping|tumble|tumbled|tumbles|tumbling|crash|crashed|crashes|crashing|loss|losses|lost|sink|sinks|sank|sunk|sinking|decrease|decreased|decreases|decreasing)\b', '', combined, flags=re.I)
+                clean_down_spec = re.sub(rf'\b(?:{SPECULATIVE_VERB_PAT})\s+[^.!?;,]{{0,25}}\b(?:fall|falls|drop|drops|plunge|plunges|decline|declines|slump|slumps|tumble|tumbles|decrease|decreases)\b', '', non_negated_down, flags=re.I)
+                has_affirmative_down_movement = bool(re.search(r'\b(fell|falling|drops?|dropped|dropping|plunges?|plunged|plunging|declines?|declined|declining|slumps?|slumped|slumping|tumbles?|tumbled|tumbling|sinks?|sank|sunk|sinking|losses|lost|decreased?|decreasing|decreases)\b', clean_down_spec, re.I))
+                is_explicitly_denied_down = bool(re.search(r'\b(no|without\s+a?|failed\s+to|never|did\s+not|didn\'?t|does\s+not|doesn\'?t)\s+(drop|dropped|fall|fell|plunge|plunged|decline|declined|slump|slumped|tumble|tumbled|crash|crashed|decrease|decreased)\b', combined, re.I))
 
                 if UPWARD_CLAIM:
+                    # Exclude negated downward movement (e.g. "never plunged", "did not fall") from contradiction checks
+                    clean_down = re.sub(r'\b(never|not|didn\'?t|does\s+not|doesn\'?t|no)\s+(plunged?|slumped?|tumbled?|crashed?|fell|dropped|declined|decreased?)\b', '', combined, flags=re.I)
                     has_direct_down_contradiction = bool(re.search(
                         r'\b(plunged?|plunging|slumped?|slumping|tumbled?|tumbling|crashed?|crashing|fell\s+sharply|dropped\s+sharply|declined\s+sharply|with\s+no\s+rally|no\s+rally|without\s+a\s+rally)\b'
-                        r'|\b(?:fell|dropped|declined|plunged|slumped|tumbled|sank)\s+(?:immediately\s+)?(?:after|following|upon|on)\s+(?:the\s+)?(?:reinstatement|return|appointment|announcement|news)\b',
+                        r'|\b(?:fell|dropped|declined|plunged|slumped|tumbled|sank|decreased)\s+(?:immediately\s+)?(?:after|following|upon|on)\s+(?:the\s+)?(?:reinstated?|reinstatement|returned?|returns?|returning|appointment|announcement|news)\b',
+                        clean_down,
+                        re.I
+                    ))
+                    # Allow magnitude/adverb or time before "before", and constrain post-event match so it cannot cross intervening before relations
+                    has_rally_before_event = bool(re.search(
+                        r'\b(?:rally|rallied|rallies|soared|jumped|rose|gained|increased)(?:[^.!?;,]{0,40})\s+(?:before|prior\s+to|ahead\s+of)\b[^\n.!?]{0,100}\b(?:reinstated?|reinstatement|returned?|returns?|returning)',
                         combined,
                         re.I
                     ))
-                    if has_direct_down_contradiction and not has_affirmative_up_movement:
+                    has_post_event_rally = bool(re.search(
+                        r'\b(?:reversing\s+from\s+a\s+[^.!?;\n]{0,50}(?:rally|gain|surge|jump)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,40}\s+(?:after|following|upon|on\s+(?:the\s+)?(?:reinstatement|return|announcement|news)\b)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,50}\b(?:reinstated?|reinstatement|returned?|returns?|returning)|(?:rally|rallied|rallies|soared|jumped|rose|gained|increased)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,40}\s+(?:after|following|upon|on\s+(?:the\s+)?(?:reinstatement|return|announcement|news)\b)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,50}\b(?:reinstated?|reinstatement|returned?|returns?|returning)|(?:reinstated?|reinstatement|returned?|returns?|returning)\s+[^.!?;\n]{0,50}\b(?:sparked|triggered|led\s+to|followed\s+by)\s+[^.!?;\n]{0,40}(?:rally|gain|surge|jump))\b',
+                        combined,
+                        re.I
+                    ))
+
+                    claim_days = re.findall(r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', claim_lower)
+                    claim_months = re.findall(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', claim_lower)
+                    claim_years = re.findall(r'\b(19\d\d|20\d\d)\b', claim_lower)
+                    comb_months = set(re.findall(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', combined))
+                    comb_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', combined))
+                    date_constraints_violated = bool(
+                        (claim_months and not (set(claim_months) & comb_months))
+                        or (claim_years and not (set(claim_years) & comb_years))
+                    )
+                    movement_time_tokens = claim_days or claim_months or claim_years
+
+                    has_upward_on_claimed_timeframe = any(
+                        re.search(rf'\b(?:rally|rallied|rallies|rose|rising|gained|gains|jumped|jumps|surged|surges|soared|increased?|increasing|increases)\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:on|in)?\s*{t}\b', clean_up, re.I)
+                        or re.search(rf'\b{t}\'s\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:rally|rallied|rallies|gain|gained|gains|rise|rose|risen|jump|jumped|jumps|surge|surged|surges|soar|soared|increase|increases)\b', clean_up, re.I)
+                        or re.search(rf'\b(?:on\s+)?{t}(?:\'s)?(?:,\s*|\s+)(?:(?!\b(?:{DAYS_MONTHS_PAT}|{SPECULATIVE_VERB_PAT}|then|later|subsequently|afterwards|fell|falling|dropped|dropping|declined|declining|plunged|plunging|slumped|slumping|tumbled|tumbling|crashed|crashing|sank|sunk|decreased|decreasing)\b)[^.!?;]){{0,40}}\b(?:rally|rallied|rallies|rose|rising|gained|gains|jumped|jumps|surged|surges|soared|gain|rise|jump|surge|increased?|increasing|increases)\b(?!\s*[^.!?;,]{{0,30}}\b(?:on\s+|in\s+)?(?:{other_days_pat})\b)', clean_up, re.I)
+                        for t in movement_time_tokens
+                    )
+                    down_concerns_claimed_timeframe = any(
+                        re.search(rf'\b(?:fell|falling|dropped|dropping|declined|declining|plunged|plunging|slumped|slumping|tumbled|tumbling|crashed|crashing|sank|sunk|losses|lost|decreased?|decreasing|decreases)\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:on|in)?\s*{t}\b', clean_down, re.I)
+                        or re.search(rf'\b{t}\'s\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:drop|dropped|fall|fell|fallen|plunge|plunged|decline|declined|loss|losses|slump|slumped|tumble|tumbled|decrease|decreased)\b', clean_down, re.I)
+                        or re.search(rf'\b(?:on\s+)?{t}(?:\'s)?(?:,\s*|\s+)(?:(?!\b(?:{DAYS_MONTHS_PAT}|rally|rallied|rallies|rose|rising|gained|gains|jumped|jumps|surged|surges|soared|increased|increasing)\b)[^.!?;]){{0,40}}\b(?:fell|dropped|declined|plunged|slumped|tumbled|sank|drop|fall|decline|plunge|decreased|decreasing)\b(?!\s*[^.!?;,]{{0,30}}\b(?:on\s+|in\s+)?(?:{other_days_pat})\b)', clean_down, re.I)
+                        for t in movement_time_tokens
+                    )
+                    is_later_or_different_timeframe_down = any(
+                        re.search(r'\b(?:then|later|subsequently|the\s+following|the\s+next\s+day)\b[^.!?;,]{0,30}\b(?:fell|dropped|declined|plunged|slumped|tumbled|crashed|decreased)\b', clean_down, re.I)
+                        or re.search(r'\b(?:fell|dropped|declined|plunged|slumped|tumbled|crashed|decreased)\b[^.!?;,]{0,30}\b(?:later|subsequently|the\s+following|the\s+next\s+day)\b', clean_down, re.I)
+                        or re.search(r'\b(?:fell|dropped|declined|plunged|decreased)\b[^.!?;,]{0,40}\breversing\s+from\b', clean_down, re.I)
+                        or (t in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] and re.search(r'\b(?:fell|dropped|declined|plunged|slumped|decreased)\s+(?:on\s+)?(?!' + t + r'\b)(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', clean_down, re.I))
+                        for t in movement_time_tokens
+                    )
+                    is_timeframe_confirmed_reversal = bool(
+                        movement_time_tokens and has_upward_on_claimed_timeframe and is_later_or_different_timeframe_down and not down_concerns_claimed_timeframe
+                    )
+                    is_event_confirmed_reversal = bool(has_post_event_rally and not has_rally_before_event)
+
+                    claim_is_post_return = bool(re.search(r'\b(?:after|following|upon|on)\b[^\n.!?]{0,50}\b(?:returned?|returns?|returning|reinstated?|reinstatement)\b|\b(?:returned?|returns?|returning|reinstated?|reinstatement)\b[^\n.!?]{0,50}\b(?:and|then)\b[^\n.!?]{0,30}\b(?:stock|shares?|price|goes\s+up|rose|rally|jump|surge)', claim_lower))
+
+                    if has_direct_down_contradiction or down_concerns_claimed_timeframe or (claim_is_post_return and has_rally_before_event):
+                        down_is_conflict = (
+                            (claim_is_post_return and has_rally_before_event)
+                            or (movement_time_tokens and down_concerns_claimed_timeframe)
+                            or (not movement_time_tokens and not claim_is_post_return)
+                            or bool(re.search(r'\b(?:fell|dropped|declined|plunged|decreased)\s+(?:sharply\s+)?(?:immediately\s+)?(?:after|upon|on)\s+(?:the\s+)?(?:reinstatement|return)\b', clean_down, re.I))
+                        )
+                        if down_is_conflict:
+                            if is_timeframe_confirmed_reversal or is_event_confirmed_reversal:
+                                pass
+                            else:
+                                return ("contradict", 92)
+
+                    if is_explicitly_denied_up:
                         return ("contradict", 92)
-                    elif has_affirmative_up_movement:
+                    if date_constraints_violated:
+                        return ("related", 50)
+                    if claim_days and claim_months:
+                        conflicting_day_month = bool(re.search(
+                            rf'\b(?:on\s+)?(?:{"|".join(claim_days)})\b[^.!?;]{{0,40}}?\b(?:in\s+)?(?!' + '|'.join(claim_months) + rf'\b)(?:january|february|march|april|may|june|july|august|september|october|november|december)\b',
+                            combined,
+                            re.I
+                        ))
+                        if conflicting_day_month:
+                            return ("related", 50)
+                    if claim_days and claim_years:
+                        conflicting_day_year = bool(re.search(
+                            rf'\b(?:on\s+)?(?:{"|".join(claim_days)})\b[^.!?;]{{0,40}}?\b(?:in\s+)?(?!' + '|'.join(claim_years) + rf'\b)(?:19\d\d|20\d\d)\b',
+                            combined,
+                            re.I
+                        ))
+                        if conflicting_day_year:
+                            return ("related", 50)
+                    if movement_time_tokens and not has_upward_on_claimed_timeframe and not is_event_confirmed_reversal:
+                        return ("related", 50)
+                    if claim_is_post_return and not has_post_event_rally:
+                        return ("neutral", 50)
+                    if has_affirmative_up_movement:
+                        if is_causal_claim and not causal_confirmed:
+                            return ("neutral", 50)
                         conf = int(min(98, max(75, sim_score * 100 + 10)))
                         return ("support", conf)
+                    if down_concerns_claimed_timeframe:
+                        return ("contradict", 92)
 
                 elif DOWNWARD_CLAIM:
+                    clean_up = re.sub(r'\b(never|not|didn\'?t|does\s+not|doesn\'?t|no)\s+(soared?|jumped?|surged?|rallied?|rose|gained|increased?)\b', '', combined, flags=re.I)
                     has_direct_up_contradiction = bool(re.search(
                         r'\b(soared?|soaring|jumped?|jumping|surged?|surging|rallied?|rallying|skyrocketed?|with\s+no\s+drop|no\s+drop|without\s+a\s+drop|no\s+decline)\b'
-                        r'|\b(?:rose|jumped|surged|soared|rallied|gained)\s+(?:immediately\s+)?(?:after|following|upon|on)\s+(?:the\s+)?(?:reinstatement|return|appointment|announcement|news)\b',
+                        r'|\b(?:rose|jumped|surged|soared|rallied|gained|increased)\s+(?:immediately\s+)?(?:after|following|upon|on)\s+(?:the\s+)?(?:reinstated?|reinstatement|returned?|returns?|returning|appointment|announcement|news)\b',
+                        clean_up,
+                        re.I
+                    ))
+                    has_drop_before_event = bool(re.search(
+                        r'\b(?:fell|dropped|declined|plunged|decreased)(?:[^.!?;,]{0,40})\s+(?:before|prior\s+to|ahead\s+of)\b[^\n.!?]{0,100}\b(?:reinstated?|reinstatement|returned?|returns?|returning)',
                         combined,
                         re.I
                     ))
-                    if has_direct_up_contradiction and not has_affirmative_down_movement:
+                    has_post_event_drop = bool(re.search(
+                        r'\b(?:reversing\s+from\s+a\s+[^.!?;\n]{0,50}(?:drop|fall|plunge|decline)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,40}\s+(?:after|following|upon|on\s+(?:the\s+)?(?:reinstatement|return|announcement|news)\b)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,50}\b(?:reinstated?|reinstatement|returned?|returns?|returning)|(?:fell|dropped|declined|plunged|decreased)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,40}\s+(?:after|following|upon|on\s+(?:the\s+)?(?:reinstatement|return|announcement|news)\b)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,50}\b(?:reinstated?|reinstatement|returned?|returns?|returning))\b',
+                        combined,
+                        re.I
+                    ))
+
+                    claim_days = re.findall(r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', claim_lower)
+                    claim_months = re.findall(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', claim_lower)
+                    claim_years = re.findall(r'\b(19\d\d|20\d\d)\b', claim_lower)
+                    comb_months = set(re.findall(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', combined))
+                    comb_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', combined))
+                    date_constraints_violated = bool(
+                        (claim_months and not (set(claim_months) & comb_months))
+                        or (claim_years and not (set(claim_years) & comb_years))
+                    )
+                    movement_time_tokens = claim_days or claim_months or claim_years
+
+                    has_downward_on_claimed_timeframe = any(
+                        re.search(rf'\b(?:fell|falling|dropped|dropping|declined|declining|plunged|plunging|slumped|slumping|tumbled|tumbling|sank|sunk|losses|lost|decreased?|decreasing|decreases)\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:on|in)?\s*{t}\b', clean_down_spec, re.I)
+                        or re.search(rf'\b{t}\'s\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:drop|dropped|fall|fell|fallen|plunge|plunged|decline|declined|loss|losses|slump|slumped|tumble|tumbled|decrease|decreased)\b', clean_down_spec, re.I)
+                        or re.search(rf'\b(?:on\s+)?{t}(?:\'s)?(?:,\s*|\s+)(?:(?!\b(?:{DAYS_MONTHS_PAT}|{SPECULATIVE_VERB_PAT}|then|later|subsequently|afterwards|rally|rallied|rallies|rose|rising|gained|gains|jumped|jumps|surged|surges|soared|increased|increasing)\b)[^.!?;]){{0,40}}\b(?:fell|dropped|declined|plunged|slumped|tumbled|sank|drop|fall|decline|plunge|decreased|decreasing)\b(?!\s*[^.!?;,]{{0,30}}\b(?:on\s+|in\s+)?(?:{other_days_pat})\b)', clean_down_spec, re.I)
+                        for t in movement_time_tokens
+                    )
+                    up_concerns_claimed_timeframe = any(
+                        re.search(rf'\b(?:rose|rising|jumped|jumps|surged|surges|soared|rallied|rallies|gained|gains|increased|increasing)\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:on|in)?\s*{t}\b', clean_up, re.I)
+                        or re.search(rf'\b{t}\'s\b(?:(?!\b(?:{DAYS_MONTHS_PAT})\b)[^.!?;,]){{0,30}}\b(?:rally|rallied|rallies|gain|gained|gains|rise|rose|risen|jump|jumped|jumps|surge|surged|surges|soar|soared|increase|increases)\b', clean_up, re.I)
+                        or re.search(rf'\b(?:on\s+)?{t}(?:\'s)?(?:,\s*|\s+)(?:(?!\b(?:{DAYS_MONTHS_PAT}|fell|falling|dropped|dropping|declined|declining|plunged|plunging|slumped|slumping|tumbled|tumbling|crashed|crashing|sank|sunk|decreased|decreasing)\b)[^.!?;]){{0,40}}\b(?:rose|jumped|surged|soared|rallied|gained|rally|rise|jump|surge|increased|increasing)\b(?!\s*[^.!?;,]{{0,30}}\b(?:on\s+|in\s+)?(?:{other_days_pat})\b)', clean_up, re.I)
+                        for t in movement_time_tokens
+                    )
+                    is_later_or_different_timeframe_up = any(
+                        re.search(r'\b(?:then|later|subsequently|the\s+following|the\s+next\s+day)\b[^.!?;,]{0,30}\b(?:rose|jumped|surged|soared|rallied|gained|increased)\b', clean_up, re.I)
+                        or re.search(r'\b(?:rose|jumped|surged|soared|rallied|gained|increased)\b[^.!?;,]{0,30}\b(?:later|subsequently|the\s+following|the\s+next\s+day)\b', clean_up, re.I)
+                        or re.search(r'\b(?:rose|jumped|surged|soared|rallied|increased)\b[^.!?;,]{0,40}\breversing\s+from\b', clean_up, re.I)
+                        or (t in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] and re.search(r'\b(?:rose|jumped|surged|soared|rallied|increased)\s+(?:on\s+)?(?!' + t + r'\b)(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', clean_up, re.I))
+                        for t in movement_time_tokens
+                    )
+                    is_timeframe_confirmed_reversal = bool(
+                        movement_time_tokens and has_downward_on_claimed_timeframe and is_later_or_different_timeframe_up and not up_concerns_claimed_timeframe
+                    )
+                    is_event_confirmed_reversal = bool(has_post_event_drop and not has_drop_before_event)
+                    claim_is_post_return = bool(re.search(r'\b(?:after|following|upon|on)\b[^\n.!?]{0,50}\b(?:returned?|returns?|returning|reinstated?|reinstatement)\b|\b(?:returned?|returns?|returning|reinstated?|reinstatement)\b[^\n.!?]{0,50}\b(?:and|then)\b[^\n.!?]{0,30}\b(?:stock|shares?|price|goes\s+down|fell|drop|plunge)', claim_lower))
+
+                    if has_direct_up_contradiction or up_concerns_claimed_timeframe or (claim_is_post_return and has_drop_before_event):
+                        up_is_conflict = (
+                            (claim_is_post_return and has_drop_before_event)
+                            or (movement_time_tokens and up_concerns_claimed_timeframe)
+                            or (not movement_time_tokens and not claim_is_post_return)
+                            or bool(re.search(r'\b(?:rose|jumped|surged|soared|rallied|gained|increased)\s+(?:sharply\s+)?(?:immediately\s+)?(?:after|upon|on)\s+(?:the\s+)?(?:reinstatement|return)\b', clean_up, re.I))
+                        )
+                        if up_is_conflict:
+                            if is_timeframe_confirmed_reversal or is_event_confirmed_reversal:
+                                pass
+                            else:
+                                return ("contradict", 92)
+
+                    if is_explicitly_denied_down:
                         return ("contradict", 92)
-                    elif has_affirmative_down_movement:
+                    if date_constraints_violated:
+                        return ("related", 50)
+                    if claim_days and claim_months:
+                        conflicting_day_month = bool(re.search(
+                            rf'\b(?:on\s+)?(?:{"|".join(claim_days)})\b[^.!?;]{{0,40}}?\b(?:in\s+)?(?!' + '|'.join(claim_months) + rf'\b)(?:january|february|march|april|may|june|july|august|september|october|november|december)\b',
+                            combined,
+                            re.I
+                        ))
+                        if conflicting_day_month:
+                            return ("related", 50)
+                    if claim_days and claim_years:
+                        conflicting_day_year = bool(re.search(
+                            rf'\b(?:on\s+)?(?:{"|".join(claim_days)})\b[^.!?;]{{0,40}}?\b(?:in\s+)?(?!' + '|'.join(claim_years) + rf'\b)(?:19\d\d|20\d\d)\b',
+                            combined,
+                            re.I
+                        ))
+                        if conflicting_day_year:
+                            return ("related", 50)
+                    if date_constraints_violated:
+                        return ("related", 50)
+                    if movement_time_tokens and not has_downward_on_claimed_timeframe and not is_event_confirmed_reversal:
+                        return ("related", 50)
+                    elif claim_is_post_return and not has_post_event_drop:
+                        return ("neutral", 50)
+                    if has_affirmative_down_movement:
+                        if is_causal_claim and not causal_confirmed:
+                            return ("neutral", 50)
                         conf = int(min(98, max(75, sim_score * 100 + 10)))
                         return ("support", conf)
+                    if up_concerns_claimed_timeframe:
+                        return ("contradict", 92)
 
             # If the claim asserts causality ('causes', 'caused', 'linked to') or medical cure/efficacy,
             # require explicit scientific/medical confirmation
@@ -520,8 +749,10 @@ class EvidenceRanker:
         claim_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', claim_text))
         stopwords_caps = {
             "THE", "AND", "FOR", "NOT", "YES", "NEW", "ALL", "TOP", "HAS", "HAD", "TWO",
-            "CEO", "CFO", "CTO", "COO", "CIO", "CMO", "VP", "SVP", "EVP", "MD", "PM"
+            "CEO", "CFO", "CTO", "COO", "CIO", "CMO", "VP", "SVP", "EVP", "MD"
         }
+        if "prime minister" in claim_lower or re.search(r'\b(?:[Pp][Mm]|[Pp]\.[Mm]\.)\s+[A-Z][a-z]', claim_text):
+            stopwords_caps.add("PM")
         claim_acronyms -= stopwords_caps
         if claim_acronyms:
             comb_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', combined_text))
@@ -628,8 +859,20 @@ class EvidenceRanker:
 
         def entity_in_evidence(entity_str: str) -> bool:
             e_lower = entity_str.lower()
-            if any(w.lower() in comb_lower for w in entity_str.split()):
+            if e_lower in comb_lower:
                 return True
+            words = entity_str.split()
+            if len(words) >= 2:
+                surname = words[-1]
+                given_name = words[0]
+                if re.search(rf'\b{re.escape(surname.lower())}\b', comb_lower):
+                    conflicting_m = re.search(rf'\b(?!(?:its|the|a|an|their|his|her|former|new|interim|acting)\b)([A-Z][a-z]+)\s+{re.escape(surname)}\b', combined_text)
+                    if conflicting_m and conflicting_m.group(1).lower() != given_name.lower():
+                        return False
+                    return True
+            elif len(words) == 1:
+                if re.search(rf'\b{re.escape(e_lower)}\b', comb_lower):
+                    return True
             acr = KNOWN_ACRONYMS.get(e_lower, "")
             if acr and re.search(rf'\b{acr}\b', comb_lower):
                 return True
@@ -638,17 +881,98 @@ class EvidenceRanker:
         # In relational claims (e.g. endorsements, meetings, acquisitions, sports victories between multiple parties),
         # all named participants must be present in the candidate evidence.
         is_relational = bool(re.search(r'\b(endorsed|endorses|endorsing|endorsement|sued|suing|met with|married|accused|appointed|nominated|acquired|bought|merged|defeated|beat|beats)\b', claim_lower))
-        is_officeholder = (
-            bool(re.search(r'\b(chief justice|president|prime minister|ceo|chief executive|governor|chairman|chancellor)\b', claim_lower))
-            and not bool(re.search(r'\b(stock|shares?|market|equities|price|rally|plunge|jump|drop|fall|surge)\b', claim_lower))
-        )
+        is_movement_claim = bool(re.search(
+            r'\b(?:stock|shares?|price|equities)\b.*\b(?:goes?\s+(?:up|down)|went\s+(?:up|down)|rall(?:y|ied|ies)|plung(?:e|ed|es)|surges?|surged|jumps?|jumped|climbs?|climbed|climbing|rose|soars?|soared|drops?|dropped|falls?|fell)\b'
+            r'|\b(?:goes?\s+(?:up|down)|went\s+(?:up|down)|rall(?:y|ied|ies)|plung(?:e|ed|es)|surges?|surged|jumps?|jumped|climbs?|climbed|climbing|rose|soars?|soared|drops?|dropped|falls?|fell)\b.*\b(?:stock|shares?|price|equities)\b',
+            claim_lower
+        ))
+        is_officeholder = bool(re.search(r'\b(chief justice|president|prime minister|ceo|chief executive|governor|chairman|chancellor)\b', claim_lower))
         if is_relational and len(ent_phrases) >= 2:
             missing_ents = [e for e in ent_phrases if not entity_in_evidence(e)]
             if missing_ents:
                 return False, f"Evidence does not mention participant entity '{missing_ents[0]}' from claim."
         elif is_officeholder and ent_phrases:
-            if not entity_in_evidence(ent_phrases[0]):
-                return False, f"Evidence does not mention subject entity '{ent_phrases[0]}' for officeholder claim."
+            # Extract the person explicitly associated with the role/return clause
+            role_person_m = (
+                re.search(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:returned|returns?|returning|as\s+(?:the\s+)?ceo|is\s+(?:the\s+)?ceo|appointed|reinstated)\b', claim_text)
+                or re.search(r'\b(?:reinstated?|reinstatement\s+of|return\s+of)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b', claim_text)
+                or re.search(r'\b(?:after|upon|following)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:returned|was\s+reinstated)\b', claim_text)
+            )
+            if role_person_m:
+                claimed_person = role_person_m.group(1)
+            else:
+                person_candidates = [
+                    e for e in ent_phrases
+                    if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$', e)
+                    and e.split()[0] not in {"The", "A", "An"}
+                    and e.lower() not in {"yahoo finance", "google news"}
+                ]
+                claimed_person = person_candidates[0] if person_candidates else ent_phrases[0]
+
+            co_subject_m = re.search(r'\b(?:The\s+)?([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+)*)\s+(?:stock|shares?|equities)\b', claim_text)
+            if co_subject_m:
+                claimed_co = co_subject_m.group(1).strip()
+                company_ents = [claimed_co]
+            else:
+                company_ents = [e for e in ent_phrases if e.lower() != claimed_person.lower()]
+
+            # Detect rival returnee/officeholder in evidence
+            # e.g., "Nvidia stock rose after the board reinstated Bob Jones as CEO" or "Bob Jones is CEO"
+            different_person_match = (
+                re.search(r'(?i:\b(?:reinstated?|appointed?|named?|hired?|welcomed?)\s+)(?!(?:Its|The|A|An|Their|His|Her|Former|New|Interim|Acting)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?i:\s+(?:as\s+(?:the\s+)?ceo|to\s+replace|as\s+chief\s+executive)\b)', combined_text)
+                or re.search(r'\b(?!(?:Its|The|A|An|Their|His|Her|Former|New|Interim|Acting)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?i:\s+(?:returned\s+as\s+(?:the\s+)?ceo|is\s+(?:the\s+)?ceo|as\s+(?:the\s+)?ceo|appointed\s+(?:as\s+)?ceo|replaced|succeeded)\b)', combined_text)
+                or re.search(r'(?i:\b(?:after|upon|following)(?:\s+the\s+board)?\s+(?:reinstated?|appointed?)\s+)(?!(?:Its|The|A|An|Their|His|Her|Former|New|Interim|Acting)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b', combined_text)
+                or re.search(r'(?i:\b(?:after|upon|following)\s+)(?!(?:Its|The|A|An|Their|His|Her|Former|New|Interim|Acting)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?i:\s+(?:returned|was\s+reinstated|resigned)\b)', combined_text)
+            )
+            NON_PERSON_ROLES = {
+                "its ceo", "the ceo", "a ceo", "former ceo", "new ceo", "interim ceo", "acting ceo",
+                "its founder", "the founder", "its chief", "the chief", "its president", "the president",
+                "its leader", "the leader", "him", "her", "them", "the board", "its executives"
+            }
+            captured_name = different_person_match.group(1).strip() if different_person_match else ""
+            is_valid_person_name = bool(
+                captured_name
+                and captured_name.lower() not in NON_PERSON_ROLES
+                and not re.match(r'^(?:its|the|a|an|former|new|interim|acting)?\s*(?:ceo|chief\s+executive|founder|president|leader|official|board)\b', captured_name, re.I)
+            )
+            has_given_name_conflict = bool(
+                is_valid_person_name
+                and len(claimed_person.split()) >= 2
+                and len(captured_name.split()) >= 2
+                and claimed_person.split()[0].lower() != captured_name.split()[0].lower()
+            )
+            has_competing_person = bool(
+                is_valid_person_name and
+                (not any(w.lower() in captured_name.lower() for w in claimed_person.split())
+                 or has_given_name_conflict)
+            )
+            if has_competing_person:
+                return False, f"Evidence attributes leadership event to different person '{captured_name}' rather than '{claimed_person}'."
+
+            if not entity_in_evidence(claimed_person):
+                is_leadership_phrase = bool(
+                    re.search(
+                        r'\b(?:reinstat\w*|return\w*)\s+(?:as\s+(?:the\s+)?(?:ceo|chief\s+executive|leader|boss)|to\s+(?:the\s+)?helm|to\s+lead|(?:its|the|former)\s+(?:ceo|chief\s+executive|founder|leader)|him|her)\b'
+                        r'|\b(?:board|company)\s+reinstated\s+(?:its\s+)?(?:ceo|founder|chief\s+executive|him|her)\b'
+                        r'|\b(?:reinstatement|return)\s+of\s+(?:its\s+)?(?:ceo|founder|chief\s+executive)\b'
+                        r'|\b(?:after|upon|following|on)\s+(?:the\s+)?(?:reinstatement|return)\s+(?:of\s+(?:its\s+)?(?:ceo|founder|chief\s+executive)|as\s+ceo)?\b'
+                        r'|\b(?:after|upon|following|on)\s+(?:the\s+)?reinstatement\b',
+                        comb_lower
+                    )
+                )
+                is_corporate_asset_reinstatement = bool(
+                    re.search(
+                        r'\b(?:reinstat\w*|return\w*)\s+(?:of\s+capital|capital|its\s+dividend|the\s+dividend|dividend|payout|guidance|buyback|distribution|share\s+repurchase|trading|operations)\b',
+                        comb_lower
+                    )
+                )
+                is_leadership_return_event = is_leadership_phrase and not is_corporate_asset_reinstatement
+
+                # If this is a movement claim, allow company entity + leadership return/reinstatement when no competing person is named
+                if is_movement_claim and any(entity_in_evidence(e) for e in company_ents) and is_leadership_return_event:
+                    pass
+                else:
+                    return False, f"Evidence does not mention subject entity '{claimed_person}' for officeholder claim."
         elif ent_phrases:
             # For non-relational claims, at least one key named entity (or its acronym) must match
             if not any(entity_in_evidence(e) for e in ent_phrases):
@@ -776,13 +1100,213 @@ class EvidenceRanker:
                     # Event & Timeframe Rule guard:
                     # If snippet confirms the claimed event occurred (e.g. rally after return/reinstatement),
                     # do not allow contradictory later movement/pullback to mislabel it as contradict.
+                    # Preserve contradictions caused by conflicting metrics, entities, or event details.
                     if stance == "contradict":
                         combined_check = f"{title} {snippet}".strip()
                         UP_C = bool(re.search(r'\b(goes\s+up|went\s+up|rise|rises|rose|rising|gains?|rally|rallies|rallied|surges?|jumps?|soars?|increases?)\b', claim_text.lower()))
-                        non_neg_up = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero)\s+(rally|gain|rise|jump|surge)\b', '', combined_check, flags=re.I)
-                        has_up_ev = bool(re.search(r'\b(rally|rallied|rallies|soared?|jumped?|surged?|rose|gained?)\b', non_neg_up, re.I))
-                        has_event_kw = bool(re.search(r'\b(reinstated?|reinstatement|returned?)\b', combined_check, re.I))
-                        if UP_C and has_up_ev and (has_event_kw or "revers" in combined_check.lower()):
+                        claim_pcts = set(re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)', claim_text, re.I))
+                        claim_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', claim_text))
+                        claim_months = set(re.findall(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', claim_text.lower()))
+                        claim_day_m = re.findall(r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', claim_text.lower())
+                        
+                        returnee_m = (
+                            re.search(r'\b(?:after|upon|following)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:returned|returns?|returning|was\s+reinstated|reinstated)\b', claim_text)
+                            or re.search(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:returned|returns?|returning|as\s+(?:the\s+)?ceo|is\s+(?:the\s+)?ceo|appointed|reinstated)\b', claim_text)
+                            or re.search(r'\b(?:reinstated?|reinstatement\s+of|return\s+of)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b', claim_text)
+                        )
+                        claim_people = [e for e in re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b', claim_text) if e not in {"Yahoo Finance", "Google News"}]
+                        claimed_p = returnee_m.group(1).strip() if returnee_m else (claim_people[0] if claim_people else "")
+
+                        co_subject_m = re.search(r'\b(?:The\s+)?([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+)*)\s+(?:stock|shares?|equities)\b', claim_text)
+                        if co_subject_m:
+                            claimed_co = co_subject_m.group(1).strip()
+                        else:
+                            claim_companies = [
+                                c for c in re.findall(r'\b[A-Z][a-zA-Z0-9_]+\b', claim_text)
+                                if c not in {"CEO", "CFO", "CTO", "COO", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Yahoo", "Finance", "Google", "News"}
+                                and (not claim_people or not any(c.lower() == p.lower() for p in claim_people[0].split()))
+                            ]
+                            claimed_co = claim_companies[0] if claim_companies else ""
+
+                        if claim_day_m:
+                            has_later_reversal = bool(
+                                re.search(r'\b(revers(?:ing|ed|al)|pullback|subsequent(?:ly)?\s+fell|later\s+fell|later\s+dropped|pulled\s+back)\b', combined_check, re.I)
+                                or any(re.search(r'\bfell\s+(?:on\s+)?(?!' + d + r'\b)(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', combined_check, re.I) for d in claim_day_m)
+                            )
+                        else:
+                            has_later_reversal = bool(re.search(
+                                r'\b(revers(?:ing|ed|al)|pullback|fell\s+(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|the\s+following|the\s+next\s+day)|subsequent(?:ly)?\s+fell|later\s+fell|later\s+dropped|pulled\s+back)\b',
+                                combined_check,
+                                re.I
+                            ))
+
+                        # Evaluate movement segments to bind company, person, percentage, and timeframe to the same movement
+                        segments = [s.strip() for s in re.split(r'(?<=[.!?])\s+|\s*;\s*|\s*,\s*(?:while|whereas|although|but|and)\s+|\s+and\s+(?=[A-Z])', combined_check) if s.strip()]
+                        if not segments:
+                            segments = [combined_check]
+
+                        NON_PERSON_ROLES = {
+                            "its ceo", "the ceo", "a ceo", "former ceo", "new ceo", "interim ceo", "acting ceo",
+                            "its founder", "the founder", "its chief", "the chief", "its president", "the president",
+                            "its leader", "the leader", "him", "her", "them", "the board", "its executives"
+                        }
+
+                        found_qualifying_movement = False
+                        for seg in segments:
+                            seg_speculative = bool(re.search(
+                                r'\b(?:may|might|could|plans?\s+to|planning\s+to|expected\s+to|expects?\s+to|forecasts?|predicts?)\s+[^.!?;\n]{0,25}\b(?:rally|gain|rise|jump|surge|increase|soar)\b',
+                                seg,
+                                re.I
+                            ))
+                            if seg_speculative:
+                                continue
+
+                            # 1. Company check in this segment
+                            if claimed_co:
+                                co_ok = bool(re.search(
+                                    rf'\b{re.escape(claimed_co)}\b[^.!?;]{{0,60}}?\b(?:stock|shares?|equities)?\b[^.!?;]{{0,40}}?\b(?:rally|rallied|rallies|rose|rising|jumped|jumps|surged|surges|soared|gained|increased)\b'
+                                    rf'|\b(?:rally|rallied|rallies|rose|rising|jumped|jumps|surged|surges|soared|gained|increased)\s+in\s+[^.!?;]{{0,30}}?\b{re.escape(claimed_co)}\b',
+                                    seg,
+                                    re.I
+                                ))
+                            else:
+                                co_ok = True
+
+                            # 2. Person check in this segment
+                            is_asset_reinstatement = bool(re.search(
+                                r'\b(?:reinstat\w*|return\w*)\s+(?:of\s+capital|capital|its\s+dividend|the\s+dividend|dividend|payout|guidance|buyback|distribution|share\s+repurchase|trading|operations)\b',
+                                seg,
+                                re.I
+                            ))
+                            is_leadership_phrase = bool(re.search(
+                                r'\b(?:reinstat\w*|return\w*)\s+(?:as\s+(?:the\s+)?(?:ceo|chief\s+executive|leader|boss)|to\s+(?:the\s+)?helm|to\s+lead|(?:its|the|former)\s+(?:ceo|chief\s+executive|founder|leader)|him|her)\b'
+                                r'|\b(?:board|company)\s+reinstated\s+(?:its\s+)?(?:ceo|founder|chief\s+executive|him|her)\b'
+                                r'|\b(?:reinstatement|return)\s+of\s+(?:its\s+)?(?:ceo|founder|chief\s+executive)\b'
+                                r'|\b(?:after|upon|following|on)\s+(?:the\s+)?(?:reinstatement|return)\s+(?:of\s+(?:its\s+)?(?:ceo|founder|chief\s+executive)|as\s+ceo)?\b'
+                                r'|\b(?:after|upon|following|on)\s+(?:the\s+)?reinstatement\b',
+                                seg,
+                                re.I
+                            ))
+
+                            if claimed_p:
+                                p_words = claimed_p.split()
+                                has_full_p = claimed_p.lower() in seg.lower()
+                                has_surname = bool(re.search(rf'\b{re.escape(p_words[-1])}\b', seg, re.I))
+                                conflicting_m = re.search(rf'\b(?!(?:its|the|a|an|their|his|her|former|new|interim|acting)\b)([A-Z][a-z]+)\s+{re.escape(p_words[-1])}\b', seg)
+                                has_given_name_conflict = bool(conflicting_m and len(p_words) >= 2 and conflicting_m.group(1).lower() != p_words[0].lower())
+
+                                rival_m = (
+                                    re.search(r'(?i:\b(?:reinstated?|appointed?|named?|hired?)\s+)(?!(?:Its|The|A|An|Their|His|Her|Former|New|Interim|Acting)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?i:\s+(?:as\s+(?:the\s+)?ceo|to\s+replace|as\s+chief\s+executive)\b)', seg)
+                                    or re.search(r'\b(?!(?:Its|The|A|An|Their|His|Her|Former|New|Interim|Acting)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?i:\s+(?:returned\s+as\s+(?:the\s+)?ceo|is\s+(?:the\s+)?ceo|as\s+(?:the\s+)?ceo|appointed\s+(?:as\s+)?ceo)\b)', seg)
+                                    or re.search(r'(?i:\b(?:after|upon|following)(?:\s+the\s+board)?\s+(?:reinstated?|appointed?)\s+)(?!(?:Its|The|A|An|Their|His|Her|Former|New|Interim|Acting)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b', seg)
+                                )
+                                captured_rival = rival_m.group(1).strip() if rival_m else ""
+                                is_rival_valid = bool(
+                                    captured_rival
+                                    and captured_rival.lower() not in NON_PERSON_ROLES
+                                    and not re.match(r'^(?:its|the|a|an|former|new|interim|acting)?\s*(?:ceo|chief\s+executive|founder|president|leader|official|board)\b', captured_rival, re.I)
+                                )
+                                has_rival = bool(is_rival_valid and (not any(w.lower() in captured_rival.lower() for w in p_words) or (len(p_words) >= 2 and len(captured_rival.split()) >= 2 and p_words[0].lower() != captured_rival.split()[0].lower())))
+                                p_ok = ((has_full_p or (has_surname and not has_given_name_conflict) or (is_leadership_phrase and not is_asset_reinstatement)) and not has_given_name_conflict and not has_rival)
+                            else:
+                                p_ok = True
+
+                            # 3. Percentage check in this segment
+                            if claim_pcts:
+                                if claimed_co:
+                                    co_pct_m = re.findall(
+                                        rf'\b{re.escape(claimed_co)}\b[^.!?;]{{0,60}}?\b(?:stock|shares?|equities)?\b[^.!?;]{{0,40}}?\b(?:rally|rallied|rallies|rose|rising|jumped|jumps|surged|surges|soared|gained|increased)\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)'
+                                        rf'|\b(?:reversing\s+from\s+a\s+[^.!?;\n]{{0,40}}?(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)[^.!?;\n]{{0,40}}?(?:rally|gain|surge|jump)|(?:rally|rallied|rallies|soared|jumped|rose|gained|increased)\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)[^.!?;\n]{{0,50}}?(?:after|following|upon|on))',
+                                        seg,
+                                        re.I
+                                    )
+                                    seg_pcts = {p for tup in co_pct_m for p in (tup if isinstance(tup, tuple) else (tup,)) if p}
+                                    pct_ok = bool(claim_pcts & seg_pcts)
+                                else:
+                                    seg_rise_pcts = set(re.findall(
+                                        r'\b(?:reversing\s+from\s+a\s+[^.!?;\n]{0,40}?(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)[^.!?;\n]{0,40}?(?:rally|gain|surge|jump)|(?:rally|rallied|rallies|soared|jumped|rose|gained|increased)\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)[^.!?;\n]{0,50}?(?:after|following|upon|on))',
+                                        seg,
+                                        re.I
+                                    ))
+                                    seg_pcts = {p for tup in seg_rise_pcts for p in tup if p}
+                                    if not seg_pcts:
+                                        seg_pcts = set(re.findall(
+                                            r'\b(?:rally|rallied|rallies|rose|rising|gained|gains|jumped|jumps|surged|surges|soared|increased)\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)(?!\w)',
+                                            seg,
+                                            re.I
+                                        ))
+                                    pct_ok = bool(claim_pcts & seg_pcts)
+                            else:
+                                pct_ok = True
+
+                            # 4. Year check in this segment
+                            if claim_years:
+                                seg_years = set(re.findall(
+                                    r'\b(?:returned|returns?|returning|reinstated?|reinstatement|rally|rallied|rallies|rose|rising|jumped|surged|in|during)\s+[^.!?;,]{0,25}?(19\d\d|20\d\d)\b',
+                                    seg,
+                                    re.I
+                                ))
+                                year_ok = bool(claim_years & seg_years)
+                            else:
+                                year_ok = True
+
+                            # 5. Month check in this segment
+                            if claim_months:
+                                seg_months = {m.lower() for m in re.findall(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', seg, re.I)}
+                                comb_months_all = {m.lower() for m in re.findall(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', combined_check, re.I)}
+                                month_ok = bool(claim_months & seg_months) if seg_months else (not bool(comb_months_all - claim_months))
+                            else:
+                                month_ok = True
+
+                            # 6. Day check in this segment
+                            if claim_day_m:
+                                seg_up_day = any(
+                                    re.search(r'\b(?:rally|rallied|rallies|rose|gained|jumped|surged|soared|increased)\b[^.!?;,]{0,40}\b(?:on\s+)?' + d + r'\b|\b' + d + r'\'?s?\b[^.!?;,]{0,40}\b(?:rally|gain|rise|jump|surge)\b', seg, re.I)
+                                    for d in claim_day_m
+                                )
+                                seg_down_day = any(
+                                    re.search(r'\b(?:fell|dropped|declined|plunged|slumped|tumbled|crashed|decreased)\b[^.!?;,]{0,30}\b(?:on\s+)?' + d + r'\b', seg, re.I)
+                                    for d in claim_day_m
+                                )
+                                day_ok = seg_up_day and not seg_down_day
+                            else:
+                                day_ok = True
+
+                            # 7. Non-negated rise check
+                            is_negated_rise = bool(re.search(
+                                r'\b(?:no|never|failed\s+to|without\s+a?|zero|did\s+not|didn\'?t|not)\s+(?:rally|rallied|rallies|gain|gained|gains|rise|rose|risen|rising|jump|jumped|jumps|surge|surged|surges|soar|soared|soars|increase|increased|increases)\b',
+                                seg,
+                                re.I
+                            ))
+
+                            # 8. Event check in this segment
+                            seg_has_post_event_rally = bool(re.search(
+                                r'\b(?:reversing\s+from\s+a\s+[^.!?;\n]{0,50}(?:rally|gain|surge|jump)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,40}\s+(?:after|following|upon|on\s+(?:the\s+)?(?:reinstatement|return|announcement|news)\b)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,50}\b(?:reinstated?|reinstatement|returned?|returns?|returning)|(?:rally|rallied|rallies|soared|jumped|rose|gained)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,40}\s+(?:after|following|upon|on\s+(?:the\s+)?(?:reinstatement|return|announcement|news)\b)(?:(?!\bbefore\b|\bprior\b|\bahead\b)[^.!?;\n]){0,50}\b(?:reinstated?|reinstatement|returned?|returns?|returning)|(?:reinstated?|reinstatement|returned?|returns?|returning)\s+[^.!?;\n]{0,50}\b(?:sparked|triggered|led\s+to|followed\s+by)\s+[^.!?;\n]{0,40}(?:rally|gain|surge|jump))\b',
+                                seg,
+                                re.I
+                            ))
+                            seg_has_rally_before_event = bool(re.search(
+                                r'\b(?:rally|rallied|rallies|soared|jumped|rose|gained)(?:[^.!?;,]{0,40})\s+(?:before|prior\s+to|ahead\s+of)\b[^\n.!?]{0,100}\b(?:reinstated?|reinstatement|returned?|returns?|returning)',
+                                seg,
+                                re.I
+                            ))
+                            seg_contradicts_return = bool(re.search(
+                                r'\b(?:never\s+left|did\s+not\s+return|not\s+reinstated|refused\s+to\s+return|denied\s+returning|never\s+returned)\b',
+                                seg,
+                                re.I
+                            ))
+
+                            claim_has_return_event = bool(re.search(r'\b(return|reinstat)', claim_text, re.I))
+                            if claim_has_return_event:
+                                event_ok = seg_has_post_event_rally and not seg_has_rally_before_event and not seg_contradicts_return and not is_asset_reinstatement
+                            else:
+                                event_ok = (seg_has_post_event_rally or (claim_day_m and day_ok)) and not is_asset_reinstatement
+
+                            if co_ok and p_ok and pct_ok and year_ok and month_ok and day_ok and event_ok and not is_negated_rise:
+                                found_qualifying_movement = True
+                                break
+
+                        if UP_C and found_qualifying_movement and has_later_reversal:
                             stance = "support"
                             stance_conf = 88
                             stance_reason = "Evidence confirms the claimed event occurred (rally after return/reinstatement), despite later reversal."
