@@ -281,7 +281,8 @@ class EvidenceRanker:
                 "record", "record-breaking", "records", "growth", "growing",
                 "surge", "surged", "expansion", "analysis", "statistics",
                 "official", "milestone", "capacity", "generation", "share",
-                "power", "energy", "annual", "quarter", "decade", "year"
+                "power", "energy", "annual", "quarter", "decade", "year",
+                "rally", "rallied", "soared", "jumped", "reinstated", "reinstatement"
             ]
             has_affirmative = (sim_score >= 0.50) or any(m in combined for m in affirmative_report_markers)
 
@@ -348,6 +349,47 @@ class EvidenceRanker:
                 return ("neutral", 50)
             if re.search(r'\b(?:better|worse|tastier|greater|preferable)\s+than\b|\bfor\s+every\s+project\b', claim_lower):
                 return ("neutral", 50)
+
+            # Safety guard 5: Directional & Temporal Event Stance (Stock, Market, Economic, or Directional Movement)
+            # Event & Timeframe Rule: Prevent opposite-direction words ("fell", "dropped", "reversing") from automatically
+            # triggering CONTRADICT when the snippet confirms the claimed event ("rally", "soared", "jumped", "reinstated").
+            UPWARD_CLAIM = bool(re.search(r'\b(goes\s+up|went\s+up|gone\s+up|rise|rises|rose|rising|gains?|gained|gaining|rally|rallies|rallied|rallying|surges?|surged|surging|jumps?|jumped|jumping|soars?|soared|soaring|climbs?|climbed|climbing|increases?|increased|increasing|higher)\b', claim_lower))
+            DOWNWARD_CLAIM = bool(re.search(r'\b(goes\s+down|went\s+down|gone\s+down|falls?|fell|falling|drops?|dropped|dropping|plunges?|plunged|plunging|declines?|declined|declining|slumps?|slumped|slumping|tumbles?|tumbled|tumbling|sinks?|sank|sunk|sinking|decreases?|decreased|decreasing|lower)\b', claim_lower))
+
+            if UPWARD_CLAIM or DOWNWARD_CLAIM:
+                non_negated_up = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero)\s+(rally|gain|rise|jump|surge|increase|rallying|rebound)\b', '', combined, flags=re.I)
+                has_affirmative_up_movement = bool(re.search(r'\b(rally|rallied|rallies|rallying|soared?|soaring|soars|jumped?|jumping|jumps|surged?|surging|surges|rose|risen|rising|gained?|gaining|gains|rebound|rebounded)\b', non_negated_up, re.I))
+
+                non_negated_down = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero)\s+(drop|fall|plunge|decline|slump|tumble|loss)\b', '', combined, flags=re.I)
+                has_affirmative_down_movement = bool(re.search(r'\b(fell|falling|drops?|dropped|dropping|plunges?|plunged|plunging|declines?|declined|declining|slumps?|slumped|slumping|tumbles?|tumbled|tumbling|sinks?|sank|sunk|sinking|losses|lost)\b', non_negated_down, re.I))
+
+                has_affirmative_event_context = bool(re.search(r'\b(reinstated?|reinstatement|returned?|returning|appointed?|resumed?)\b', combined, re.I))
+
+                if UPWARD_CLAIM:
+                    has_direct_down_contradiction = bool(re.search(
+                        r'\b(plunged?|plunging|slumped?|slumping|tumbled?|tumbling|crashed?|crashing|fell\s+sharply|dropped\s+sharply|declined\s+sharply|with\s+no\s+rally|no\s+rally|without\s+a\s+rally)\b'
+                        r'|\b(?:fell|dropped|declined|plunged|slumped|tumbled|sank)\s+(?:immediately\s+)?(?:after|following|upon|on)\s+(?:the\s+)?(?:reinstatement|return|appointment|announcement|news)\b',
+                        combined,
+                        re.I
+                    ))
+                    if has_direct_down_contradiction and not has_affirmative_up_movement:
+                        return ("contradict", 92)
+                    elif has_affirmative_up_movement:
+                        conf = int(min(98, max(75, sim_score * 100 + 10)))
+                        return ("support", conf)
+
+                elif DOWNWARD_CLAIM:
+                    has_direct_up_contradiction = bool(re.search(
+                        r'\b(soared?|soaring|jumped?|jumping|surged?|surging|rallied?|rallying|skyrocketed?|with\s+no\s+drop|no\s+drop|without\s+a\s+drop|no\s+decline)\b'
+                        r'|\b(?:rose|jumped|surged|soared|rallied|gained)\s+(?:immediately\s+)?(?:after|following|upon|on)\s+(?:the\s+)?(?:reinstatement|return|appointment|announcement|news)\b',
+                        combined,
+                        re.I
+                    ))
+                    if has_direct_up_contradiction and not has_affirmative_down_movement:
+                        return ("contradict", 92)
+                    elif has_affirmative_down_movement:
+                        conf = int(min(98, max(75, sim_score * 100 + 10)))
+                        return ("support", conf)
 
             # If the claim asserts causality ('causes', 'caused', 'linked to') or medical cure/efficacy,
             # require explicit scientific/medical confirmation
@@ -476,7 +518,10 @@ class EvidenceRanker:
 
         # 2. Acronyms & Named Agencies (e.g. WHO, Reuters, IEA, NASA, UN, CDC, FDA)
         claim_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', claim_text))
-        stopwords_caps = {"THE", "AND", "FOR", "NOT", "YES", "NEW", "ALL", "TOP", "HAS", "HAD", "TWO"}
+        stopwords_caps = {
+            "THE", "AND", "FOR", "NOT", "YES", "NEW", "ALL", "TOP", "HAS", "HAD", "TWO",
+            "CEO", "CFO", "CTO", "COO", "CIO", "CMO", "VP", "SVP", "EVP", "MD", "PM"
+        }
         claim_acronyms -= stopwords_caps
         if claim_acronyms:
             comb_acronyms = set(re.findall(r'\b[A-Z]{2,6}\b', combined_text))
@@ -593,7 +638,10 @@ class EvidenceRanker:
         # In relational claims (e.g. endorsements, meetings, acquisitions, sports victories between multiple parties),
         # all named participants must be present in the candidate evidence.
         is_relational = bool(re.search(r'\b(endorsed|endorses|endorsing|endorsement|sued|suing|met with|married|accused|appointed|nominated|acquired|bought|merged|defeated|beat|beats)\b', claim_lower))
-        is_officeholder = bool(re.search(r'\b(chief justice|president|prime minister|ceo|chief executive|governor|chairman|chancellor)\b', claim_lower))
+        is_officeholder = (
+            bool(re.search(r'\b(chief justice|president|prime minister|ceo|chief executive|governor|chairman|chancellor)\b', claim_lower))
+            and not bool(re.search(r'\b(stock|shares?|market|equities|price|rally|plunge|jump|drop|fall|surge)\b', claim_lower))
+        )
         if is_relational and len(ent_phrases) >= 2:
             missing_ents = [e for e in ent_phrases if not entity_in_evidence(e)]
             if missing_ents:
@@ -725,6 +773,19 @@ class EvidenceRanker:
                 stance_reason = gemini_result.get("reason", "")
                 if g_stance in ("support", "contradict"):
                     stance = g_stance
+                    # Event & Timeframe Rule guard:
+                    # If snippet confirms the claimed event occurred (e.g. rally after return/reinstatement),
+                    # do not allow contradictory later movement/pullback to mislabel it as contradict.
+                    if stance == "contradict":
+                        combined_check = f"{title} {snippet}".strip()
+                        UP_C = bool(re.search(r'\b(goes\s+up|went\s+up|rise|rises|rose|rising|gains?|rally|rallies|rallied|surges?|jumps?|soars?|increases?)\b', claim_text.lower()))
+                        non_neg_up = re.sub(r'\b(no|without\s+a?|failed\s+to|never|zero)\s+(rally|gain|rise|jump|surge)\b', '', combined_check, flags=re.I)
+                        has_up_ev = bool(re.search(r'\b(rally|rallied|rallies|soared?|jumped?|surged?|rose|gained?)\b', non_neg_up, re.I))
+                        has_event_kw = bool(re.search(r'\b(reinstated?|reinstatement|returned?)\b', combined_check, re.I))
+                        if UP_C and has_up_ev and (has_event_kw or "revers" in combined_check.lower()):
+                            stance = "support"
+                            stance_conf = 88
+                            stance_reason = "Evidence confirms the claimed event occurred (rally after return/reinstatement), despite later reversal."
                 else:  # neutral
                     # If semantic similarity is high (>= 0.35), categorize as "related" topic coverage
                     if sim >= 0.35:
