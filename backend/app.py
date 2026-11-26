@@ -566,16 +566,14 @@ def analyze_file():
 
         elif ext == 'pdf':
             extracted_text, success, msg = extract_text_from_pdf(save_path)
-            if not success and not extracted_text:
+            if not success or not extracted_text or not extracted_text.strip():
                 app.logger.error(f"[analyze-file] PDF extraction failed for {filename}: {msg}")
                 return jsonify({
-                    "error": "Could not extract readable text from PDF document.",
+                    "error": "Could not extract readable text from this PDF.",
                     "fileName": filename,
                     "fileExtension": ext
                 }), 422
             extraction_note = f"PDF Parser: {msg}"
-            if not extracted_text:
-                extracted_text = f"PDF document {filename} contained no discernible text."
 
         elif ext == 'txt':
             with open(save_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -584,6 +582,12 @@ def analyze_file():
 
         # Analyze extracted content
         if not extracted_text.strip():
+            if ext == 'pdf':
+                return jsonify({
+                    "error": "Could not extract readable text from this PDF.",
+                    "fileName": filename,
+                    "fileExtension": ext
+                }), 422
             extracted_text = f"File {filename} contained no discernible text."
 
         is_image_file = ext in ('jpg', 'jpeg', 'png')
@@ -658,6 +662,9 @@ def perform_ocr():
 
     filename = secure_filename(file.filename)
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ""
+    if ext not in ('jpg', 'jpeg', 'png'):
+        return jsonify({"error": f"File format .{ext} is not supported for image OCR. Supported formats: jpg, jpeg, png."}), 400
+
     stored_filename = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
     save_path = os.path.join(app.config['UPLOAD_FOLDER'], stored_filename)
     file.save(save_path)
