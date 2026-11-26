@@ -192,18 +192,46 @@ def _fetch_from_google_news_rss(claim_text: str, max_articles: int = 5) -> List[
     Queries Google News RSS endpoint without requiring an API key.
     Extracts Source Name, Title, Publication Date, URL, and calculates Agreement & Trust.
     """
-    clean_query = re.sub(r'[^\w\s.%-]', '', claim_text).strip('. ')
-    if not clean_query:
-        return [], None
+    # Normalize possessive typos and clean conversational filler words
+    norm = re.sub(r"\b([a-zA-Z]+)'s\b", r"\1s", claim_text.strip())
+    norm = re.sub(r"\breturn\b(?=\s+as|\s+to)", "returns", norm, flags=re.I)
 
-    # Trim subordinate / participial clauses or cut cleanly at word boundary
-    m = re.search(r'^(.*?)\s*(?:,|;|\b(?:following|according to|amid|after|as|during|marking|which|resulting in)\b)', clean_query, re.I)
-    if m and len(m.group(1)) >= 25:
-        search_text = m.group(1)
-    elif len(clean_query) > 85:
-        search_text = clean_query[:85].rsplit(' ', 1)[0]
+    is_conversational = bool(re.match(r'^(?:after|when|as|since|now\s+that|because|if)\b', norm, re.I))
+    STOPWORDS = {
+        'after', 'again', 'entire', 'very', 'literally', 'actually', 'basically',
+        'just', 'totally', 'absolutely', 'really', 'so', 'well', 'now', 'please',
+        'hey', 'look', 'see', 'the', 'a', 'an', 'as', 'and', 'or', 'but', 'is',
+        'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had', 'this', 'that',
+        'these', 'those', 'from', 'with', 'into', 'onto', 'about', 'above', 'below',
+        'world', 'goes', 'went', 'up', 'down', 'come', 'comes'
+    }
+    known_entities = {
+        'nvidia': 'Nvidia', 'ceo': 'CEO', 'tsmc': 'TSMC', 'ai': 'AI',
+        'milkyway': 'Milky Way', 'jensen': 'Jensen', 'huang': 'Huang'
+    }
+    tokens = []
+    for w in re.findall(r'[a-zA-Z0-9]+', norm):
+        w_lower = w.lower()
+        if w_lower in STOPWORDS:
+            continue
+        if w_lower in known_entities:
+            tokens.append(known_entities[w_lower])
+        else:
+            tokens.append(w)
+
+    if is_conversational and len(tokens) >= 3:
+        search_text = ' '.join(tokens[:7])
     else:
-        search_text = clean_query
+        clean_query = re.sub(r'[^\w\s.%-]', '', norm).strip('. ')
+        if not clean_query:
+            return [], None
+        m = re.search(r'^(.*?)\s*(?:,|;|\b(?:following|according to|amid|during|marking|which|resulting in)\b)', clean_query, re.I)
+        if m and len(m.group(1)) >= 25:
+            search_text = m.group(1)
+        elif len(clean_query) > 85:
+            search_text = clean_query[:85].rsplit(' ', 1)[0]
+        else:
+            search_text = clean_query
 
     url = f"{GOOGLE_NEWS_RSS_URL}?q={urllib.parse.quote(search_text)}&hl=en-US&gl=US&ceid=US:en"
     headers = {

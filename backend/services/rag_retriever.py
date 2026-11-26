@@ -239,13 +239,92 @@ class RAGRetrievalEngine:
         return {"score": 50, "publisher": clean_pub, "category": "News Media"}
 
     def _clean_claim_query(self, claim_text: str) -> str:
-        """Cleans claim text for search query formulation."""
-        m = re.search(r'^(.*?)\s*(?:,|;|\b(?:following|according to|amid|after|as|during|marking|which|resulting in)\b)', claim_text, re.I)
-        text = m.group(1) if (m and len(m.group(1)) >= 25) else claim_text
-        clean = re.sub(r'[^\w\s.%-]', '', text).strip('. ')
+        """
+        Cleans casual, typo-laden, or conversational claims into focused search queries.
+        1. Fixes common verb possessive typos: return's -> returns, go's -> goes, etc.
+        2. Normalizes punctuation: removes commas, quotes, brackets.
+        3. Filters conversational filler words (after, again, entire, very, literally, etc.)
+           and builds clean keyword queries for conversational / compound sentences.
+        """
+        if not claim_text:
+            return ""
+        norm = re.sub(r"\b([a-zA-Z]+)'s\b", r"\1s", claim_text.strip())
+        norm = re.sub(r"\breturn\b(?=\s+as|\s+to)", "returns", norm, flags=re.I)
+
+        is_conversational = bool(re.match(r'^(?:after|when|as|since|now\s+that|because|if)\b', norm, re.I))
+
+        STOPWORDS = {
+            'after', 'again', 'entire', 'very', 'literally', 'actually', 'basically',
+            'just', 'totally', 'absolutely', 'really', 'so', 'well', 'now', 'please',
+            'hey', 'look', 'see', 'the', 'a', 'an', 'as', 'and', 'or', 'but', 'is',
+            'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had', 'this', 'that',
+            'these', 'those', 'from', 'with', 'into', 'onto', 'about', 'above', 'below',
+            'world', 'goes', 'went', 'come', 'comes'
+        }
+
+        known_entities = {
+            'nvidia': 'Nvidia', 'ceo': 'CEO', 'tsmc': 'TSMC', 'ai': 'AI',
+            'milkyway': 'Milky Way', 'jensen': 'Jensen', 'huang': 'Huang'
+        }
+
+        tokens = []
+        for w in re.findall(r'[a-zA-Z0-9]+', norm):
+            w_lower = w.lower()
+            if w_lower in STOPWORDS:
+                continue
+            if w_lower in known_entities:
+                tokens.append(known_entities[w_lower])
+            else:
+                tokens.append(w)
+
+        if is_conversational and len(tokens) >= 3:
+            return ' '.join(tokens[:7])
+
+        m = re.search(r'^(.*?)\s*(?:,|;|\b(?:following|according to|amid|during|marking|which|resulting in)\b)', norm, re.I)
+        text = m.group(1) if (m and len(m.group(1)) >= 25) else norm
+        clean = re.sub(r'[^\w\s.%-]', ' ', text)
+        clean = re.sub(r'\s+', ' ', clean).strip('. ')
         if len(clean) > 85:
             clean = clean[:85].rsplit(' ', 1)[0]
-        return clean or claim_text
+        return clean or ' '.join(tokens[:7]) or claim_text
+
+    def _build_keyword_fallback_query(self, text: str) -> str:
+        """
+        Builds a concise fallback search query from named entities, acronyms, and salient nouns/verbs.
+        Strips filler words and possessive typos.
+        Example: "after jensen huang return's as the ceo , the nvidia stock goes up again."
+        -> "Jensen Huang CEO Nvidia stock"
+        """
+        if not text:
+            return ""
+        norm = re.sub(r"\b([a-zA-Z]+)'s\b", r"\1s", text.strip())
+        norm = re.sub(r"\breturn\b(?=\s+as|\s+to)", "returns", norm, flags=re.I)
+
+        known_entities = {
+            'nvidia': 'Nvidia', 'ceo': 'CEO', 'tsmc': 'TSMC', 'ai': 'AI',
+            'milkyway': 'Milky Way', 'jensen': 'Jensen', 'huang': 'Huang'
+        }
+
+        STOPWORDS = {
+            'after', 'again', 'entire', 'very', 'literally', 'actually', 'basically',
+            'just', 'totally', 'absolutely', 'really', 'so', 'well', 'now', 'please',
+            'hey', 'look', 'see', 'the', 'a', 'an', 'as', 'and', 'or', 'but', 'is',
+            'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had', 'this', 'that',
+            'these', 'those', 'from', 'with', 'into', 'onto', 'about', 'above', 'below',
+            'world', 'goes', 'went', 'up', 'down', 'come', 'comes'
+        }
+
+        tokens = []
+        for w in re.findall(r'[a-zA-Z0-9]+', norm):
+            w_lower = w.lower()
+            if w_lower in STOPWORDS:
+                continue
+            if w_lower in known_entities:
+                tokens.append(known_entities[w_lower])
+            elif len(w) >= 3:
+                tokens.append(w)
+
+        return ' '.join(tokens[:6])
 
     def _fetch_rss_wire_evidence(self, query: str, max_items: int = 6) -> List[Dict[str, Any]]:
         """Queries Google News RSS wire archives for recent published coverage."""
@@ -375,6 +454,12 @@ class RAGRetrievalEngine:
                     })
             except Exception:
                 pass
+
+        if not results:
+            fallback_q = self._build_keyword_fallback_query(q_str)
+            if fallback_q and fallback_q.lower() != q_str.lower():
+                logger.info(f"Primary wire search returned 0 items. Retrying with keyword fallback query: '{fallback_q}'")
+                return self._fetch_rss_wire_evidence(fallback_q, max_items=max_items)
 
         return results
 

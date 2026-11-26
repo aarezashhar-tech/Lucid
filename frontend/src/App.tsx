@@ -2415,14 +2415,6 @@ function ReportScreen({
     ? subject
     : derivedFromText || "Verified Article";
 
-  const scoring = result.scoringFactors || {
-    evidenceStrength: { weight: 0.70, score: result.evidence?.evidenceScore ?? 80, contribution: 56.0, label: "Evidence Strength (70%)" },
-    sourceReputation: { weight: 0.10, score: result.sourceReputation?.trustScore ?? 85, contribution: 8.5, label: "Domain & Source Authority (10%)" },
-    claimConsistency: { weight: 0.10, score: 92, contribution: 9.2, label: "Factual Claim Consistency (10%)" },
-    mlPrediction: { weight: 0.05, score: result.prediction === "REAL" ? 82 : 28, contribution: 4.1, label: "ML Text Pattern Classifier (5%)" },
-    languageQuality: { weight: 0.05, score: result.languageIntegrity ?? 88, contribution: 4.4, label: "Journalistic Language Integrity (5%)" },
-  };
-
   const suppCount = result.evidence?.supportingCount ?? result.claims?.filter((c) => c.status === "Supported").length ?? 3;
   const contraCount = result.evidence?.contradictingCount ?? result.claims?.filter((c) => c.status === "Contradicted").length ?? 0;
   const sourceTrust = result.sourceReputation?.trustScore ?? result.sourceCredibility ?? 85;
@@ -2431,6 +2423,30 @@ function ReportScreen({
   const displaySourceType = result.sourceType || result.sourceReputation?.sourceType;
   const sourceTier = result.sourceReputation?.tier || (sourceTrust >= 80 ? "High" : sourceTrust >= 60 ? "Medium" : "Low");
   const verdict = result.verdict || "VERIFIED";
+
+  const isDirectSubmission = Boolean(
+    result.isDirectSubmission ||
+    result.sourceDomain === "direct-submission" ||
+    result.sourceReputation?.domain === "direct-submission" ||
+    result.sourceReputation?.domain === "N/A" ||
+    (!result.url && (!result.sourceReputation?.publisher || result.sourceReputation?.publisher === "Unknown" || result.publisher === "Unknown" || displayPublisher === "Unknown" || displayPublisher === "Unspecified / Self-Published Content"))
+  );
+
+  const defaultScoring = isDirectSubmission ? {
+    evidenceStrength: { weight: 0.90, score: result.evidence?.evidenceScore ?? 80, contribution: 72.0, label: "Evidence Strength (90%)" },
+    sourceReputation: { weight: 0.00, score: 50, contribution: 0.0, label: "Domain & Source Reputation (0%)" },
+    claimConsistency: { weight: 0.10, score: 92, contribution: 9.2, label: "Factual Claim Consistency (10%)" },
+    mlPrediction: { weight: 0.00, score: 50, contribution: 0.0, label: "ML Text Pattern Classifier (0%)" },
+    languageQuality: { weight: 0.00, score: 50, contribution: 0.0, label: "Journalistic Language Integrity (0%)" },
+  } : {
+    evidenceStrength: { weight: 0.80, score: result.evidence?.evidenceScore ?? 80, contribution: 64.0, label: "Evidence Strength (80%)" },
+    sourceReputation: { weight: 0.10, score: result.sourceReputation?.trustScore ?? 85, contribution: 8.5, label: "Domain & Source Reputation (10%)" },
+    claimConsistency: { weight: 0.10, score: 92, contribution: 9.2, label: "Factual Claim Consistency (10%)" },
+    mlPrediction: { weight: 0.00, score: 50, contribution: 0.0, label: "ML Text Pattern Classifier (0%)" },
+    languageQuality: { weight: 0.00, score: 50, contribution: 0.0, label: "Journalistic Language Integrity (0%)" },
+  };
+
+  const scoring = result.scoringFactors || defaultScoring;
 
   const handleCopyLink = () => {
     navigator.clipboard?.writeText(window.location.href);
@@ -2510,25 +2526,38 @@ function ReportScreen({
           {displayTitle}
         </h1>
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-body-sm text-xs sm:text-sm text-on-surface-variant">
-          <span>
-            Publisher: <strong className="text-on-surface font-semibold">{displayPublisher}</strong>
-          </span>
-          {displaySourceType && (
+          {isDirectSubmission ? (
             <>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-label-xs font-semibold bg-surface-container text-on-surface-variant border border-surface-container-high/40">
+                <MatIcon name="edit_note" size={13} />
+                <span>Direct Text Claim</span>
+              </span>
+              <span className="text-outline">·</span>
+              <span>Verified via live external news, fact-check &amp; reference sources</span>
+            </>
+          ) : (
+            <>
+              <span>
+                Publisher: <strong className="text-on-surface font-semibold">{displayPublisher}</strong>
+              </span>
+              {displaySourceType && (
+                <>
+                  <span className="text-outline">·</span>
+                  <span>
+                    Source Type: <strong className="text-on-surface font-semibold">{displaySourceType}</strong>
+                  </span>
+                </>
+              )}
               <span className="text-outline">·</span>
               <span>
-                Source Type: <strong className="text-on-surface font-semibold">{displaySourceType}</strong>
+                Domain: <span className="font-mono">{result.sourceReputation?.domain || result.sourceDomain || "N/A"}</span>
               </span>
-            </>
-          )}
-          <span className="text-outline">·</span>
-          <span>
-            Domain: <span className="font-mono">{result.sourceReputation?.domain || result.sourceDomain || "N/A"}</span>
-          </span>
-          {result.sourceReputation?.publisherConfidence && (
-            <>
-              <span className="text-outline">·</span>
-              <span className="text-tertiary font-medium">Confidence: {result.sourceReputation.publisherConfidence}</span>
+              {result.sourceReputation?.publisherConfidence && (
+                <>
+                  <span className="text-outline">·</span>
+                  <span className="text-tertiary font-medium">Confidence: {result.sourceReputation.publisherConfidence}</span>
+                </>
+              )}
             </>
           )}
         </div>
@@ -2974,50 +3003,76 @@ function ReportScreen({
 
           {/* Primary Source Meta */}
           <div className="lucid-card-sub grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg bg-surface-container-low border border-surface-container-high/30">
-            <div>
-              <small className="font-label-xs text-label-xs text-outline uppercase tracking-wider block font-bold">
-                Identified Primary Publisher
-              </small>
-              <b className="font-headline-sm text-headline-sm text-on-surface">{displayPublisher}</b>
-              {displaySourceType && (
-                <span className="font-body-sm text-body-sm text-on-surface-variant block mt-0.5">
-                  Source Type: <strong className="text-on-surface font-semibold">{displaySourceType}</strong>
-                </span>
-              )}
-              {result.sourceReputation?.publisherConfidence && (
-                <span className="font-label-xs text-label-xs text-tertiary block mt-0.5 font-semibold">
-                  Confidence: {result.sourceReputation.publisherConfidence}
-                </span>
-              )}
-              <span className="font-body-sm text-body-sm text-on-surface-variant block mt-0.5">
-                Domain: {result.sourceReputation?.domain || result.sourceDomain || "N/A"}
-              </span>
-            </div>
-            <div className="sm:text-right">
-              <small className="font-label-xs text-xs text-outline uppercase tracking-wider block font-bold">
-                Domain Trust Score
-              </small>
-              <div className="flex items-center sm:justify-end gap-2 mt-0.5">
-                <b
-                  className={`font-headline-lg text-headline-lg ${
-                    sourceTrust >= 80 ? "text-tertiary" : sourceTrust >= 60 ? "text-[#9A5B00] dark:text-amber-400" : "text-error"
-                  }`}
-                >
-                  {sourceTrust}/100
-                </b>
-                <span
-                  className={`px-2 py-0.5 rounded-full font-label-xs text-xs font-bold uppercase tracking-wider ${
-                    sourceTrust >= 80
-                      ? "bg-tertiary/10 text-tertiary"
-                      : sourceTrust >= 60
-                      ? "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
-                      : "bg-error/10 text-error"
-                  }`}
-                >
-                  {sourceTrust >= 80 ? "High" : sourceTrust >= 60 ? "Medium" : "Low"}
-                </span>
-              </div>
-            </div>
+            {isDirectSubmission ? (
+              <>
+                <div>
+                  <small className="font-label-xs text-label-xs text-outline uppercase tracking-wider block font-bold">
+                    Submission Context
+                  </small>
+                  <b className="font-headline-sm text-headline-sm text-on-surface">Direct Text Claim</b>
+                  <span className="font-body-sm text-body-sm text-on-surface-variant block mt-0.5">
+                    Verified via external news, fact-check &amp; reference sources
+                  </span>
+                </div>
+                <div className="sm:text-right">
+                  <small className="font-label-xs text-xs text-outline uppercase tracking-wider block font-bold">
+                    Verification Channel
+                  </small>
+                  <div className="flex items-center sm:justify-end gap-2 mt-1">
+                    <span className="px-3 py-1 rounded-full font-label-xs text-xs font-bold uppercase tracking-wider bg-surface-container text-primary border border-surface-container-high">
+                      External Verification
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <small className="font-label-xs text-label-xs text-outline uppercase tracking-wider block font-bold">
+                    Identified Primary Publisher
+                  </small>
+                  <b className="font-headline-sm text-headline-sm text-on-surface">{displayPublisher}</b>
+                  {displaySourceType && (
+                    <span className="font-body-sm text-body-sm text-on-surface-variant block mt-0.5">
+                      Source Type: <strong className="text-on-surface font-semibold">{displaySourceType}</strong>
+                    </span>
+                  )}
+                  {result.sourceReputation?.publisherConfidence && (
+                    <span className="font-label-xs text-label-xs text-tertiary block mt-0.5 font-semibold">
+                      Confidence: {result.sourceReputation.publisherConfidence}
+                    </span>
+                  )}
+                  <span className="font-body-sm text-body-sm text-on-surface-variant block mt-0.5">
+                    Domain: {result.sourceReputation?.domain || result.sourceDomain || "N/A"}
+                  </span>
+                </div>
+                <div className="sm:text-right">
+                  <small className="font-label-xs text-xs text-outline uppercase tracking-wider block font-bold">
+                    Domain Trust Score
+                  </small>
+                  <div className="flex items-center sm:justify-end gap-2 mt-0.5">
+                    <b
+                      className={`font-headline-lg text-headline-lg ${
+                        sourceTrust >= 80 ? "text-tertiary" : sourceTrust >= 60 ? "text-[#9A5B00] dark:text-amber-400" : "text-error"
+                      }`}
+                    >
+                      {sourceTrust}/100
+                    </b>
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-label-xs text-xs font-bold uppercase tracking-wider ${
+                        sourceTrust >= 80
+                          ? "bg-tertiary/10 text-tertiary"
+                          : sourceTrust >= 60
+                          ? "bg-[#FDF1DC] text-[#9A5B00] border border-[#F5D49E] dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40"
+                          : "bg-error/10 text-error"
+                      }`}
+                    >
+                      {sourceTrust >= 80 ? "High" : sourceTrust >= 60 ? "Medium" : "Low"}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Source Transparency Block (Requested Format) */}
@@ -3418,17 +3473,17 @@ function ReportScreen({
               </h3>
             </div>
             <span className="font-label-xs text-label-xs text-outline font-medium">
-              80% Evidence &amp; Source led · ML &amp; Style capped at 10%
+              {isDirectSubmission
+                ? "Pure evidence-led verification: 90% Evidence Strength · 10% Factual Claim Consistency"
+                : "Evidence-led verification: 80% Evidence Strength · 10% Domain & Source Reputation · 10% Factual Claim Consistency"}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          <div className={`grid grid-cols-1 ${isDirectSubmission ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-3`}>
             {[
-              { key: "evidenceStrength", factor: scoring.evidenceStrength, icon: "fact_check", descSuffix: "Corroborating citations", defaultPct: 70 },
-              { key: "sourceReputation", factor: scoring.sourceReputation, icon: "domain", descSuffix: "Publisher & domain authority", defaultPct: 10 },
+              { key: "evidenceStrength", factor: scoring.evidenceStrength, icon: "fact_check", descSuffix: "Corroborating citations", defaultPct: isDirectSubmission ? 90 : 80 },
+              ...(!isDirectSubmission ? [{ key: "sourceReputation", factor: scoring.sourceReputation, icon: "domain", descSuffix: "Publisher & domain authority", defaultPct: 10 }] : []),
               { key: "claimConsistency", factor: scoring.claimConsistency, icon: "balance", descSuffix: "Internal claim coherence", defaultPct: 10 },
-              { key: "mlPrediction", factor: scoring.mlPrediction, icon: "psychology", descSuffix: "Linguistic pattern classifier", defaultPct: 5 },
-              { key: "languageQuality", factor: scoring.languageQuality, icon: "article", descSuffix: "Journalistic tone integrity", defaultPct: 5 },
             ].map(({ key, factor, icon, descSuffix, defaultPct }) => {
               if (!factor) return null;
               const isNotScored = factor.score === "Not scored" || typeof factor.score === "string";
