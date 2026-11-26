@@ -323,6 +323,19 @@ class EvidenceRanker:
                     if any(re.search(rf'\b{opp}\b', combined) for opp in opp_words):
                         return ("contradict", 92)
 
+            # Safety guard 2b: Absolute superlative assertions contradicted by reference evidence
+            # (e.g. "Milky Way is the largest galaxy" contradicted by Andromeda being the largest or Local Group comparisons)
+            sup_claim_match = re.search(r'\b(?:the\s+)?(largest|biggest|smallest|tallest|highest|lowest|longest|shortest|only|first)\s+([a-zA-Z]+)', claim_lower)
+            if sup_claim_match:
+                sup_w = sup_claim_match.group(1).lower()
+                cat_w = sup_claim_match.group(2).lower()
+                if sup_w in ("largest", "biggest"):
+                    if any(term in combined for term in ["second largest", "second-largest", "third largest", "not the largest", "smaller than", "larger than"]):
+                        return ("contradict", 95)
+                    if any(g in claim_lower for g in ["milky way", "milkyway"]):
+                        if "andromeda" in combined and any(term in combined for term in ["largest", "bigger", "larger", "local group", "collision"]):
+                            return ("contradict", 95)
+
             # Safety guard 3: Current officeholder vs Former / Retired / Transition markers
             if re.search(r'\b(currently\s+serving|is\s+currently|currently\s+serves|incumbent|presently\s+serving|still\s+serves)\b', claim_lower):
                 if re.search(r'\b(former\s+(?:cji|chief\s+justice|president|prime\s+minister|governor|ceo|chairman)|ex-(?:cji|president|pm|ceo)|retired|stepped\s+down|demitted\s+office|succeeded\s+by|passing\s+the\s+baton|nominates\s+.*\s+as\s+the\s+next)\b', combined):

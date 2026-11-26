@@ -649,9 +649,12 @@ class VerificationEngine:
 
         # -------------------------------------------------------------
         # STEP 6: Final Trust Score (Multi-Factor Scoring)
-        # Weights: Evidence 70%, Source 10%, Consistency 10%, ML 5%, Language 5%
+        # Weights: 
+        # Known publisher URL: 80% Evidence, 10% Source, 10% Consistency, 0% ML, 0% Language
+        # Direct text claim: 90% Evidence, 0% Source, 10% Consistency, 0% ML, 0% Language
         # -------------------------------------------------------------
         logger.info(f"Pipeline Step 6: Final Trust Score & Verdict Calculation (Genre: {article_type})")
+        is_direct = bool(not url_or_domain or source_data.get("domain") in ("direct-submission", "N/A", ""))
         verdict_results = self.scoring_engine.compute_verdict_and_score(
             ml_score=ml_score,
             source_score=source_score,
@@ -666,7 +669,9 @@ class VerificationEngine:
             source_tier=source_data.get("tier", ""),
             source_category=source_data.get("category", ""),
             top_supporting=top_supporting,
-            top_contradicting=top_contradicting
+            top_contradicting=top_contradicting,
+            is_direct_submission=is_direct,
+            source_domain=source_data.get("domain", "")
         )
 
         final_verdict = verdict_results["verdict"]
@@ -959,6 +964,7 @@ class VerificationEngine:
             # Layer 4: Multi-Factor Scoring Factors
             "scoringFactors": scoring_factors,
             "languageIntegrity": scoring_factors["languageQuality"]["score"],
+            "isDirectSubmission": is_direct,
             
             # Layer 6: Sources registry
             "sources": sources_list,
@@ -981,8 +987,8 @@ class VerificationEngine:
                 {"step": "GNews API Corroboration", "detail": f"Searched recent trusted news wires ({len(evidence_results.get('gnewsArticles', []))} article matches)", "status": "done"},
                 {"step": "Source Reputation Audit", "detail": f"Evaluated domain authority: {source_data['sourceName']} ({source_data['trustScore']}/100)", "status": "done"},
                 {"step": "Evidence Cross-Referencing", "detail": f"Queried wire archives ({supp_count} supporting, {contra_count} contradicting)", "status": "done"},
-                {"step": "ML Model Inference", "detail": "Executed TF-IDF + Logistic Regression pattern analysis (5% weight)", "status": "done"},
-                {"step": "Multi-Factor Synthesis", "detail": f"Calculated 5-layer weighted trust score ({final_trust_score}/100) -> {final_verdict}", "status": "done"}
+                {"step": "ML Model Inference", "detail": "Executed TF-IDF pattern analysis (advisory reference only, 0% weight)", "status": "done"},
+                {"step": "Multi-Factor Synthesis", "detail": f"Calculated evidence-led weighted trust score ({final_trust_score}/100) -> {final_verdict}", "status": "done"}
             ],
 
             "aiIntegrations": {

@@ -24,11 +24,19 @@ from utils.url_extractor import is_real_article_url
 
 TupleScore = Tuple[int, str]
 
-WEIGHT_EVIDENCE = 0.70
+WEIGHT_EVIDENCE_URL = 0.80
+WEIGHT_SOURCE_URL = 0.10
+WEIGHT_CONSISTENCY_URL = 0.10
+
+WEIGHT_EVIDENCE_DIRECT = 0.90
+WEIGHT_SOURCE_DIRECT = 0.00
+WEIGHT_CONSISTENCY_DIRECT = 0.10
+
+WEIGHT_EVIDENCE = 0.80
 WEIGHT_SOURCE = 0.10
 WEIGHT_CONSISTENCY = 0.10
-WEIGHT_ML = 0.05
-WEIGHT_LANGUAGE = 0.05
+WEIGHT_ML = 0.00
+WEIGHT_LANGUAGE = 0.00
 
 HIGH_STANCE_CONFIDENCE_THRESHOLD = 75.0
 TIER1_SCORE_FLOOR = 82
@@ -245,44 +253,60 @@ class MultiFactorScoringEngine:
         lan_contrib: float = None,
         src_contrib: float = None,
         con_contrib: float = None,
-        evi_label: str = f"Evidence Strength ({int(WEIGHT_EVIDENCE * 100)}%)",
-        ml_label: str = f"ML Text Pattern Classifier ({int(WEIGHT_ML * 100)}%)",
-        lan_label: str = f"Journalistic Language Integrity ({int(WEIGHT_LANGUAGE * 100)}%)",
-        src_label: str = f"Domain & Source Reputation ({int(WEIGHT_SOURCE * 100)}%)",
-        con_label: str = f"Factual Claim Consistency ({int(WEIGHT_CONSISTENCY * 100)}%)"
+        w_evidence: float = WEIGHT_EVIDENCE,
+        w_source: float = WEIGHT_SOURCE,
+        w_consistency: float = WEIGHT_CONSISTENCY,
+        w_ml: float = WEIGHT_ML,
+        w_language: float = WEIGHT_LANGUAGE,
+        evi_label: str = None,
+        ml_label: str = None,
+        lan_label: str = None,
+        src_label: str = None,
+        con_label: str = None
     ) -> Dict[str, Any]:
+        if evi_label is None:
+            evi_label = f"Evidence Strength ({int(round(w_evidence * 100))}%)"
+        if ml_label is None:
+            ml_label = f"ML Text Pattern Classifier ({int(round(w_ml * 100))}%)"
+        if lan_label is None:
+            lan_label = f"Journalistic Language Integrity ({int(round(w_language * 100))}%)"
+        if src_label is None:
+            src_label = f"Domain & Source Reputation ({int(round(w_source * 100))}%)"
+        if con_label is None:
+            con_label = f"Factual Claim Consistency ({int(round(w_consistency * 100))}%)"
+
         return {
             "evidenceStrength": {
-                "weight": WEIGHT_EVIDENCE,
+                "weight": w_evidence,
                 "score": evi_score,
-                "contribution": evi_contrib if evi_contrib is not None else round(WEIGHT_EVIDENCE * float(evi_score), 1),
+                "contribution": evi_contrib if evi_contrib is not None else (round(w_evidence * float(evi_score), 1) if isinstance(evi_score, (int, float)) else 0.0),
                 "label": evi_label
             },
-            "mlPrediction": {
-                "weight": WEIGHT_ML,
-                "score": ml_score,
-                "contribution": ml_contrib if ml_contrib is not None else round(WEIGHT_ML * float(ml_score), 1),
-                "label": ml_label
-            },
-            "languageQuality": {
-                "weight": WEIGHT_LANGUAGE,
-                "score": lan_score,
-                "contribution": lan_contrib if lan_contrib is not None else round(WEIGHT_LANGUAGE * float(lan_score), 1),
-                "label": lan_label,
-                "notes": language_notes
-            },
             "sourceReputation": {
-                "weight": WEIGHT_SOURCE,
+                "weight": w_source,
                 "score": src_score,
-                "contribution": src_contrib if src_contrib is not None else round(WEIGHT_SOURCE * float(src_score), 1),
+                "contribution": src_contrib if src_contrib is not None else (round(w_source * float(src_score), 1) if isinstance(src_score, (int, float)) else 0.0),
                 "label": src_label
             },
             "claimConsistency": {
-                "weight": WEIGHT_CONSISTENCY,
+                "weight": w_consistency,
                 "score": con_score,
-                "contribution": con_contrib if con_contrib is not None else round(WEIGHT_CONSISTENCY * float(con_score), 1),
+                "contribution": con_contrib if con_contrib is not None else (round(w_consistency * float(con_score), 1) if isinstance(con_score, (int, float)) else 0.0),
                 "label": con_label,
                 "notes": consistency_notes
+            },
+            "mlPrediction": {
+                "weight": 0.0,
+                "score": ml_score,
+                "contribution": 0.0,
+                "label": ml_label
+            },
+            "languageQuality": {
+                "weight": 0.0,
+                "score": lan_score,
+                "contribution": 0.0,
+                "label": lan_label,
+                "notes": language_notes
             }
         }
 
@@ -304,7 +328,9 @@ class MultiFactorScoringEngine:
         source_tier: str = "",
         source_category: str = "",
         top_supporting: List[Dict[str, Any]] = None,
-        top_contradicting: List[Dict[str, Any]] = None
+        top_contradicting: List[Dict[str, Any]] = None,
+        is_direct_submission: bool = None,
+        source_domain: str = ""
     ) -> Dict[str, Any]:
         """
         Computes the final 5-factor weighted score and maps to the 6-tier verdict.
@@ -332,6 +358,28 @@ class MultiFactorScoringEngine:
         evi_s = max(0, min(100, float(evidence_score)))
         con_s = max(0, min(100, float(consistency_score)))
         lan_s = max(0, min(100, float(language_score)))
+
+        # Determine whether input is direct text submission vs URL/article with known publisher
+        if is_direct_submission is None:
+            dom = (source_domain or "").lower()
+            if not dom and source_quality_assessment:
+                dom = str(source_quality_assessment.get("domain", "")).lower()
+            is_direct_submission = (
+                dom in ("direct-submission", "n/a", "")
+                or source_category in ("Unattributed Text Input", "Uploaded Image", "Uploaded Document")
+                or (source_tier == "Unverified" and (not dom or dom in ("direct-submission", "n/a")))
+            )
+
+        if is_direct_submission:
+            w_evidence = WEIGHT_EVIDENCE_DIRECT       # 0.90
+            w_source = WEIGHT_SOURCE_DIRECT           # 0.00
+            w_consistency = WEIGHT_CONSISTENCY_DIRECT # 0.10
+        else:
+            w_evidence = WEIGHT_EVIDENCE_URL          # 0.80
+            w_source = WEIGHT_SOURCE_URL              # 0.10
+            w_consistency = WEIGHT_CONSISTENCY_URL     # 0.10
+        w_ml = 0.00
+        w_language = 0.00
 
         # -----------------------------------------------------------------
         # 0. SATIRICAL CONTENT (Requirement 6)
@@ -445,16 +493,14 @@ class MultiFactorScoringEngine:
 
         # -----------------------------------------------------------------
         # 2. FACTUAL VERIFICATION MULTI-FACTOR SCORING
-        # Domain reputation is capped at 10%.
-        # Weights: Evidence 70%, Source 10%, Consistency 10%, ML 5%, Language 5%.
-        # (Evidence + Source = 80% combined; ML + Language = 10% combined)
+        # ML Text Pattern Classifier & Journalistic Language Integrity = 0%
+        # Known publisher URL: 80% Evidence + 10% Source + 10% Consistency
+        # Direct text claim: 90% Evidence + 10% Consistency
         # -----------------------------------------------------------------
         computed_score = round(
-            (WEIGHT_EVIDENCE * evi_s) +
-            (WEIGHT_SOURCE * src_s) +
-            (WEIGHT_CONSISTENCY * con_s) +
-            (WEIGHT_ML * ml_s) +
-            (WEIGHT_LANGUAGE * lan_s)
+            (w_evidence * evi_s) +
+            (w_source * src_s) +
+            (w_consistency * con_s)
         )
         final_trust_score = max(5, min(98, int(computed_score)))
 
@@ -669,7 +715,10 @@ class MultiFactorScoringEngine:
 
         is_needs_review = both_sides_strong and weights_close
         support_clearly_dominates = (total_support_weight >= 0.45 and (total_contradict_weight == 0 or total_support_weight >= 2.0 * total_contradict_weight))
-        contradict_clearly_dominates = (total_contradict_weight >= 0.45 and (total_support_weight == 0 or total_contradict_weight >= 2.0 * total_support_weight))
+        contradict_clearly_dominates = (
+            (total_contradict_weight >= 0.45 and (total_support_weight == 0 or total_contradict_weight >= 2.0 * total_support_weight))
+            or (total_support_weight == 0 and (total_contradict_weight >= 0.20 or len(contra_items) >= 1 or contradicting_evidence_count >= 1))
+        )
 
         if has_false_fact_check:
             verdict = "KNOWN FALSE"
@@ -808,7 +857,12 @@ class MultiFactorScoringEngine:
                 src_score=int(round(src_s)),
                 con_score=int(round(con_s)),
                 language_notes=language_notes,
-                consistency_notes=consistency_notes
+                consistency_notes=consistency_notes,
+                w_evidence=w_evidence,
+                w_source=w_source,
+                w_consistency=w_consistency,
+                w_ml=w_ml,
+                w_language=w_language
             )
         }
 

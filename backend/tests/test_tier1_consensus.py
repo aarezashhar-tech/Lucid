@@ -71,13 +71,14 @@ def test_weights_rebalanced_evidence_source_80_ml_lang_10():
     ml_w = factors["mlPrediction"]["weight"]
     lan_w = factors["languageQuality"]["weight"]
 
-    assert round(ev_w + src_w, 2) == 0.80
-    assert round(ml_w + lan_w, 2) == 0.10
+    assert round(ev_w, 2) == 0.90
+    assert round(src_w, 2) == 0.00
+    assert round(ml_w + lan_w, 2) == 0.00
     assert round(con_w, 2) == 0.10
     assert round(ev_w + src_w + con_w + ml_w + lan_w, 2) == 1.00
-    assert "70%" in factors["evidenceStrength"]["label"]
-    assert "5%" in factors["mlPrediction"]["label"]
-    assert "5%" in factors["languageQuality"]["label"]
+    assert "90%" in factors["evidenceStrength"]["label"]
+    assert "0%" in factors["mlPrediction"]["label"]
+    assert "0%" in factors["languageQuality"]["label"]
 
 
 def test_two_tier1_sources_on_short_messy_claim_triggers_verified_and_floor_82():
