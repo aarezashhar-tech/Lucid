@@ -3895,7 +3895,8 @@ export default function App() {
       if (!response.ok) {
         const errJson = await response.json().catch(() => null);
         console.error("[OCR Diagnostics] API error response:", response.status, response.statusText, errJson);
-        throw new Error("Text could not be extracted from this image.");
+        const errMsg = errJson?.error || "Text could not be extracted from this image.";
+        throw new Error(errMsg);
       }
 
       const ocrData = await response.json();
@@ -3915,9 +3916,9 @@ export default function App() {
       setOcrPreviewData(previewPayload);
       setScreen("ocr-preview");
       navigate("/ocr-preview");
-    } catch (err) {
+    } catch (err: any) {
       console.error("[OCR Diagnostics] Image text extraction failed:", err);
-      setVerifyError("Text could not be extracted from this image. Please try a clearer screenshot or upload text directly.");
+      setVerifyError(err?.message || "Text could not be extracted from this image. Please try a clearer screenshot or upload text directly.");
     } finally {
       setIsExtractingOcr(false);
     }
