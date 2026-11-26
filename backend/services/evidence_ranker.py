@@ -168,6 +168,8 @@ class EvidenceRanker:
                     return ("contradict", 98)
             for pos in POSITIVE_RATINGS:
                 if pos in fc_rating:
+                    if sim_score < 0.15 or not self._has_shared_entity_or_core_token(claim_text, raw_combined):
+                        return ("related", 50) if sim_score >= 0.10 else ("neutral", 40)
                     return ("support", 95)
 
         # 2. Check contradiction and debunking markers across combined text (NLP stance detection)
@@ -302,11 +304,17 @@ class EvidenceRanker:
                 "power", "energy", "annual", "quarter", "decade", "year",
                 "rally", "rallied", "soared", "jumped"
             ]
-            has_affirmative = (sim_score >= 0.50) or any(m in combined for m in affirmative_report_markers)
-
             # If Wikipedia summary matches the entity and proposition
-            if "wikipedia" in combined and sim_score >= 0.55:
+            is_wiki = "wikipedia" in combined or "[wikipedia" in combined
+            if is_wiki:
+                if self._snippet_mentions_claim_topic_or_entities(claim_text, raw_combined) and sim_score >= 0.55:
+                    has_affirmative = True
+                else:
+                    return ("related", 50) if sim_score >= 0.35 else ("neutral", 40)
+            elif (sim_score >= 0.50) or any(m in combined for m in affirmative_report_markers):
                 has_affirmative = True
+            else:
+                has_affirmative = False
 
             # Safety guard 1: Subject/object inversion in competition/match claims ("Argentina defeated Spain" vs "Spain Beats Argentina")
             match_inv = re.search(
@@ -354,6 +362,17 @@ class EvidenceRanker:
                     if any(g in claim_lower for g in ["milky way", "milkyway"]):
                         if "andromeda" in combined and any(term in combined for term in ["largest", "bigger", "larger", "local group", "collision"]):
                             return ("contradict", 95)
+
+            # Safety guard 2c: Failure/crash claims contradicted by successful landing/completion
+            CLAIM_FAILS = bool(re.search(r'\b(failed\s+to\s+land|failed|failure|crashed|crash|crashing|wrecked|unsuccessful|exploded|destroyed)\b', claim_lower))
+            if CLAIM_FAILS:
+                EV_SUCCEEDS = bool(re.search(r'\b(?:lands?|landed|landing|touchdown|soft-landing|soft\s+landing|successful\s+landing|successfully\s+landed|lands?\s+on\s+the\s+moon)\b', combined, re.I))
+                EV_FAILS = bool(re.search(r'\b(failed|failure|crashed|crash|crashing|wrecked|destroyed|explosion)\b', combined, re.I))
+                if EV_SUCCEEDS and not EV_FAILS:
+                    return ("contradict", 92)
+                if not EV_FAILS:
+                    # Candidate does not corroborate the claimed failure or crash
+                    return ("related", 50)
 
             # Safety guard 3: Current officeholder vs Former / Retired / Transition markers
             if re.search(r'\b(currently\s+serving|is\s+currently|currently\s+serves|incumbent|presently\s+serving|still\s+serves)\b', claim_lower):
@@ -615,6 +634,8 @@ class EvidenceRanker:
                     if has_affirmative_down_movement:
                         if is_causal_claim and not causal_confirmed:
                             return ("neutral", 50)
+                        if sim_score < 0.15 or not self._has_shared_entity_or_core_token(claim_text, raw_combined):
+                            return ("related", 50) if sim_score >= 0.10 else ("neutral", 40)
                         conf = int(min(98, max(75, sim_score * 100 + 10)))
                         return ("support", conf)
                     if up_concerns_claimed_timeframe:
@@ -647,6 +668,8 @@ class EvidenceRanker:
                 return ("neutral", 50)
 
             if has_affirmative:
+                if sim_score < 0.15 or not self._has_shared_entity_or_core_token(claim_text, raw_combined):
+                    return ("related", 50) if sim_score >= 0.10 else ("neutral", 40)
                 conf = int(min(98, max(65, sim_score * 100 + 10)))
                 return ("support", conf)
             else:
@@ -791,6 +814,14 @@ class EvidenceRanker:
         comb_years = set(re.findall(r'\b(19\d\d|20\d\d)\b', combined_text))
         if claim_years and comb_years and not (claim_years & comb_years):
             return False, "Candidate cites conflicting year or date metric."
+
+        # Check for numbered versions / mission iterations (e.g. Chandrayaan-3 vs Chandrayaan-2, Apollo 11 vs Apollo 13)
+        claim_numbered = re.findall(r'\b([A-Za-z]{3,})[-\s](\d{1,3})\b', claim_text)
+        comb_numbered = re.findall(r'\b([A-Za-z]{3,})[-\s](\d{1,3})\b', combined_text)
+        for base_name, num in claim_numbered:
+            comb_nums_for_base = {n for (nm, n) in comb_numbered if nm.lower() == base_name.lower()}
+            if comb_nums_for_base and num not in comb_nums_for_base:
+                return False, f"Candidate cites different version/iteration of {base_name} ({', '.join(sorted(comb_nums_for_base))} vs {num})."
 
         # Monetary / large-scale magnitude check (e.g. 'ten trillion dollars' cannot match routine coverage)
         claim_scales = set(re.findall(r'\b(trillion|billion|million)\b', claim_lower))
@@ -1023,6 +1054,81 @@ class EvidenceRanker:
                 return False
 
         return len(matched) >= 1
+
+    def _has_shared_entity_or_core_token(self, claim_text: str, evidence_text: str) -> bool:
+        """
+        Requirement 2: Validates that candidate evidence shares at least one named entity
+        or core event token with the claim.
+        Prevents weak, generic topical overlaps (e.g. 6%-8% similarity) from inflating the trust score.
+        """
+        if not claim_text or not evidence_text:
+            return False
+
+        claim_lower = claim_text.lower()
+        ev_lower = evidence_text.lower()
+
+        # 1. Check for specific named entities in the claim
+        # Multi-word proper names: e.g. "Ehab Abu Jazar", "Jensen Huang", "Chandrayaan-3"
+        named_entities = re.findall(r'\b[A-Z][a-zA-Z0-9_-]+(?:\s+[A-Z][a-zA-Z0-9_-]+)+\b', claim_text)
+        words = claim_text.split()
+        single_caps = [
+            w.strip('.,!?:;"\'()') for w in words[1:]
+            if w and w[0].isupper() and len(w) > 2 and w.upper() not in {"THE", "AND", "FOR", "NOT", "YES", "NEW", "TOP"}
+        ]
+        acronyms = re.findall(r'\b[A-Z0-9]{2,6}\b', claim_text)
+
+        all_entities = set(named_entities + single_caps + acronyms)
+        # Filter out weekdays from all_entities
+        all_entities = {e for e in all_entities if e.lower() not in {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}}
+
+        # If claim has named entities, check if any appear in evidence
+        for ent in all_entities:
+            if ent.lower() in ev_lower:
+                return True
+            parts = ent.split()
+            if len(parts) >= 2:
+                # Check surname
+                surname = parts[-1]
+                if len(surname) > 3 and re.search(rf'\b{re.escape(surname.lower())}\b', ev_lower):
+                    return True
+                if len(parts) >= 3:
+                    last_two = " ".join(parts[-2:])
+                    if last_two.lower() in ev_lower:
+                        return True
+
+        # 2. Check for core event tokens (content words: key nouns, actions, numbers, locations)
+        STOPWORDS = {
+            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "do", "does", "did", "to", "at", "in", "for",
+            "on", "by", "with", "about", "against", "between", "into", "through",
+            "during", "before", "after", "above", "below", "from", "up", "down",
+            "out", "off", "over", "under", "again", "further", "then", "once",
+            "here", "there", "when", "where", "why", "how", "all", "any", "both",
+            "each", "few", "more", "most", "other", "some", "such", "no", "nor",
+            "not", "only", "own", "same", "so", "than", "too", "very", "can",
+            "will", "just", "should", "now", "it", "its", "this", "that", "these",
+            "those", "stated", "said", "reported", "says", "claims", "according",
+            "family", "living", "people", "world", "state", "states", "years", "year",
+            "today", "news", "report", "first", "last", "country", "countries"
+        }
+
+        claim_tokens = [
+            w for w in re.findall(r'\b[a-zA-Z0-9_-]+\b', claim_lower)
+            if w not in STOPWORDS and len(w) >= 4 and not w.isdigit()
+        ]
+
+        # Specific numbers / years
+        claim_numbers = re.findall(r'\b(?:\d{1,4}|19\d\d|20\d\d)\b', claim_text)
+
+        for token in claim_tokens:
+            if re.search(rf'\b{re.escape(token)}\b', ev_lower):
+                return True
+
+        for num in claim_numbers:
+            if re.search(rf'\b{re.escape(num)}\b', ev_lower):
+                return True
+
+        return False
 
     def rank_evidence_for_claim(
         self,
@@ -1320,6 +1426,24 @@ class EvidenceRanker:
                 stance, stance_conf = self.classify_stance(claim_text, item, sim)
                 stance_reason = ""
 
+            # Requirement 2: Minimum Semantic & Entity Match Floor for SUPPORT stance
+            # Require minimum semantic similarity threshold (>= 0.15 / 15%) AND at least one shared
+            # named entity or core event token before classifying an article as SUPPORT.
+            # Downgrades weak 6%-8% topical overlaps to neutral/related.
+            if stance == "support":
+                has_entity_match = self._has_shared_entity_or_core_token(
+                    claim_text, f"{title} {snippet} {item.get('description', '')}"
+                )
+                if sim < 0.15 or not has_entity_match:
+                    if sim >= 0.10:
+                        stance = "related"
+                        stance_conf = 50
+                        stance_reason = f"Topical overlap ({int(round(sim * 100))}%) below support floor (15%) or lacks entity/event corroboration."
+                    else:
+                        stance = "neutral"
+                        stance_conf = 40
+                        stance_reason = f"Weak match ({int(round(sim * 100))}%) below minimum threshold (15%) with no entity overlap."
+
             # Requirement 5: Require snippet to mention claim's key entities or topic.
             # A generic overview page (like a Wikipedia article on a whole planet) must not count as a contradiction.
             # Explicit IFCN / Fact Check ratings are direct debunks and not generic overview pages.
@@ -1376,14 +1500,25 @@ class EvidenceRanker:
 
         # Sort each stance bucket by composite score descending
         if gemini_stances is not None:
-            # Gemini-classified buckets
-            supporting = [it for it in evaluated if it["stance"] == "support"]
+            # Gemini-classified buckets (strictly require semantic similarity >= 0.15 and entity/core token match)
+            supporting = [
+                it for it in evaluated
+                if it["stance"] == "support"
+                and it.get("semanticSimilarity", 0.0) >= 0.15
+                and self._has_shared_entity_or_core_token(claim_text, f"{it.get('articleTitle', '')} {it.get('evidenceSnippet', '')}")
+            ]
             contradicting = [it for it in evaluated if it["stance"] == "contradict"]
             related = [it for it in evaluated if it["stance"] == "related"]
             neutral = [it for it in evaluated if it["stance"] == "neutral"]
         else:
-            # Heuristic fallback buckets
-            supporting = [it for it in evaluated if it["stance"] == "support" and it["relevanceScore"] >= 30]
+            # Heuristic fallback buckets (strictly require semantic similarity >= 0.15 and entity/core token match)
+            supporting = [
+                it for it in evaluated
+                if it["stance"] == "support"
+                and it.get("semanticSimilarity", 0.0) >= 0.15
+                and it.get("relevanceScore", 0) >= 30
+                and self._has_shared_entity_or_core_token(claim_text, f"{it.get('articleTitle', '')} {it.get('evidenceSnippet', '')}")
+            ]
             contradicting = [it for it in evaluated if it["stance"] == "contradict" and (it["relevanceScore"] >= 20 or "Contradicted by" in it.get("evidenceSnippet", "") or "[Derived check]" in it.get("evidenceSnippet", ""))]
             related = [it for it in evaluated if it["stance"] == "related"]
             neutral = [it for it in evaluated if it["stance"] == "neutral"]
